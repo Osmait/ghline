@@ -6,7 +6,7 @@ use ratatui::style::Style;
 
 use super::{bold, fill, hline, put, put_right, put_trunc, vline, wrap};
 use crate::app::{App, Pane};
-use crate::data::Kind;
+use crate::data::{Kind, Status};
 use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
@@ -18,10 +18,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 }
 
-fn state_badge(buf: &mut Buffer, x: u16, y: u16, max: u16, state: &str) -> u16 {
+fn state_badge(buf: &mut Buffer, x: u16, y: u16, max: u16, state: Status) -> u16 {
     let color = theme::state_color(state);
     let base = Style::default().bg(theme::BG).fg(color);
-    let text = format!("[ {} ]", state.to_uppercase());
+    let text = format!("[ {} ]", state.label().to_uppercase());
     put(buf, x, y, max, &text, base)
 }
 
@@ -98,8 +98,8 @@ fn issue_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
 
     out.push(vec![
         (
-            format!("[ {} ]", cur.state.to_uppercase()),
-            base.fg(theme::state_color(&cur.state)),
+            format!("[ {} ]", cur.state.label().to_uppercase()),
+            base.fg(theme::state_color(cur.state)),
         ),
         (format!("  #{}  ", cur.num), base.fg(theme::DIMMER)),
         (
@@ -168,7 +168,7 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     // ---- header
     let mut y = area.y + 1;
-    let mut cx = state_badge(buf, x, y, max, &cur.state);
+    let mut cx = state_badge(buf, x, y, max, cur.state);
     cx = put(buf, cx, y, max, "  ", base);
     cx = put(
         buf,
@@ -190,13 +190,13 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
     cx = put(buf, cx, y, max, "  ", base);
     let (checks_label, checks_color) = if cur.kind == Kind::Pr {
         (
-            format!("{} {} checks", theme::state_icon(&cur.checks), cur.checks),
-            theme::state_color(&cur.checks),
+            format!("{} {} checks", theme::state_icon(cur.checks), cur.checks),
+            theme::state_color(cur.checks),
         )
     } else {
         (
-            format!("{} {}", theme::state_icon(&cur.state), cur.state),
-            theme::state_color(&cur.state),
+            format!("{} {}", theme::state_icon(cur.state), cur.state),
+            theme::state_color(cur.state),
         )
     };
     put(buf, cx, y, max, &checks_label, base.fg(checks_color));
@@ -208,9 +208,9 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 
     let branch_line = if !cur.branch.is_empty() {
-        let verb = match cur.state.as_str() {
-            "merged" => "merged",
-            "closed" => "closed",
+        let verb = match cur.state {
+            Status::Merged => "merged",
+            Status::Closed => "closed",
             _ => "merge",
         };
         format!(
@@ -423,18 +423,18 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
-        let color = theme::state_color(&j.status);
+        let color = theme::state_color(j.status);
         put(
             buf,
             area.x + 2,
             y,
             area.right(),
-            theme::state_icon(&j.status),
+            theme::state_icon(j.status),
             base.fg(color),
         );
 
         let dur_x = put_right(buf, area.right() - 1, y, &j.dur, base.fg(theme::DIMMER));
-        let st_x = put_right(buf, dur_x - 2, y, &j.status, base.fg(color));
+        let st_x = put_right(buf, dur_x - 2, y, j.status.label(), base.fg(color));
         let fg = if sel { theme::BRIGHT } else { theme::FG };
         put_trunc(buf, area.x + 4, y, st_x - 1, &j.name, base.fg(fg));
         y += 1;
@@ -451,11 +451,11 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     put(buf, area.x + 2, y, area.right(), &s, base.fg(theme::BORDER));
     y += 1;
 
-    let passed = jobs.iter().filter(|j| j.status == "success").count();
-    let failed = jobs.iter().filter(|j| j.status == "failure").count();
+    let passed = jobs.iter().filter(|j| j.status == Status::Success).count();
+    let failed = jobs.iter().filter(|j| j.status == Status::Failure).count();
     let progress = jobs
         .iter()
-        .filter(|j| j.status == "running" || j.status == "pending")
+        .filter(|j| j.status == Status::Running || j.status == Status::Pending)
         .count();
     put_trunc(
         buf,

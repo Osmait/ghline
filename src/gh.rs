@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::data::{
     Account, Comment, FileChange, Hunk, Item, Job, Kind, Label, RawLog, Repo, Review, ReviewState,
-    Step,
+    Status, Step,
 };
 
 pub use crate::error::{Error, Result as Res};
@@ -136,22 +136,19 @@ fn duration(start: &str, end: &str) -> String {
 }
 
 /// The state of an Actions check/job in the design's vocabulary.
-fn conclusion(status: &str, conclusion: &str) -> String {
-    let st = status.to_lowercase();
-    let cc = conclusion.to_lowercase();
-    if st != "completed" {
-        return match st.as_str() {
-            "in_progress" => "running".into(),
-            _ => "pending".into(),
+///
+/// A run that has not completed reports no conclusion yet, so the status field
+/// is what decides; once completed, the conclusion takes over.
+fn conclusion(status: &str, conclusion: &str) -> Status {
+    if !status.eq_ignore_ascii_case("completed") {
+        return match Status::parse(status) {
+            Status::Running => Status::Running,
+            _ => Status::Pending,
         };
     }
-    match cc.as_str() {
-        "success" | "neutral" => "success".into(),
-        "failure" | "timed_out" | "action_required" | "startup_failure" => "failure".into(),
-        "cancelled" => "cancelled".into(),
-        "skipped" => "skipped".into(),
-        "" => "pending".into(),
-        other => other.into(),
+    match Status::parse(conclusion) {
+        Status::Unknown => Status::Pending,
+        settled => settled,
     }
 }
 
@@ -290,7 +287,7 @@ pub fn issues(repo: &str) -> Res<Vec<Item>> {
             let mut it = Item::blank(Kind::Issue);
             it.num = n(i, "number");
             it.title = s(i, "title");
-            it.state = s(i, "state").to_lowercase();
+            it.state = Status::parse(&s(i, "state"));
             it.author = i
                 .pointer("/author/login")
                 .and_then(|x| x.as_str())
@@ -321,12 +318,12 @@ fn rollup_run_id(v: &Value) -> i64 {
 }
 
 /// Reduces a PR's check rollup to a single state.
-fn rollup(v: &Value) -> String {
+fn rollup(v: &Value) -> Status {
     let checks = arr(v, "statusCheckRollup");
     if checks.is_empty() {
-        return "pending".into();
+        return Status::Pending;
     }
-    let states: Vec<String> = checks
+    let states: Vec<Status> = checks
         .iter()
         .map(|c| {
             // CheckRun carries status/conclusion; StatusContext only has state
@@ -338,14 +335,14 @@ fn rollup(v: &Value) -> String {
         })
         .collect();
 
-    if states.iter().any(|s| s == "failure") {
-        "failure".into()
-    } else if states.iter().any(|s| s == "running") {
-        "running".into()
-    } else if states.iter().any(|s| s == "pending") {
-        "pending".into()
+    if states.contains(&Status::Failure) {
+        Status::Failure
+    } else if states.contains(&Status::Running) {
+        Status::Running
+    } else if states.contains(&Status::Pending) {
+        Status::Pending
     } else {
-        "success".into()
+        Status::Success
     }
 }
 
@@ -375,9 +372,9 @@ pub fn prs(repo: &str) -> Res<Vec<Item>> {
                 .get("isDraft")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
-            let state = s(p, "state").to_lowercase();
-            it.state = if draft && state == "open" {
-                "draft".into()
+            let state = Status::parse(&s(p, "state"));
+            it.state = if draft && state == Status::Open {
+                Status::Draft
             } else {
                 state
             };
@@ -784,18 +781,18 @@ mod tests {
 
     #[test]
     fn conclusion_maps_every_state_the_api_can_send() {
-        assert_eq!(conclusion("completed", "SUCCESS"), "success");
-        assert_eq!(conclusion("completed", "neutral"), "success");
-        assert_eq!(conclusion("completed", "TIMED_OUT"), "failure");
-        assert_eq!(conclusion("completed", "startup_failure"), "failure");
-        assert_eq!(conclusion("completed", "cancelled"), "cancelled");
-        assert_eq!(conclusion("completed", "skipped"), "skipped");
+        assert_eq!(conclusion("completed", "SUCCESS"), Status::Success);
+        assert_eq!(conclusion("completed", "neutral"), Status::Success);
+        assert_eq!(conclusion("completed", "TIMED_OUT"), Status::Failure);
+        assert_eq!(conclusion("completed", "startup_failure"), Status::Failure);
+        assert_eq!(conclusion("completed", "cancelled"), Status::Cancelled);
+        assert_eq!(conclusion("completed", "skipped"), Status::Skipped);
         // still running: the conclusion is not filled in yet
-        assert_eq!(conclusion("in_progress", ""), "running");
-        assert_eq!(conclusion("queued", ""), "pending");
-        assert_eq!(conclusion("waiting", ""), "pending");
+        assert_eq!(conclusion("in_progress", ""), Status::Running);
+        assert_eq!(conclusion("queued", ""), Status::Pending);
+        assert_eq!(conclusion("waiting", ""), Status::Pending);
         // completed with no conclusion at all
-        assert_eq!(conclusion("completed", ""), "pending");
+        assert_eq!(conclusion("completed", ""), Status::Pending);
     }
 
     #[test]
@@ -867,22 +864,22 @@ mod tests {
             { "status": "COMPLETED", "conclusion": "SUCCESS" },
             { "status": "COMPLETED", "conclusion": "FAILURE" },
         ]});
-        assert_eq!(rollup(&mixed), "failure");
+        assert_eq!(rollup(&mixed), Status::Failure);
 
         let running = serde_json::json!({ "statusCheckRollup": [
             { "status": "COMPLETED", "conclusion": "SUCCESS" },
             { "status": "IN_PROGRESS", "conclusion": "" },
         ]});
-        assert_eq!(rollup(&running), "running");
+        assert_eq!(rollup(&running), Status::Running);
 
         let all_good = serde_json::json!({ "statusCheckRollup": [
             { "status": "COMPLETED", "conclusion": "SUCCESS" },
         ]});
-        assert_eq!(rollup(&all_good), "success");
+        assert_eq!(rollup(&all_good), Status::Success);
 
         // a PR with no checks at all is pending, not successful
         let empty = serde_json::json!({ "statusCheckRollup": [] });
-        assert_eq!(rollup(&empty), "pending");
+        assert_eq!(rollup(&empty), Status::Pending);
     }
 
     #[test]
@@ -891,7 +888,7 @@ mod tests {
         let ctx = serde_json::json!({ "statusCheckRollup": [
             { "state": "FAILURE" },
         ]});
-        assert_eq!(rollup(&ctx), "failure");
+        assert_eq!(rollup(&ctx), Status::Failure);
     }
 
     #[test]

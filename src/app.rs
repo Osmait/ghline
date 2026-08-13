@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::actions::{Flash, Prompt};
-use crate::data::{self, Account, Item, Job, Kind, LogLine, RawLog, Repo, TABS};
+use crate::data::{self, Account, Item, Job, Kind, LogLine, RawLog, Repo, Status, TABS};
 use crate::demo;
 use crate::service::{Request, Response, Service};
 
@@ -86,7 +86,7 @@ pub struct TreeNode {
     pub kind: NodeKind,
     pub ji: usize,
     pub name: String,
-    pub status: String,
+    pub status: Status,
     pub dur: String,
 }
 
@@ -399,12 +399,14 @@ impl App {
         }
         let all = demo::job_templates();
         let only_success = match self.current() {
-            Some(c) if c.kind == Kind::Run && c.state == "success" => true,
-            Some(c) if c.kind == Kind::Pr && c.checks == "success" => true,
+            Some(c) if c.kind == Kind::Run && c.state == Status::Success => true,
+            Some(c) if c.kind == Kind::Pr && c.checks == Status::Success => true,
             _ => false,
         };
         if only_success {
-            all.into_iter().filter(|j| j.status == "success").collect()
+            all.into_iter()
+                .filter(|j| j.status == Status::Success)
+                .collect()
         } else {
             all
         }
@@ -431,7 +433,7 @@ impl App {
                 kind: NodeKind::Job,
                 ji,
                 name: j.name.to_string(),
-                status: j.status.clone(),
+                status: j.status,
                 dur: j.dur.clone(),
             });
             if !self.collapsed.contains(&ji) {
@@ -440,7 +442,7 @@ impl App {
                         kind: NodeKind::Step,
                         ji,
                         name: s.name.to_string(),
-                        status: s.status.clone(),
+                        status: s.status,
                         dur: s.dur.clone(),
                     });
                 }
@@ -460,15 +462,15 @@ impl App {
         let tree = self.flat_tree();
         let idx = self.tree_sel_idx(tree.len());
         let (status, name) = match tree.get(idx) {
-            Some(n) => (n.status.clone(), n.name.clone()),
-            None => ("pending".to_string(), String::new()),
+            Some(n) => (n.status, n.name.clone()),
+            None => (Status::Pending, String::new()),
         };
         let is_step = tree
             .get(idx)
             .map(|n| n.kind == NodeKind::Step)
             .unwrap_or(false);
 
-        let step_specific = if is_step && status != "failure" && status != "running" {
+        let step_specific = if is_step && status != Status::Failure && status != Status::Running {
             demo::step_log(&name)
         } else {
             None
@@ -476,13 +478,13 @@ impl App {
 
         let mut lines: Vec<(String, &'static str)> = match step_specific {
             Some(v) => v,
-            None => demo::logs_for(&status)
+            None => demo::logs_for(status)
                 .iter()
                 .map(|(t, k)| (t.to_string(), *k))
                 .collect(),
         };
 
-        if status == "running" {
+        if status == Status::Running {
             lines.extend(
                 demo::STREAM
                     .iter()
@@ -643,7 +645,7 @@ impl App {
             self.logs_state.insert((key.clone(), id), Load::Loading);
             let finished = self
                 .current()
-                .map(|c| c.state != "running" && c.checks != "running")
+                .map(|c| c.state.is_settled() && c.checks.is_settled())
                 .unwrap_or(true);
             self.ask(Request::RunLog {
                 repo: key,
@@ -1551,13 +1553,13 @@ mod tests {
 
         // the draft PR of the demo data
         app.item = 3;
-        assert_eq!(app.current().unwrap().state, "draft");
+        assert_eq!(app.current().unwrap().state, Status::Draft);
         app.ask_merge();
         assert!(app.prompt.is_none(), "a draft cannot be merged");
 
         // and the already merged one
         app.item = 4;
-        assert_eq!(app.current().unwrap().state, "merged");
+        assert_eq!(app.current().unwrap().state, Status::Merged);
         app.ask_merge();
         assert!(app.prompt.is_none());
     }
@@ -1574,7 +1576,7 @@ mod tests {
         app.confirm();
 
         let pr = app.current().unwrap();
-        assert_eq!(pr.state, "merged");
+        assert_eq!(pr.state, Status::Merged);
         assert_eq!(pr.merged_with.as_deref(), Some("merge commit"));
         assert_eq!(app.repo().unwrap().prs, open_prs - 1, "one less open PR");
         // GitHub offers to delete the branch right after
@@ -1592,13 +1594,13 @@ mod tests {
 
         app.ask_close();
         app.confirm();
-        assert_eq!(app.current().unwrap().state, "closed");
+        assert_eq!(app.current().unwrap().state, Status::Closed);
         assert_eq!(app.repo().unwrap().prs, open_prs - 1);
 
         app.ask_close(); // now it reopens
         assert!(matches!(app.prompt, Some(Prompt::Reopen)));
         app.confirm();
-        assert_eq!(app.current().unwrap().state, "open");
+        assert_eq!(app.current().unwrap().state, Status::Open);
         assert_eq!(app.repo().unwrap().prs, open_prs);
     }
 
@@ -1630,7 +1632,7 @@ mod tests {
     fn cancelling_a_prompt_changes_nothing() {
         let mut app = demo();
         app.pane = Pane::List;
-        let before = app.current().unwrap().state.clone();
+        let before = app.current().unwrap().state;
         app.ask_merge();
         app.cancel_prompt();
         assert!(app.prompt.is_none());

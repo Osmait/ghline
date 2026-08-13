@@ -1,5 +1,6 @@
 //! Palette and glyphs taken verbatim from the design (`GitHub TUI.dc.html`).
 
+use crate::data::Status;
 use ratatui::style::Color;
 
 const fn rgb(hex: u32) -> Color {
@@ -67,15 +68,28 @@ pub fn lang(name: &str) -> Color {
 }
 
 /// The design's `sc(status)`.
-pub fn state_color(status: &str) -> Color {
+pub fn state_color(status: Status) -> Color {
     match status {
-        "success" | "open" => GREEN,
-        "failure" => RED,
-        "running" => YELLOW,
-        "pending" | "skipped" => DIMMER,
-        "cancelled" | "draft" => DIM,
-        "closed" | "merged" => PURPLE,
-        _ => FG,
+        Status::Success | Status::Open => GREEN,
+        Status::Failure => RED,
+        Status::Running => YELLOW,
+        Status::Pending | Status::Skipped => DIMMER,
+        Status::Cancelled | Status::Draft => DIM,
+        Status::Closed | Status::Merged => PURPLE,
+        Status::Unknown => FG,
+    }
+}
+
+/// The design's `si(status)`.
+pub fn state_icon(status: Status) -> &'static str {
+    match status {
+        Status::Success => "✓",
+        Status::Failure => "✗",
+        Status::Running => "◐",
+        Status::Pending => "○",
+        Status::Skipped => "⊘",
+        Status::Cancelled => "⊗",
+        _ => "•",
     }
 }
 
@@ -94,19 +108,6 @@ pub fn review(state: crate::data::ReviewState) -> (Color, &'static str) {
 /// A label colour as it arrives from GitHub.
 pub fn label(rgb: (u8, u8, u8)) -> Color {
     Color::Rgb(rgb.0, rgb.1, rgb.2)
-}
-
-/// The design's `si(status)`.
-pub fn state_icon(status: &str) -> &'static str {
-    match status {
-        "success" => "✓",
-        "failure" => "✗",
-        "running" => "◐",
-        "pending" => "○",
-        "skipped" => "⊘",
-        "cancelled" => "⊗",
-        _ => "•",
-    }
 }
 
 /// Visibility markers for the repo pane. The design leaves both empty (the

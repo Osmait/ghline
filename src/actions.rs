@@ -5,7 +5,7 @@
 //! GitHub calls does not require touching the render.
 
 use crate::app::App;
-use crate::data::{Kind, MERGE_METHODS};
+use crate::data::{Kind, MERGE_METHODS, Status};
 use crate::service::Request;
 
 /// A pending confirmation. While one is up, every other key is ignored.
@@ -63,10 +63,12 @@ impl App {
     /// `m`: opens the merge confirmation if the PR allows it.
     pub fn ask_merge(&mut self) {
         let Some(cur) = self.current() else { return };
-        match cur.state.as_str() {
-            "open" => self.prompt = Some(Prompt::Merge(0)),
-            "draft" => self.flash_warn("draft pull requests can't be merged — mark it ready first"),
-            "merged" => self.flash_warn("this pull request is already merged"),
+        match cur.state {
+            Status::Open => self.prompt = Some(Prompt::Merge(0)),
+            Status::Draft => {
+                self.flash_warn("draft pull requests can't be merged — mark it ready first");
+            }
+            Status::Merged => self.flash_warn("this pull request is already merged"),
             _ => self.flash_warn("closed pull requests can't be merged — reopen it first"),
         }
     }
@@ -74,10 +76,12 @@ impl App {
     /// `c`: closes the PR, or reopens it if it was already closed.
     pub fn ask_close(&mut self) {
         let Some(cur) = self.current() else { return };
-        match cur.state.as_str() {
-            "open" | "draft" => self.prompt = Some(Prompt::Close),
-            "closed" => self.prompt = Some(Prompt::Reopen),
-            _ => self.flash_warn("a merged pull request can't be closed"),
+        if cur.state.is_open() {
+            self.prompt = Some(Prompt::Close);
+        } else if cur.state == Status::Closed {
+            self.prompt = Some(Prompt::Reopen);
+        } else {
+            self.flash_warn("a merged pull request can't be closed");
         }
     }
 
@@ -90,8 +94,10 @@ impl App {
             return;
         }
         let (num, branch) = (cur.num, cur.branch.clone());
-        match cur.state.as_str() {
-            "merged" | "closed" => self.prompt = Some(Prompt::DeleteBranch { num, branch }),
+        match cur.state {
+            Status::Merged | Status::Closed => {
+                self.prompt = Some(Prompt::DeleteBranch { num, branch });
+            }
             _ => self.flash_warn("delete the branch after merging or closing the pull request"),
         }
     }
@@ -165,7 +171,7 @@ impl App {
         match prompt {
             Prompt::Merge(m) => {
                 let method = MERGE_METHODS[*m];
-                item.state = "merged".into();
+                item.state = Status::Merged;
                 item.merged_with = Some(method.short().into());
                 self.bump_open_prs(-1);
                 self.flash_ok(format!("#{num} merged into main via {}", method.short()));
@@ -174,12 +180,12 @@ impl App {
                 }
             }
             Prompt::Close => {
-                item.state = "closed".into();
+                item.state = Status::Closed;
                 self.bump_open_prs(-1);
                 self.flash_ok(format!("#{num} closed"));
             }
             Prompt::Reopen => {
-                item.state = "open".into();
+                item.state = Status::Open;
                 self.bump_open_prs(1);
                 self.flash_ok(format!("#{num} reopened"));
             }

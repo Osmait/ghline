@@ -121,8 +121,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             x,
             y,
             max,
-            &format!("{} {} checks", theme::state_icon(&cur.checks), cur.checks),
-            base.fg(theme::state_color(&cur.checks)),
+            &format!("{} {} checks", theme::state_icon(cur.checks), cur.checks),
+            base.fg(theme::state_color(cur.checks)),
         );
         let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::DIMMER));
         let cx = put(

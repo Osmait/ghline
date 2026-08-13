@@ -3,7 +3,7 @@
 
 use crate::data::{
     Account, Comment, DemoLine, FileChange, Hunk, Item, Job, Kind, Label, Repo, Review,
-    ReviewState, Step,
+    ReviewState, Status, Step,
 };
 use crate::demo_diffs;
 
@@ -217,7 +217,7 @@ pub fn issues(repo: usize) -> Vec<Item> {
             let mut it = Item::blank(Kind::Issue);
             it.num = num - r * 13;
             it.title = title.to_string();
-            it.state = state.into();
+            it.state = Status::parse(state);
             it.author = author.into();
             it.when = ago(n, u);
             it.comments = comments;
@@ -281,10 +281,10 @@ pub fn prs(repo: usize) -> Vec<Item> {
     p.body = "Reads every host from hosts.yml (github.com and GHE) and lets you switch\nwith a modal picker bound to a.\n\nStill draft: the SSO re-auth flow is stubbed.".into();
 
     p.title = "fix(layout): clamp sidebar width to a minimum of 12 cols".into();
-    p.state = "open".into();
+    p.state = Status::Open;
     p.author = "marasanz".into();
     p.when = ago(26, "m");
-    p.checks = "failure".into();
+    p.checks = Status::Failure;
     p.add = "+128".into();
     p.del = "-34".into();
     p.branch = "fix/sidebar-clamp".into();
@@ -321,10 +321,10 @@ pub fn prs(repo: usize) -> Vec<Item> {
     p.body = "Streams job logs over the Actions API instead of re-fetching the whole\nblob on every tick.\n\n- LogStream with a bounded channel and keepalives\n- follow mode (f) pinned to the bottom of the pane\n- highlight ##[error] lines and index them for e\n\nRefs #388".into();
 
     p.title = "feat(actions): stream job logs with follow mode".into();
-    p.state = "open".into();
+    p.state = Status::Open;
     p.author = "kdev".into();
     p.when = ago(5, "h");
-    p.checks = "running".into();
+    p.checks = Status::Running;
     p.add = "+342".into();
     p.del = "-9".into();
     p.branch = "feat/log-stream".into();
@@ -345,10 +345,10 @@ pub fn prs(repo: usize) -> Vec<Item> {
     p.body = "Bumps crossterm from 0.27.0 to 0.28.1.\n\nRelease notes and changelog omitted — see the upstream repository.".into();
 
     p.title = "chore(deps): bump crossterm to 0.28".into();
-    p.state = "open".into();
+    p.state = Status::Open;
     p.author = "dependabot".into();
     p.when = ago(1, "d");
-    p.checks = "success".into();
+    p.checks = Status::Success;
     p.add = "+9".into();
     p.del = "-9".into();
     p.branch = "dependabot/crossterm".into();
@@ -382,10 +382,10 @@ pub fn prs(repo: usize) -> Vec<Item> {
     p.files = 6;
 
     p.title = "feat(auth): multi-account switcher with GHE hosts".into();
-    p.state = "draft".into();
+    p.state = Status::Draft;
     p.author = "sofi".into();
     p.when = ago(2, "d");
-    p.checks = "pending".into();
+    p.checks = Status::Pending;
     p.add = "+611".into();
     p.del = "-56".into();
     p.branch = "feat/multi-account".into();
@@ -417,10 +417,10 @@ pub fn prs(repo: usize) -> Vec<Item> {
     p.body = "Pure move plus a parser for vim counts (3j). No behaviour change beyond\ncounts now being honoured in every list.\n\nCloses #371".into();
 
     p.title = "refactor: move keymap into its own crate".into();
-    p.state = "merged".into();
+    p.state = Status::Merged;
     p.author = "tsuki".into();
     p.when = ago(4, "d");
-    p.checks = "success".into();
+    p.checks = Status::Success;
     p.add = "+370".into();
     p.del = "-648".into();
     p.branch = "refactor/keymap-crate".into();
@@ -503,7 +503,7 @@ pub fn runs(repo: usize) -> Vec<Item> {
             let mut it = Item::blank(Kind::Run);
             it.num = num - r * 7;
             it.title = title.to_string();
-            it.state = state.into();
+            it.state = Status::parse(state);
             it.author = author.into();
             it.when = ago(n, u);
             it.event = event.into();
@@ -513,10 +513,10 @@ pub fn runs(repo: usize) -> Vec<Item> {
         .collect()
 }
 
-fn step(name: &str, status: &str, dur: &str) -> Step {
+fn step(name: &str, status: Status, dur: &str) -> Step {
     Step {
         name: name.into(),
-        status: status.into(),
+        status,
         dur: dur.into(),
     }
 }
@@ -525,68 +525,68 @@ pub fn job_templates() -> Vec<Job> {
     vec![
         Job {
             name: "lint".into(),
-            status: "success".into(),
+            status: Status::Success,
             dur: "38s".into(),
             steps: vec![
-                step("Set up job", "success", "2s"),
-                step("Checkout", "success", "3s"),
-                step("Setup toolchain", "success", "11s"),
-                step("cargo fmt --check", "success", "6s"),
-                step("clippy -D warnings", "success", "14s"),
-                step("Post job cleanup", "success", "2s"),
+                step("Set up job", Status::Success, "2s"),
+                step("Checkout", Status::Success, "3s"),
+                step("Setup toolchain", Status::Success, "11s"),
+                step("cargo fmt --check", Status::Success, "6s"),
+                step("clippy -D warnings", Status::Success, "14s"),
+                step("Post job cleanup", Status::Success, "2s"),
             ],
         },
         Job {
             name: "test (ubuntu-24.04)".into(),
-            status: "success".into(),
+            status: Status::Success,
             dur: "2m 14s".into(),
             steps: vec![
-                step("Set up job", "success", "2s"),
-                step("Checkout", "success", "4s"),
-                step("Cache deps", "success", "9s"),
-                step("cargo test --all", "success", "1m 51s"),
-                step("Upload coverage", "success", "8s"),
+                step("Set up job", Status::Success, "2s"),
+                step("Checkout", Status::Success, "4s"),
+                step("Cache deps", Status::Success, "9s"),
+                step("cargo test --all", Status::Success, "1m 51s"),
+                step("Upload coverage", Status::Success, "8s"),
             ],
         },
         Job {
             name: "test (macos-15)".into(),
-            status: "failure".into(),
+            status: Status::Failure,
             dur: "3m 02s".into(),
             steps: vec![
-                step("Set up job", "success", "3s"),
-                step("Checkout", "success", "5s"),
-                step("Cache deps", "success", "12s"),
-                step("cargo test --all", "failure", "2m 34s"),
-                step("Upload artifacts", "skipped", "—"),
+                step("Set up job", Status::Success, "3s"),
+                step("Checkout", Status::Success, "5s"),
+                step("Cache deps", Status::Success, "12s"),
+                step("cargo test --all", Status::Failure, "2m 34s"),
+                step("Upload artifacts", Status::Skipped, "—"),
             ],
         },
         Job {
             name: "build-release".into(),
-            status: "running".into(),
+            status: Status::Running,
             dur: "1m 06s".into(),
             steps: vec![
-                step("Set up job", "success", "2s"),
-                step("Checkout", "success", "4s"),
-                step("cross build aarch64", "running", "1m 00s"),
-                step("Sign binaries", "pending", "—"),
-                step("Publish draft", "pending", "—"),
+                step("Set up job", Status::Success, "2s"),
+                step("Checkout", Status::Success, "4s"),
+                step("cross build aarch64", Status::Running, "1m 00s"),
+                step("Sign binaries", Status::Pending, "—"),
+                step("Publish draft", Status::Pending, "—"),
             ],
         },
         Job {
             name: "e2e-tui".into(),
-            status: "pending".into(),
+            status: Status::Pending,
             dur: "—".into(),
             steps: vec![
-                step("Set up job", "pending", "—"),
-                step("Run vhs tapes", "pending", "—"),
+                step("Set up job", Status::Pending, "—"),
+                step("Run vhs tapes", Status::Pending, "—"),
             ],
         },
     ]
 }
 
-pub fn logs_for(status: &str) -> &'static [DemoLine] {
+pub fn logs_for(status: Status) -> &'static [DemoLine] {
     match status {
-        "success" => &[
+        Status::Success => &[
             ("##[group]Run cargo test --all", "group"),
             ("  cargo test --all --locked", "dim"),
             (
@@ -604,7 +604,7 @@ pub fn logs_for(status: &str) -> &'static [DemoLine] {
             ("test result: ok. 148 passed; 0 failed; 2 ignored", "green"),
             ("##[endgroup]", "group"),
         ],
-        "failure" => &[
+        Status::Failure => &[
             ("##[group]Run cargo test --all", "group"),
             ("  cargo test --all --locked", "dim"),
             (
@@ -642,7 +642,7 @@ pub fn logs_for(status: &str) -> &'static [DemoLine] {
             ("##[error]Process completed with exit code 101.", "red"),
             ("##[endgroup]", "group"),
         ],
-        "running" => &[
+        Status::Running => &[
             (
                 "##[group]Run cross build --target aarch64-apple-darwin",
                 "group",
@@ -658,7 +658,7 @@ pub fn logs_for(status: &str) -> &'static [DemoLine] {
             ("warning: unused variable: `cols`", "yellow"),
             ("  --> src/layout/solver.rs:198:13", "dim"),
         ],
-        "skipped" => &[(
+        Status::Skipped => &[(
             "This step was skipped because a previous step failed.",
             "dim",
         )],

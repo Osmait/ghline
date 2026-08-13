@@ -6,6 +6,7 @@ use ratatui::style::{Color, Style};
 
 use super::{fill, hline, put, put_right, put_trunc, scroll_into_view, vline, wrap};
 use crate::app::{App, NodeKind, Pane};
+use crate::data::Status;
 use crate::theme;
 
 const TREE_W: u16 = 38;
@@ -118,12 +119,12 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             cx,
             y,
             area.right(),
-            theme::state_icon(&n.status),
-            base.fg(theme::state_color(&n.status)),
+            theme::state_icon(n.status),
+            base.fg(theme::state_color(n.status)),
         );
         cx = put(buf, cx, y, area.right(), " ", base);
 
-        let dur_color = if n.status == "running" {
+        let dur_color = if n.status == Status::Running {
             theme::YELLOW
         } else {
             theme::DIMMER
@@ -144,8 +145,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
     let nodes = app.flat_tree();
     let idx = app.tree_sel_idx(nodes.len());
     let (name, status, dur) = match nodes.get(idx) {
-        Some(n) => (n.name.clone(), n.status.clone(), n.dur.clone()),
-        None => ("—".to_string(), "pending".to_string(), "—".to_string()),
+        Some(n) => (n.name.clone(), n.status, n.dur.clone()),
+        None => ("—".to_string(), Status::Pending, "—".to_string()),
     };
 
     // ---- header
@@ -162,8 +163,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.x + 1,
         area.y,
         area.right(),
-        theme::state_icon(&status),
-        base.fg(theme::state_color(&status)),
+        theme::state_icon(status),
+        base.fg(theme::state_color(status)),
     );
     cx = put(buf, cx, area.y, area.right(), " ", base);
     // the rightmost ~32 columns are reserved (follow + shortcut)
@@ -174,7 +175,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.y,
         head_max,
         &name,
-        base.fg(theme::state_color(&status)),
+        base.fg(theme::state_color(status)),
     );
     cx = put(buf, cx, area.y, head_max, "  ", base);
     put_trunc(
@@ -307,7 +308,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
-    let tail = if status == "running" {
+    let tail = if status == Status::Running {
         "▌ streaming…".to_string()
     } else if !app.log_filter.is_empty() {
         format!("filter: /{}", app.log_filter)

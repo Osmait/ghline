@@ -7,7 +7,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{fill, hline, put, put_right, put_trunc, scroll_into_view};
 use crate::app::{App, Pane};
-use crate::data::{Item, Kind, TABS};
+use crate::data::{Item, Kind, Status, TABS};
 use crate::theme;
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
@@ -115,18 +115,18 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
 fn icon_for(it: &Item) -> &'static str {
     match it.kind {
         Kind::Issue => {
-            if it.state == "open" {
+            if it.state == Status::Open {
                 "◉"
             } else {
                 "⊙"
             }
         }
-        Kind::Pr => match it.state.as_str() {
-            "merged" => "⑃",
-            "draft" => "⑂",
+        Kind::Pr => match it.state {
+            Status::Merged => "⑃",
+            Status::Draft => "⑂",
             _ => "⇅",
         },
-        Kind::Run => theme::state_icon(&it.state),
+        Kind::Run => theme::state_icon(it.state),
     }
 }
 
@@ -209,7 +209,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
 
         // icon + number
-        let status = &it.state;
+        let status = it.state;
         put(
             buf,
             area.x + 2,
@@ -224,12 +224,12 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
         // estado (derecha)
         let state_text = if it.kind == Kind::Pr {
-            format!("{}  {} checks", it.state, theme::state_icon(&it.checks))
+            format!("{}  {} checks", it.state, theme::state_icon(it.checks))
         } else {
             it.state.to_string()
         };
         let state_color = theme::state_color(if it.kind == Kind::Pr {
-            &it.checks
+            it.checks
         } else {
             status
         });

@@ -1,5 +1,83 @@
 //! The design's static data: accounts, repos, issues, PRs, runs, jobs and logs.
 
+/// The state vocabulary the design uses across issues, pull requests and CI.
+///
+/// One enum rather than two because `Item::state` genuinely holds either,
+/// depending on the item's kind — the design's own `sc()` and `si()` map the
+/// whole union in a single function too.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Status {
+    // issues and pull requests
+    Open,
+    Draft,
+    Merged,
+    Closed,
+    // checks, jobs and workflow runs
+    Success,
+    Failure,
+    Running,
+    Pending,
+    Cancelled,
+    Skipped,
+    /// Anything the API reports that is not modelled here, and the resting
+    /// state of a field that does not apply to this kind of item.
+    #[default]
+    Unknown,
+}
+
+impl Status {
+    /// The lowercase name the interface prints, matching the design's strings.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Draft => "draft",
+            Self::Merged => "merged",
+            Self::Closed => "closed",
+            Self::Success => "success",
+            Self::Failure => "failure",
+            Self::Running => "running",
+            Self::Pending => "pending",
+            Self::Cancelled => "cancelled",
+            Self::Skipped => "skipped",
+            Self::Unknown => "",
+        }
+    }
+
+    /// Reads the API's spelling, which arrives in any case and sometimes with
+    /// underscores (`TIMED_OUT`).
+    pub fn parse(raw: &str) -> Self {
+        match raw.to_lowercase().replace('_', " ").as_str() {
+            "open" => Self::Open,
+            "draft" => Self::Draft,
+            "merged" => Self::Merged,
+            "closed" => Self::Closed,
+            "success" | "neutral" => Self::Success,
+            "failure" | "timed out" | "action required" | "startup failure" => Self::Failure,
+            "running" | "in progress" => Self::Running,
+            "pending" | "queued" | "waiting" | "requested" => Self::Pending,
+            "cancelled" | "canceled" => Self::Cancelled,
+            "skipped" => Self::Skipped,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Is this a pull request that can still be acted on?
+    pub fn is_open(self) -> bool {
+        matches!(self, Self::Open | Self::Draft)
+    }
+
+    /// Has this check, job or run finished running?
+    pub fn is_settled(self) -> bool {
+        !matches!(self, Self::Running | Self::Pending)
+    }
+}
+
+impl std::fmt::Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Issue,
@@ -219,7 +297,7 @@ pub struct Item {
     /// Internal identifier (the run's databaseId); 0 for issues and PRs.
     pub id: i64,
     pub title: String,
-    pub state: String,
+    pub state: Status,
     pub author: String,
     pub when: String,
     pub body: String,
@@ -228,7 +306,7 @@ pub struct Item {
     pub comments: u32,
     pub comment_list: Vec<Comment>,
     // pull request
-    pub checks: String,
+    pub checks: Status,
     pub add: String,
     pub del: String,
     pub files: u32,
@@ -272,14 +350,14 @@ impl Item {
             num: 0,
             id: 0,
             title: String::new(),
-            state: "open".into(),
+            state: Status::Open,
             author: String::new(),
             when: String::new(),
             body: String::new(),
             labels: Vec::new(),
             comments: 0,
             comment_list: Vec::new(),
-            checks: String::new(),
+            checks: Status::Unknown,
             add: String::new(),
             del: String::new(),
             files: 0,
@@ -299,14 +377,14 @@ impl Item {
 #[derive(Clone)]
 pub struct Step {
     pub name: String,
-    pub status: String,
+    pub status: Status,
     pub dur: String,
 }
 
 #[derive(Clone)]
 pub struct Job {
     pub name: String,
-    pub status: String,
+    pub status: Status,
     pub dur: String,
     pub steps: Vec<Step>,
 }
