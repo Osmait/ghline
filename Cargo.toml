@@ -1,0 +1,32 @@
+[package]
+name = "github-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.28"
+ratatui = "0.29"
+serde_json = "1.0.151"
+unicode-width = "0.2"
+
+# Lints kept deliberately narrow: the goal is to catch real defects, not to
+# fight the `as u16` casts that a cell-grid renderer is made of.
+[lints.rust]
+unsafe_code = "forbid"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+# nothing in the product may panic on its own; tests opt out locally
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+dbg_macro = "warn"
+print_stdout = "warn"
+# idiom nits that had real hits when the pedantic group was tried
+use_self = "warn"
+unnested_or_patterns = "warn"
+redundant_closure_for_method_calls = "warn"
+needless_pass_by_value = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"

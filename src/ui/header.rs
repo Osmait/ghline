@@ -1,0 +1,134 @@
+//! Barra superior: `gh │ cuenta │ breadcrumbs … sync · ? help`.
+
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Style};
+
+use super::{bold, fill, put, put_right};
+use crate::app::{App, View};
+use crate::data::TABS;
+use crate::theme;
+
+pub struct Crumb {
+    pub label: String,
+    pub color: Color,
+    pub sep: &'static str,
+}
+
+pub fn crumbs(app: &App) -> Vec<Crumb> {
+    let mut out = vec![
+        Crumb {
+            label: app.login().to_string(),
+            color: theme::DIM,
+            sep: "/",
+        },
+        Crumb {
+            label: app.repo_name().to_string(),
+            color: theme::BRIGHT,
+            sep: "›",
+        },
+        Crumb {
+            label: TABS[app.tab].label.to_string(),
+            color: if app.view == View::List {
+                theme::CYAN
+            } else {
+                theme::DIM
+            },
+            sep: if app.view == View::List { "" } else { "›" },
+        },
+    ];
+
+    if app.view != View::List
+        && let Some(cur) = app.current()
+    {
+        out.push(Crumb {
+            label: format!("#{}", cur.num),
+            color: if app.view == View::Detail {
+                theme::CYAN
+            } else {
+                theme::DIM
+            },
+            sep: if app.view == View::Detail { "" } else { "›" },
+        });
+    }
+    if app.view == View::Diff {
+        out.push(Crumb {
+            label: "diff".to_string(),
+            color: theme::CYAN,
+            sep: "",
+        });
+    }
+    if app.view == View::Logs {
+        let tree = app.flat_tree();
+        let name = tree
+            .get(app.tree_sel_idx(tree.len()))
+            .map(|n| n.name.clone())
+            .unwrap_or_else(|| "—".into());
+        out.push(Crumb {
+            label: name,
+            color: theme::CYAN,
+            sep: "",
+        });
+    }
+    out
+}
+
+pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
+    fill(buf, area, theme::PANEL);
+    let y = area.y;
+    let max = area.right();
+    let base = Style::default().bg(theme::PANEL);
+
+    let mut x = area.x + 1;
+    x = put(buf, x, y, max, "gh", bold(base.fg(theme::YELLOW)));
+    x = put(buf, x, y, max, "  │  ", base.fg(theme::DIM));
+
+    // cuenta activa
+    x = put(buf, x, y, max, "●", base.fg(theme::GREEN));
+    x = put(buf, x, y, max, " ", base);
+    x = put(buf, x, y, max, app.login(), base.fg(theme::FG));
+    x = put(buf, x, y, max, " ", base);
+    x = put(
+        buf,
+        x,
+        y,
+        max,
+        app.account().map(|a| a.kind.as_str()).unwrap_or(""),
+        base.fg(theme::DIM),
+    );
+    x = put(buf, x, y, max, " [a]", base.fg(theme::DIM));
+    x = put(buf, x, y, max, "  │  ", base.fg(theme::DIM));
+
+    // breadcrumbs; the right-hand side is reserved
+    let sync = if app.live() {
+        if app.waiting() {
+            "gh · syncing…".to_string()
+        } else {
+            "gh · live".to_string()
+        }
+    } else {
+        format!(
+            "synced {}s ago · {}",
+            3 + (app.tick % 40),
+            if app.view == View::Logs {
+                "streaming"
+            } else {
+                "idle"
+            }
+        )
+    };
+    let right_w = sync.chars().count() as u16 + 10;
+    let crumb_max = max.saturating_sub(right_w).max(x);
+
+    for c in crumbs(app) {
+        x = put(buf, x, y, crumb_max, &c.label, base.fg(c.color));
+        if !c.sep.is_empty() {
+            x = put(buf, x, y, crumb_max, " ", base);
+            x = put(buf, x, y, crumb_max, c.sep, base.fg(theme::GUTTER));
+            x = put(buf, x, y, crumb_max, " ", base);
+        }
+    }
+
+    let help_x = put_right(buf, max - 1, y, "?  help", base.fg(theme::DIMMEST));
+    put_right(buf, help_x - 2, y, &sync, base.fg(theme::DIM));
+}
