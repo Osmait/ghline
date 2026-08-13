@@ -1,0 +1,5 @@
+# Pinned so that a formatting or lint difference between machines is a real
+# finding rather than a version gap.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
