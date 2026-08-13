@@ -153,7 +153,8 @@ back. In real mode the changes are real changes on GitHub.
 | File | Contents |
 |---|---|
 | `src/theme.rs` | the design's palette and glyphs (`sc()` / `si()`) |
-| `src/data.rs` | static data: accounts, repos, issues, PRs, runs, jobs, logs |
+| `src/data.rs` | the model: items, statuses, diffs — no dependencies of its own |
+| `src/demo.rs` | the design's fixture, apart from the model it fills in |
 | `src/app.rs` | state and reducer, equivalent to the design's `Component` class |
 | `src/gh.rs` | invoking `gh` and translating its JSON into the model |
 | `src/service.rs` | worker thread: requests and responses over channels |
@@ -161,6 +162,29 @@ back. In real mode the changes are real changes on GitHub.
 | `src/error.rs` | the error type shared by the `gh` layer |
 | `src/ui/` | render per region: header, sidebar, list, detail, diff, logs, status, overlay |
 | `src/snapshot.rs` | terminal-free mode for inspecting a render |
+
+## Layering
+
+Each module only reaches downwards, which the import graph makes easy to
+check:
+
+```
+data, error        model and failures, no dependencies of their own
+theme, gh          presentation and infrastructure, both read the model
+demo               the design's fixture
+service            blocking gh calls on a worker thread, over channels
+app                state and reducer
+ui                 render per region; reads the state, mutates nothing
+```
+
+The model carries no presentation: a label travels as RGB and a review as a
+`ReviewState`, and `theme` is what turns either into a terminal colour. No
+module under `ui/` imports `gh` or `service`, so the render can never reach the
+network.
+
+States — open, draft, merged, success, failure and the rest — are a `Status`
+enum rather than strings. `theme::state_color` and `state_icon` match on it
+exhaustively, so a new state makes the compiler ask what it should look like.
 
 ## Error handling
 
@@ -178,8 +202,16 @@ with no echo.
 ## Tests
 
 ```sh
-cargo test
+cargo test          # 86 unit tests
+cargo clippy        # the lint set configured in Cargo.toml
+cargo machete       # unused dependencies
+cargo audit         # advisories against the dependency tree
 ```
+
+The lint set in `Cargo.toml` forbids `unsafe`, and warns on `unwrap`, `expect`,
+`panic`, `todo`, `dbg!` and `print!` outside the modules that legitimately need
+them. It is kept deliberately narrow: the full `pedantic` group mostly objects
+to the `as u16` casts a cell-grid renderer is made of.
 
 The suite covers the parsing and layout edge cases that are easy to get wrong
 and hard to see: dates with GitHub's zero timestamp, both ANSI escape forms,
