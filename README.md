@@ -39,9 +39,12 @@ Requires a truecolor terminal. The design's font is JetBrains Mono.
 | Logs | `gh run view --log`, split per job and step |
 | Actions | `gh pr merge/close/reopen` and `DELETE /git/refs` |
 
-The calls run on a separate thread, so the interface never hangs: each panel
-shows `loading…` while its response is on the way, and the `gh` error if it
-fails. `r` drops the active repo's caches and asks for everything again.
+The calls run on a separate thread, so the interface never hangs. While a
+response is on its way each panel draws the outline of what is coming —
+placeholder rows in the proportions the real ones will have, with a highlight
+band travelling down them — rather than a word in an empty box, so nothing
+jumps when the data lands. A failure shows the `gh` error instead. `r` drops
+the active repo's caches and asks for everything again.
 
 ## Navigation
 
@@ -105,6 +108,14 @@ Commands: `:account`, `:issues`, `:prs`, `:actions`, `:logs`, `:diff`, `:files`,
 As in the design, `q` and `:q` go back or close the overlay; to quit the program
 use `ctrl-c`.
 
+## Markdown
+
+Bodies are Markdown, and they are rendered as such: headings lose their hashes
+and gain weight, emphasis becomes emphasis, inline code and links take the
+design's palette, and tables keep their shape. `tui-markdown` does the parsing,
+taken without its default feature so that syntax colouring inside fences — and
+the C dependency it brings — stays out of the build.
+
 ## Files and diff
 
 `d` on a pull request opens the diff view: the changed files with their counts
@@ -161,6 +172,7 @@ back. In real mode the changes are real changes on GitHub.
 | `src/actions.rs` | merge / close / reopen / branch deletion, isolated from the UI |
 | `src/error.rs` | the error type shared by the `gh` layer |
 | `src/ui/` | render per region: header, sidebar, list, detail, diff, logs, status, overlay |
+| `src/ui/markdown.rs` | Markdown bodies, folded and mapped onto the design's palette |
 | `src/snapshot.rs` | terminal-free mode for inspecting a render |
 
 ## Layering
@@ -244,6 +256,9 @@ cargo run -- --svg "" 150 40 > list.svg
 
 # with real data, waiting on gh between keys
 cargo run -- --svg-live "<enter><enter>" 150 40 > logs.svg
+
+# any view held in its loading state, to look at the skeletons
+cargo run -- --svg-loading "" 150 40 5 > loading.svg
 ```
 
 Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>` and the
