@@ -138,13 +138,22 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             base.fg(color),
         );
 
-        // the agent's own name, which is what you are choosing between
+        // Two marks, two meanings: the one on the left is what it is doing
+        // and is coloured by state, this one is who it is and never changes.
         let text_x = area.x + 4;
-        let kind_end = put_trunc(
+        put(
             buf,
             text_x,
             y,
-            text_x + 10,
+            area.right(),
+            &a.icon(),
+            base.fg(theme::purple()),
+        );
+        let kind_end = put_trunc(
+            buf,
+            text_x + 2,
+            y,
+            text_x + 12,
             &a.kind,
             base.fg(theme::cyan_soft()).add_modifier(Modifier::BOLD),
         );
@@ -166,7 +175,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         };
         put_trunc(
             buf,
-            kind_end.max(text_x + 9),
+            kind_end.max(text_x + 11),
             y,
             state_x.saturating_sub(2),
             &title,
@@ -183,7 +192,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
         put_trunc(
             buf,
-            text_x + 9,
+            text_x + 11,
             y + 1,
             pane_x.saturating_sub(2),
             &a.cwd,

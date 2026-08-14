@@ -168,6 +168,33 @@ pub fn agent_kinds() -> Vec<String> {
         .collect()
 }
 
+const ICONS: &str = "agent-icons";
+
+/// The mark to draw for an agent, from config or from what it calls itself.
+///
+/// Configurable because the right answer depends on a font this program cannot
+/// see. Someone running a Nerd Font Mono can put a proper brand glyph here;
+/// the defaults stay in the range every terminal can fall back to.
+pub fn agent_icon(kind: &str) -> String {
+    load()
+        .get(ICONS)
+        .and_then(|spec| lookup_icon(spec, kind))
+        .unwrap_or_else(|| crate::data::default_agent_icon(kind).to_string())
+}
+
+/// Reads `claude=✳, codex=⌬` and finds one entry.
+///
+/// An entry that is not a single character is ignored rather than drawn: this
+/// goes into a fixed-width column, and a word there would push everything on
+/// the row sideways.
+fn lookup_icon(spec: &str, kind: &str) -> Option<String> {
+    spec.split(',')
+        .filter_map(|pair| pair.split_once('='))
+        .find(|(k, _)| k.trim() == kind)
+        .map(|(_, v)| v.trim().to_string())
+        .filter(|v| v.chars().count() == 1)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -276,6 +303,59 @@ mod tests {
         for k in ["claude", "codex", "opencode", "pi"] {
             assert!(kinds.iter().any(|x| x == k), "{k} missing from {kinds:?}");
         }
+    }
+
+    #[test]
+    fn an_agent_with_no_mark_of_its_own_gets_a_neutral_one() {
+        // inventing a brand glyph would be decoration pretending to be
+        // information; a plain mark is honest
+        assert_eq!(crate::data::default_agent_icon("something-new"), "▪");
+    }
+
+    #[test]
+    fn the_two_agents_that_have_a_real_mark_keep_it() {
+        assert_eq!(crate::data::default_agent_icon("pi"), "π");
+        assert_eq!(crate::data::default_agent_icon("claude"), "✳");
+    }
+
+    #[test]
+    fn every_default_icon_is_one_column_wide() {
+        // the column is fixed; a wide glyph would push the row sideways
+        use unicode_width::UnicodeWidthStr;
+        for kind in ["claude", "codex", "opencode", "pi", "anything"] {
+            let icon = crate::data::default_agent_icon(kind);
+            assert_eq!(icon.width(), 1, "{kind} draws {icon}");
+        }
+    }
+
+    #[test]
+    fn a_configured_icon_is_found_by_name() {
+        assert_eq!(
+            lookup_icon("claude=A, codex=B", "codex").as_deref(),
+            Some("B")
+        );
+        assert_eq!(lookup_icon("claude = A", "claude").as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn a_name_that_is_not_configured_falls_through() {
+        assert_eq!(lookup_icon("claude=A", "pi"), None);
+        assert_eq!(lookup_icon("", "pi"), None);
+        assert_eq!(lookup_icon("nonsense", "pi"), None);
+    }
+
+    #[test]
+    fn an_icon_that_is_not_a_single_character_is_refused() {
+        // it would push everything on the row sideways
+        assert_eq!(lookup_icon("claude=hello", "claude"), None);
+        assert_eq!(lookup_icon("claude=", "claude"), None);
+    }
+
+    #[test]
+    fn a_configured_icon_may_be_a_wide_one() {
+        // one character, two columns — `put` clears the cell it covers, so
+        // this is the reader's call to make
+        assert_eq!(lookup_icon("claude=漢", "claude").as_deref(), Some("漢"));
     }
 
     #[test]

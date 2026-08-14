@@ -208,7 +208,7 @@ go.
 
 ### Settings
 
-Six keys in `~/.config/github-tui/config`, all optional:
+Seven keys in `~/.config/github-tui/config`, all optional:
 
 ```
 prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
@@ -216,6 +216,7 @@ prompt-pr   = Review {repo}#{num}: {title}\n\n{url}\n\n{context}
 prompt-run  = Diagnose this failing run in {repo}.\n\n{title}\n{url}\n\n{context}
 prompt-diff = Explain this change from {repo}#{num}\n\n{url}\n\n{context}
 agents      = claude, codex, opencode, pi
+agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
 clone-roots = ~/orca, ~/Projects
 ```
 
@@ -225,6 +226,18 @@ excerpt depending on what is being sent; an unknown one is left as itself
 rather than blanked, so a typo looks like a typo. `\n` is two characters in a
 config file and becomes a real newline on the way out. The URL is in every
 default because an agent that can read the thing asks fewer questions.
+
+`agent-icons` overrides the mark drawn beside each agent, as
+`claude=✳, codex=⌬`. Only two of the defaults are real marks: `π` is what pi
+puts in its own terminal title and `✳` is what Claude Code prints for itself.
+Codex and opencode have no glyph of their own and get a neutral one, because an
+invented brand icon is decoration pretending to be information.
+
+They are plain BMP symbols rather than Nerd Font glyphs on purpose. A Nerd Font
+icon lives in the private use area, where `unicode-width` has to guess it is one
+column while the non-Mono font variants draw it across two — which is how a
+column chart quietly goes crooked. If your font can do better, say so here; an
+entry that is not a single character is ignored rather than drawn.
 
 `agents` is what to offer for a new worktree — herdr decides what it can
 actually start, so an unsupported name comes back as herdr's own refusal

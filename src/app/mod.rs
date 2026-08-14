@@ -119,13 +119,19 @@ pub enum Dest {
 impl Dest {
     pub fn title(&self) -> String {
         match self {
-            Self::Running(a) => format!("{}  ·  {}", a.kind, a.where_short()),
+            Self::Running(a) => format!("{} {}  ·  {}", a.icon(), a.kind, a.where_short()),
             Self::Fresh {
                 kind,
                 in_place: Some(branch),
                 ..
-            } => format!("new {kind} on {branch}, in the checkout"),
-            Self::Fresh { kind, .. } => format!("new worktree with {kind}"),
+            } => format!(
+                "{} new {kind} on {branch}, in the checkout",
+                crate::config::agent_icon(kind)
+            ),
+            Self::Fresh { kind, .. } => format!(
+                "{} new worktree with {kind}",
+                crate::config::agent_icon(kind)
+            ),
             Self::NotCloned(repo) => format!("{repo} is not on this machine"),
         }
     }
