@@ -40,7 +40,7 @@ pub fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {
             fenced = !fenced;
             out.push(vec![(
                 trimmed.to_string(),
-                Style::default().bg(theme::BG).fg(theme::DIMMER),
+                Style::default().bg(theme::bg()).fg(theme::dimmer()),
             )]);
             continue;
         }
@@ -102,15 +102,15 @@ fn hard_breaks(body: &str) -> String {
 
 /// Maps `tui-markdown`'s generic styling onto the design's palette.
 fn restyle(s: CoreStyle) -> Style {
-    let base = Style::default().bg(theme::BG);
+    let base = Style::default().bg(theme::bg());
     let styled = match (s.fg, s.bg) {
         // inline code arrives as white on black
         (Some(CoreColor::White), Some(CoreColor::Black)) => {
-            base.bg(theme::TAB_ACTIVE_BG).fg(theme::CYAN_SOFT)
+            base.bg(theme::tab_active_bg()).fg(theme::cyan_soft())
         }
         // links arrive as ANSI blue; the design paints them cyan
-        (Some(CoreColor::Blue), _) => base.fg(theme::CYAN),
-        _ => base.fg(theme::BODY),
+        (Some(CoreColor::Blue), _) => base.fg(theme::cyan()),
+        _ => base.fg(theme::body()),
     };
     let mut m = Modifier::empty();
     if s.add_modifier.contains(CoreModifier::BOLD) {
@@ -131,21 +131,25 @@ fn heading(spans: &[Seg]) -> Option<Vec<Seg>> {
         return None;
     }
     let level = hashes.len();
-    let color = if level <= 2 { theme::BRIGHT } else { theme::FG };
+    let color = if level <= 2 {
+        theme::bright()
+    } else {
+        theme::fg()
+    };
     let mut out: Vec<Seg> = spans[1..]
         .iter()
         .map(|(t, _)| {
             (
                 t.clone(),
                 Style::default()
-                    .bg(theme::BG)
+                    .bg(theme::bg())
                     .fg(color)
                     .add_modifier(Modifier::BOLD),
             )
         })
         .collect();
     if out.is_empty() {
-        out.push((String::new(), Style::default().bg(theme::BG)));
+        out.push((String::new(), Style::default().bg(theme::bg())));
     }
     Some(out)
 }
@@ -158,12 +162,12 @@ fn quote(spans: &[Seg]) -> Option<Vec<Seg>> {
     }
     let mut out = vec![(
         "▌ ".to_string(),
-        Style::default().bg(theme::BG).fg(theme::BORDER),
+        Style::default().bg(theme::bg()).fg(theme::border()),
     )];
     out.extend(
         spans[1..]
             .iter()
-            .map(|(t, s)| (t.clone(), s.fg(theme::DIM))),
+            .map(|(t, s)| (t.clone(), s.fg(theme::dim()))),
     );
     Some(out)
 }
@@ -293,11 +297,11 @@ mod tests {
         assert!(
             spans
                 .iter()
-                .any(|(t, s)| t == "snippet" && s.fg == Some(theme::CYAN_SOFT)),
+                .any(|(t, s)| t == "snippet" && s.fg == Some(theme::cyan_soft())),
             "inline code should not stay white on black"
         );
         assert!(
-            spans.iter().any(|(_, s)| s.fg == Some(theme::CYAN)),
+            spans.iter().any(|(_, s)| s.fg == Some(theme::cyan())),
             "links should be cyan, not ANSI blue"
         );
     }

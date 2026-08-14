@@ -22,7 +22,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
 fn state_badge(buf: &mut Buffer, x: u16, y: u16, max: u16, state: Status) -> u16 {
     let color = theme::state_color(state);
-    let base = Style::default().bg(theme::BG).fg(color);
+    let base = Style::default().bg(theme::bg()).fg(color);
     let text = format!("[ {} ]", state.label().to_uppercase());
     put(buf, x, y, max, &text, base)
 }
@@ -57,7 +57,7 @@ fn window(buf: &mut Buffer, area: Rect, lines: &[Vec<Seg>], offset: usize, focus
                 area.y + i as u16,
                 area.x,
                 "▌",
-                Style::default().bg(theme::BG).fg(theme::CYAN),
+                Style::default().bg(theme::bg()).fg(theme::cyan()),
             );
         }
     }
@@ -66,10 +66,11 @@ fn window(buf: &mut Buffer, area: Rect, lines: &[Vec<Seg>], offset: usize, focus
         return;
     }
     let bx = area.right() - 1;
-    let track = Style::default().bg(theme::BG).fg(theme::BORDER);
-    let thumb = Style::default()
-        .bg(theme::BG)
-        .fg(if focused { theme::CYAN } else { theme::DIM });
+    let track = Style::default().bg(theme::bg()).fg(theme::border());
+    let thumb =
+        Style::default()
+            .bg(theme::bg())
+            .fg(if focused { theme::cyan() } else { theme::dim() });
     let max = lines.len() - h;
     let size = ((h * h) / lines.len()).max(1);
     let pos = (h - size).checked_mul(offset).map_or(0, |v| v / max.max(1));
@@ -99,7 +100,7 @@ fn skeleton_lines(width: usize, widths: &[u16], first: usize) -> Vec<Vec<Seg>> {
             let w = (width * p as usize / 100).max(1);
             vec![(
                 "█".repeat(w),
-                Style::default().bg(theme::BG).fg(band(i + first)),
+                Style::default().bg(theme::bg()).fg(band(i + first)),
             )]
         })
         .collect()
@@ -109,7 +110,7 @@ fn skeleton_lines(width: usize, widths: &[u16], first: usize) -> Vec<Vec<Seg>> {
 /// `ui::skel_bar`; these lines are static because they scroll with the pane and
 /// a moving band would fight the scrolling.
 fn band(_row: usize) -> ratatui::style::Color {
-    theme::SEL
+    theme::sel()
 }
 
 /// How far a pane of `height` rows can scroll.
@@ -118,7 +119,7 @@ fn max_offset(len: usize, height: u16) -> usize {
 }
 
 fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<Seg>> {
-    let base = Style::default().bg(theme::BG);
+    let base = Style::default().bg(theme::bg());
     let mut out: Vec<Vec<Seg>> = Vec::new();
 
     out.push(vec![
@@ -126,19 +127,19 @@ fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<
             format!("[ {} ]", cur.state.label().to_uppercase()),
             base.fg(theme::state_color(cur.state)),
         ),
-        (format!("  #{}  ", cur.num), base.fg(theme::DIMMER)),
+        (format!("  #{}  ", cur.num), base.fg(theme::dimmer())),
         (
             format!("{} · {}", cur.author, cur.when),
-            base.fg(theme::DIMMER),
+            base.fg(theme::dimmer()),
         ),
     ]);
     out.push(Vec::new());
 
     for l in wrap(&cur.title, width.min(70)) {
-        out.push(vec![(l, bold(base.fg(theme::BRIGHT)))]);
+        out.push(vec![(l, bold(base.fg(theme::bright())))]);
     }
     out.push(Vec::new());
-    out.push(vec![("┄".repeat(width), base.fg(theme::BORDER))]);
+    out.push(vec![("┄".repeat(width), base.fg(theme::border()))]);
     out.push(Vec::new());
 
     if pending && cur.body.is_empty() {
@@ -147,7 +148,7 @@ fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<
         out.extend(markdown::render(&cur.body_text(), width.min(76)));
     }
     out.push(Vec::new());
-    out.push(vec![("COMMENTS".into(), base.fg(theme::DIM))]);
+    out.push(vec![("COMMENTS".into(), base.fg(theme::dim()))]);
     out.push(Vec::new());
     if pending && cur.as_issue().is_none_or(|i| i.comment_list.is_empty()) {
         out.extend(skeleton_lines(width.min(76), &[30, 68, 26, 74], 7));
@@ -155,14 +156,14 @@ fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<
 
     for c in cur.as_issue().into_iter().flat_map(|i| &i.comment_list) {
         out.push(vec![
-            ("▌ ".into(), base.fg(theme::BORDER)),
-            (c.author.clone(), base.fg(theme::YELLOW)),
-            (format!(" · {}", c.when), base.fg(theme::DIMMER)),
+            ("▌ ".into(), base.fg(theme::border())),
+            (c.author.clone(), base.fg(theme::yellow())),
+            (format!(" · {}", c.when), base.fg(theme::dimmer())),
         ]);
         for l in wrap(&c.body, width.saturating_sub(2).min(76)) {
             out.push(vec![
-                ("▌ ".into(), base.fg(theme::BORDER)),
-                (l, base.fg(theme::BODY)),
+                ("▌ ".into(), base.fg(theme::border())),
+                (l, base.fg(theme::body())),
             ]);
         }
         out.push(Vec::new());
@@ -196,7 +197,7 @@ fn issue(buf: &mut Buffer, area: Rect, app: &mut App) {
 
 fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
     let Some(cur) = app.current() else { return };
-    let base = Style::default().bg(theme::BG);
+    let base = Style::default().bg(theme::bg());
     let x = area.x + 2;
     let max = area.right() - 2;
 
@@ -210,7 +211,7 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         y,
         max,
         &format!("#{}", cur.num),
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     cx = put(buf, cx, y, max, "  ", base);
     cx = put(
@@ -219,7 +220,7 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         y,
         max,
         &format!("{} · {}", cur.author, cur.when),
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     cx = put(buf, cx, y, max, "  ", base);
     let (checks_label, checks_color) = if cur.kind() == Kind::Pr {
@@ -241,7 +242,7 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     y += 1;
     for line in wrap(&cur.title, (max - x).min(70) as usize) {
-        put(buf, x, y, max, &line, bold(base.fg(theme::BRIGHT)));
+        put(buf, x, y, max, &line, bold(base.fg(theme::bright())));
         y += 1;
     }
 
@@ -267,12 +268,12 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
             run.map_or("", |r| r.dur.as_str())
         )
     };
-    let bx = put_trunc(buf, x, y, max, &branch_line, base.fg(theme::DIMMER));
+    let bx = put_trunc(buf, x, y, max, &branch_line, base.fg(theme::dimmer()));
 
     // outcome of the actions: merge method and branch state
     if let Some(method) = pr.and_then(|p| p.merged_with.as_ref()) {
-        let cx = put(buf, bx, y, max, "  ·  ", base.fg(theme::DIMMER));
-        put(buf, cx, y, max, method, base.fg(theme::PURPLE));
+        let cx = put(buf, bx, y, max, "  ·  ", base.fg(theme::dimmer()));
+        put(buf, cx, y, max, method, base.fg(theme::purple()));
     }
     if pr.is_some_and(|p| p.branch_deleted) {
         let cx = put(
@@ -281,13 +282,13 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
             y,
             max,
             "⊘ ",
-            base.fg(theme::RED),
+            base.fg(theme::red()),
         );
-        put(buf, cx, y, max, "branch deleted", base.fg(theme::DIMMER));
+        put(buf, cx, y, max, "branch deleted", base.fg(theme::dimmer()));
     }
     y += 1;
 
-    hline(buf, area.x, y, area.width, theme::BORDER);
+    hline(buf, area.x, y, area.width, theme::border());
     y += 1;
 
     // ---- two columns (1fr | 1.15fr)
@@ -308,17 +309,17 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width - left_w - 1,
         height: body_h,
     };
-    vline(buf, area.x + left_w, y, body_h, theme::BORDER);
+    vline(buf, area.x + left_w, y, body_h, theme::border());
 
     description(buf, left, app);
     checks_pane(buf, right, app);
 }
 
 fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<Seg>> {
-    let base = Style::default().bg(theme::BG);
+    let base = Style::default().bg(theme::bg());
     let mut out: Vec<Vec<Seg>> = Vec::new();
 
-    out.push(vec![("DESCRIPTION".into(), base.fg(theme::DIM))]);
+    out.push(vec![("DESCRIPTION".into(), base.fg(theme::dim()))]);
     // a skeleton only while there is nothing to show; a refresh keeps the old
     // body on screen rather than blanking it
     if pending && cur.body.is_empty() {
@@ -331,8 +332,8 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
 
     out.push(Vec::new());
     out.push(vec![
-        ("FILES CHANGED".into(), base.fg(theme::DIM)),
-        ("   d → diff".into(), base.fg(theme::DIMMER)),
+        ("FILES CHANGED".into(), base.fg(theme::dim())),
+        ("   d → diff".into(), base.fg(theme::dimmer())),
     ]);
     if pending && cur.files().is_empty() {
         out.extend(skeleton_lines(width, &[58, 44, 66, 50], 5));
@@ -343,16 +344,16 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
         let room = width.saturating_sub(stats.chars().count() + 1);
         let path = super::truncate_pad(&f.path, room);
         out.push(vec![
-            (path, base.fg(theme::BODY)),
+            (path, base.fg(theme::body())),
             (" ".into(), base),
-            (f.add.clone(), base.fg(theme::GREEN)),
+            (f.add.clone(), base.fg(theme::green())),
             (" ".into(), base),
-            (f.del.clone(), base.fg(theme::RED)),
+            (f.del.clone(), base.fg(theme::red())),
         ]);
     }
 
     out.push(Vec::new());
-    out.push(vec![("REVIEWS".into(), base.fg(theme::DIM))]);
+    out.push(vec![("REVIEWS".into(), base.fg(theme::dim()))]);
     let reviews_empty = cur.as_pr().is_none_or(|p| p.reviews.is_empty());
     if pending && reviews_empty {
         out.extend(skeleton_lines(width, &[34, 28], 9));
@@ -361,8 +362,8 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
         let (color, icon) = theme::review(r.state);
         out.push(vec![
             (format!("{icon} "), base.fg(color)),
-            (format!("{} ", r.author), base.fg(theme::BODY)),
-            (r.state.label().to_string(), base.fg(theme::DIMMER)),
+            (format!("{} ", r.author), base.fg(theme::body())),
+            (r.state.label().to_string(), base.fg(theme::dimmer())),
         ]);
     }
     out
@@ -394,7 +395,7 @@ fn description(buf: &mut Buffer, area: Rect, app: &mut App) {
 
 fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     let Some(cur) = app.current() else { return };
-    fill(buf, area, theme::PANEL_ALT);
+    fill(buf, area, theme::panel_alt());
 
     // pane header
     let head = Rect {
@@ -403,8 +404,8 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         width: area.width,
         height: 1,
     };
-    fill(buf, head, theme::PANEL);
-    let hs = Style::default().bg(theme::PANEL).fg(theme::DIM);
+    fill(buf, head, theme::panel());
+    let hs = Style::default().bg(theme::panel()).fg(theme::dim());
     let workflow = if app.live() {
         let name = if cur.workflow().is_empty() {
             "checks"
@@ -438,9 +439,9 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         area.right() - 1,
         area.y,
         "enter → logs",
-        hs.fg(theme::DIMMER),
+        hs.fg(theme::dimmer()),
     );
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     // jobs
     let jobs = app.jobs();
@@ -459,8 +460,11 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             return;
         }
         let (msg, color) = match st.error() {
-            Some(e) => (e.to_string(), theme::RED),
-            None => ("no checks for this pull request".to_string(), theme::DIMMER),
+            Some(e) => (e.to_string(), theme::red()),
+            None => (
+                "no checks for this pull request".to_string(),
+                theme::dimmer(),
+            ),
         };
         put_trunc(
             buf,
@@ -468,7 +472,7 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             y,
             area.right() - 1,
             &msg,
-            Style::default().bg(theme::PANEL_ALT).fg(color),
+            Style::default().bg(theme::panel_alt()).fg(color),
         );
         return;
     }
@@ -477,7 +481,11 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             return;
         }
         let sel = i == app.check;
-        let bg = if sel { theme::SEL } else { theme::PANEL_ALT };
+        let bg = if sel {
+            theme::sel()
+        } else {
+            theme::panel_alt()
+        };
         fill(
             buf,
             Rect {
@@ -491,9 +499,9 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         let base = Style::default().bg(bg);
         if sel {
             let mark = if app.pane == Pane::Checks {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::SEL_MARK_IDLE
+                theme::sel_mark_idle()
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
@@ -507,9 +515,9 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             base.fg(color),
         );
 
-        let dur_x = put_right(buf, area.right() - 1, y, &j.dur, base.fg(theme::DIMMER));
+        let dur_x = put_right(buf, area.right() - 1, y, &j.dur, base.fg(theme::dimmer()));
         let st_x = put_right(buf, dur_x - 2, y, j.status.label(), base.fg(color));
-        let fg = if sel { theme::BRIGHT } else { theme::FG };
+        let fg = if sel { theme::bright() } else { theme::fg() };
         put_trunc(buf, area.x + 4, y, st_x - 1, &j.name, base.fg(fg));
         y += 1;
     }
@@ -519,10 +527,17 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     if y + 2 >= area.bottom() {
         return;
     }
-    let base = Style::default().bg(theme::PANEL_ALT);
+    let base = Style::default().bg(theme::panel_alt());
     let w = area.width.saturating_sub(4);
     let s = "┄".repeat(w as usize);
-    put(buf, area.x + 2, y, area.right(), &s, base.fg(theme::BORDER));
+    put(
+        buf,
+        area.x + 2,
+        y,
+        area.right(),
+        &s,
+        base.fg(theme::border()),
+    );
     y += 1;
 
     let passed = jobs.iter().filter(|j| j.status == Status::Success).count();
@@ -537,7 +552,7 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         y,
         area.right() - 1,
         &format!("{passed} passed · {failed} failed · {progress} in progress"),
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     y += 1;
     let trigger = if app.live() {
@@ -559,6 +574,6 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         y,
         area.right() - 1,
         &trigger,
-        base.fg(theme::DIMMEST),
+        base.fg(theme::dimmest()),
     );
 }

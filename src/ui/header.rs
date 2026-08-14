@@ -19,20 +19,20 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
     let mut out = vec![
         Crumb {
             label: app.login().to_string(),
-            color: theme::DIM,
+            color: theme::dim(),
             sep: "/",
         },
         Crumb {
             label: app.repo_name().to_string(),
-            color: theme::BRIGHT,
+            color: theme::bright(),
             sep: "›",
         },
         Crumb {
             label: TABS[app.tab].label.to_string(),
             color: if app.view == View::List {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::DIM
+                theme::dim()
             },
             sep: if app.view == View::List { "" } else { "›" },
         },
@@ -44,9 +44,9 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
         out.push(Crumb {
             label: format!("#{}", cur.num),
             color: if app.view == View::Detail {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::DIM
+                theme::dim()
             },
             sep: if app.view == View::Detail { "" } else { "›" },
         });
@@ -54,7 +54,7 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
     if app.view == View::Diff {
         out.push(Crumb {
             label: "diff".to_string(),
-            color: theme::CYAN,
+            color: theme::cyan(),
             sep: "",
         });
     }
@@ -66,7 +66,7 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
             .unwrap_or_else(|| "—".into());
         out.push(Crumb {
             label: name,
-            color: theme::CYAN,
+            color: theme::cyan(),
             sep: "",
         });
     }
@@ -74,19 +74,19 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
 }
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
-    fill(buf, area, theme::PANEL);
+    fill(buf, area, theme::panel());
     let y = area.y;
     let max = area.right();
-    let base = Style::default().bg(theme::PANEL);
+    let base = Style::default().bg(theme::panel());
 
     let mut x = area.x + 1;
-    x = put(buf, x, y, max, "gh", bold(base.fg(theme::YELLOW)));
-    x = put(buf, x, y, max, "  │  ", base.fg(theme::DIM));
+    x = put(buf, x, y, max, "gh", bold(base.fg(theme::yellow())));
+    x = put(buf, x, y, max, "  │  ", base.fg(theme::dim()));
 
     // cuenta activa
-    x = put(buf, x, y, max, "●", base.fg(theme::GREEN));
+    x = put(buf, x, y, max, "●", base.fg(theme::green()));
     x = put(buf, x, y, max, " ", base);
-    x = put(buf, x, y, max, app.login(), base.fg(theme::FG));
+    x = put(buf, x, y, max, app.login(), base.fg(theme::fg()));
     x = put(buf, x, y, max, " ", base);
     x = put(
         buf,
@@ -94,10 +94,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         y,
         max,
         app.account().map(|a| a.kind.as_str()).unwrap_or(""),
-        base.fg(theme::DIM),
+        base.fg(theme::dim()),
     );
-    x = put(buf, x, y, max, " [a]", base.fg(theme::DIM));
-    x = put(buf, x, y, max, "  │  ", base.fg(theme::DIM));
+    x = put(buf, x, y, max, " [a]", base.fg(theme::dim()));
+    x = put(buf, x, y, max, "  │  ", base.fg(theme::dim()));
 
     // breadcrumbs; the right-hand side is reserved
     let sync = if app.live() {
@@ -124,11 +124,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         x = put(buf, x, y, crumb_max, &c.label, base.fg(c.color));
         if !c.sep.is_empty() {
             x = put(buf, x, y, crumb_max, " ", base);
-            x = put(buf, x, y, crumb_max, c.sep, base.fg(theme::GUTTER));
+            x = put(buf, x, y, crumb_max, c.sep, base.fg(theme::gutter()));
             x = put(buf, x, y, crumb_max, " ", base);
         }
     }
 
-    let help_x = put_right(buf, max - 1, y, "?  help", base.fg(theme::DIMMEST));
-    put_right(buf, help_x - 2, y, &sync, base.fg(theme::DIM));
+    let help_x = put_right(buf, max - 1, y, "?  help", base.fg(theme::dimmest()));
+    put_right(buf, help_x - 2, y, &sync, base.fg(theme::dim()));
 }

@@ -11,7 +11,7 @@ use crate::data::Kind;
 use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
-    hline(buf, area.x, area.y, area.width, theme::BORDER);
+    hline(buf, area.x, area.y, area.width, theme::border());
 
     let y = area.y + 1;
     fill(
@@ -22,39 +22,39 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             width: area.width,
             height: 1,
         },
-        theme::PANEL,
+        theme::panel(),
     );
-    let base = Style::default().bg(theme::PANEL);
+    let base = Style::default().bg(theme::panel());
 
     let kind = app
         .current()
         .map(super::super::data::Item::kind)
         .unwrap_or(Kind::Issue);
     let (mode_label, mode_color) = match app.cmd {
-        Some(Cmd::Colon) => ("COMMAND", theme::YELLOW),
-        Some(Cmd::Slash) => ("SEARCH", theme::YELLOW),
+        Some(Cmd::Colon) => ("COMMAND", theme::yellow()),
+        Some(Cmd::Slash) => ("SEARCH", theme::yellow()),
         None => match app.view {
-            View::Logs => ("LOGS", theme::PURPLE),
-            View::Diff => ("DIFF", theme::GREEN),
+            View::Logs => ("LOGS", theme::purple()),
+            View::Diff => ("DIFF", theme::green()),
             View::Detail => {
                 if kind == Kind::Issue {
-                    ("ISSUE", theme::CYAN)
+                    ("ISSUE", theme::cyan())
                 } else {
-                    ("PULL", theme::CYAN)
+                    ("PULL", theme::cyan())
                 }
             }
-            View::List => ("NORMAL", theme::CYAN),
+            View::List => ("NORMAL", theme::cyan()),
         },
     };
     // the mode colour depends on whether a command line is open
     let mode_color = if app.cmd.is_some() {
-        theme::YELLOW
+        theme::yellow()
     } else {
         mode_color
     };
     // a pending confirmation overrides everything else
     let (mode_label, mode_color) = match app.prompt {
-        Some(_) => ("CONFIRM", theme::ORANGE),
+        Some(_) => ("CONFIRM", theme::orange()),
         None => (mode_label, mode_color),
     };
 
@@ -64,7 +64,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         y,
         area.right(),
         &format!(" {mode_label} "),
-        bold(Style::default().bg(mode_color).fg(theme::BG)),
+        bold(Style::default().bg(mode_color).fg(theme::bg())),
     );
 
     let on_pr = app.actionable_pr();
@@ -111,24 +111,24 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         }
     };
     let position = format!("{counter}  {}/{}", app.login(), app.repo_name());
-    let pos_x = put_right(buf, area.right() - 1, y, &position, base.fg(theme::DIM));
+    let pos_x = put_right(buf, area.right() - 1, y, &position, base.fg(theme::dim()));
 
     // the last action's notice replaces the help text while it lasts
     let (text, color) = match &app.flash {
         Some(f) => (
             f.text.as_str(),
             match f.kind {
-                FlashKind::Ok => theme::GREEN,
-                FlashKind::Warn => theme::YELLOW,
+                FlashKind::Ok => theme::green(),
+                FlashKind::Warn => theme::yellow(),
             },
         ),
-        None => (hint.as_str(), theme::DIMMER),
+        None => (hint.as_str(), theme::dimmer()),
     };
     super::put_trunc(buf, x + 2, y, pos_x.saturating_sub(2), text, base.fg(color));
 
     // ---- command line
     let Some(mode) = app.cmd else { return };
-    hline(buf, area.x, y + 1, area.width, theme::BORDER);
+    hline(buf, area.x, y + 1, area.width, theme::border());
     let cy = y + 2;
     fill(
         buf,
@@ -138,9 +138,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             width: area.width,
             height: 1,
         },
-        theme::BG,
+        theme::bg(),
     );
-    let cb = Style::default().bg(theme::BG);
+    let cb = Style::default().bg(theme::bg());
 
     let prefix = if mode == Cmd::Colon { ":" } else { "/" };
     let mut cx = put(
@@ -149,7 +149,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         cy,
         area.right(),
         prefix,
-        cb.fg(theme::YELLOW),
+        cb.fg(theme::yellow()),
     );
     cx = put(
         buf,
@@ -157,10 +157,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         cy,
         area.right(),
         &app.cmd_text,
-        cb.fg(theme::BRIGHT),
+        cb.fg(theme::bright()),
     );
     if app.blink {
-        put(buf, cx, cy, area.right(), "█", cb.fg(theme::CYAN));
+        put(buf, cx, cy, area.right(), "█", cb.fg(theme::cyan()));
     }
 
     let cmd_hint = if mode == Cmd::Colon {
@@ -168,5 +168,5 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     } else {
         "enter to keep · esc to clear"
     };
-    put_right(buf, area.right() - 1, cy, cmd_hint, cb.fg(theme::DIMMER));
+    put_right(buf, area.right() - 1, cy, cmd_hint, cb.fg(theme::dimmer()));
 }

@@ -80,9 +80,15 @@ fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
     let w = CW * width as f32;
     let h = CH * height as f32;
 
+    // the ground and the default ink come from whichever theme is active, or
+    // the export would always look like the design's
+    let ground = crate::theme::bg();
+    let ink = crate::theme::fg();
+    let ground_hex = hex(ground, ground);
+
     let mut svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{w}\" height=\"{h}\" viewBox=\"0 0 {w} {h}\">\n\
-         <rect width=\"100%\" height=\"100%\" fill=\"#0b0e14\"/>\n\
+         <rect width=\"100%\" height=\"100%\" fill=\"{ground_hex}\"/>\n\
          <g font-family=\"JetBrainsMono Nerd Font, JetBrains Mono, monospace\" font-size=\"16\">\n"
     );
 
@@ -90,20 +96,12 @@ fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
     for y in 0..height {
         let mut x = 0;
         while x < width {
-            let bg = hex(
-                buf[(x, y)].style().bg.unwrap_or(Color::Rgb(11, 14, 20)),
-                Color::Rgb(11, 14, 20),
-            );
+            let bg = hex(buf[(x, y)].style().bg.unwrap_or(ground), ground);
             let start = x;
-            while x < width
-                && hex(
-                    buf[(x, y)].style().bg.unwrap_or(Color::Rgb(11, 14, 20)),
-                    Color::Rgb(11, 14, 20),
-                ) == bg
-            {
+            while x < width && hex(buf[(x, y)].style().bg.unwrap_or(ground), ground) == bg {
                 x += 1;
             }
-            if bg != "#0b0e14" {
+            if bg != ground_hex {
                 svg.push_str(&format!(
                     "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{CH}\" fill=\"{bg}\"/>\n",
                     start as f32 * CW,
@@ -118,18 +116,10 @@ fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
     for y in 0..height {
         let mut x = 0;
         while x < width {
-            let fg = hex(
-                buf[(x, y)].style().fg.unwrap_or(Color::Rgb(197, 205, 217)),
-                Color::Rgb(197, 205, 217),
-            );
+            let fg = hex(buf[(x, y)].style().fg.unwrap_or(ink), ink);
             let start = x;
             let mut run = String::new();
-            while x < width
-                && hex(
-                    buf[(x, y)].style().fg.unwrap_or(Color::Rgb(197, 205, 217)),
-                    Color::Rgb(197, 205, 217),
-                ) == fg
-            {
+            while x < width && hex(buf[(x, y)].style().fg.unwrap_or(ink), ink) == fg {
                 run.push_str(buf[(x, y)].symbol());
                 x += 1;
             }

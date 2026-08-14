@@ -15,19 +15,19 @@ const FILES_W: u16 = 38;
 /// Background for each line kind, as in the design.
 fn row_bg(kind: DiffKind) -> Color {
     match kind {
-        DiffKind::Add => theme::DIFF_ADD_BG,
-        DiffKind::Del => theme::DIFF_DEL_BG,
-        DiffKind::Hdr => theme::TAB_ACTIVE_BG,
-        DiffKind::Ctx => theme::BG,
+        DiffKind::Add => theme::diff_add_bg(),
+        DiffKind::Del => theme::diff_del_bg(),
+        DiffKind::Hdr => theme::tab_active_bg(),
+        DiffKind::Ctx => theme::bg(),
     }
 }
 
 fn row_fg(kind: DiffKind) -> Color {
     match kind {
-        DiffKind::Add => theme::GREEN,
-        DiffKind::Del => theme::RED,
-        DiffKind::Hdr => theme::PURPLE,
-        DiffKind::Ctx => theme::STEP_FG,
+        DiffKind::Add => theme::green(),
+        DiffKind::Del => theme::red(),
+        DiffKind::Hdr => theme::purple(),
+        DiffKind::Ctx => theme::step_fg(),
     }
 }
 
@@ -46,12 +46,12 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: area.height,
     };
     draw_files(buf, files, app);
-    vline(buf, area.x + files_w, area.y, area.height, theme::BORDER);
+    vline(buf, area.x + files_w, area.y, area.height, theme::border());
     draw_body(buf, body, app);
 }
 
 fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
-    fill(buf, area, theme::PANEL_ALT);
+    fill(buf, area, theme::panel_alt());
 
     let head = Rect {
         x: area.x,
@@ -59,20 +59,20 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width,
         height: 1,
     };
-    fill(buf, head, theme::PANEL);
+    fill(buf, head, theme::panel());
     put(
         buf,
         area.x + 1,
         area.y,
         area.right(),
         "FILES CHANGED",
-        Style::default().bg(theme::PANEL).fg(theme::DIM),
+        Style::default().bg(theme::panel()).fg(theme::dim()),
     );
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     // footer with the PR total
     let foot_y = area.bottom() - 1;
-    hline(buf, area.x, foot_y - 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, foot_y - 1, area.width, theme::border_soft());
     fill(
         buf,
         Rect {
@@ -81,7 +81,7 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
             width: area.width,
             height: 1,
         },
-        theme::PANEL,
+        theme::panel(),
     );
     let stats = match app.current() {
         Some(cur) => cur.as_pr().map_or_else(String::new, |p| {
@@ -100,7 +100,7 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         foot_y,
         area.right() - 1,
         &stats,
-        Style::default().bg(theme::PANEL).fg(theme::DIMMER),
+        Style::default().bg(theme::panel()).fg(theme::dimmer()),
     );
 
     // rows
@@ -136,9 +136,9 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         let f = &app.diff_files()[i];
         let selected = i == sel;
         let bg = if selected {
-            theme::SEL
+            theme::sel()
         } else {
-            theme::PANEL_ALT
+            theme::panel_alt()
         };
         fill(
             buf,
@@ -153,28 +153,32 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         let base = Style::default().bg(bg);
         if selected {
             let mark = if focused {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::SEL_MARK_IDLE
+                theme::sel_mark_idle()
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
 
         // counts on the right; the name on the left, with its directory in
         // grey so the file itself stands out
-        let del_x = put_right(buf, area.right() - 1, y, &f.del, base.fg(theme::RED));
-        let add_x = put_right(buf, del_x - 1, y, &f.add, base.fg(theme::GREEN));
+        let del_x = put_right(buf, area.right() - 1, y, &f.del, base.fg(theme::red()));
+        let add_x = put_right(buf, del_x - 1, y, &f.add, base.fg(theme::green()));
 
         let (dir, name) = match f.path.rfind('/') {
             Some(i) => f.path.split_at(i + 1),
             None => ("", f.path.as_str()),
         };
-        let fg = if selected { theme::BRIGHT } else { theme::FG };
+        let fg = if selected {
+            theme::bright()
+        } else {
+            theme::fg()
+        };
         let max = add_x.saturating_sub(1);
         // when it does not all fit, the directory is cut before the name
         let name_w = name.chars().count() as u16;
         let dir_max = max.saturating_sub(name_w).max(area.x + 2);
-        let cx = put_trunc(buf, area.x + 2, y, dir_max, dir, base.fg(theme::DIMMER));
+        let cx = put_trunc(buf, area.x + 2, y, dir_max, dir, base.fg(theme::dimmer()));
         put_trunc(buf, cx, y, max, name, base.fg(fg));
     }
 }
@@ -187,8 +191,8 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width,
         height: 1,
     };
-    fill(buf, head, theme::PANEL);
-    let base = Style::default().bg(theme::PANEL);
+    fill(buf, head, theme::panel());
+    let base = Style::default().bg(theme::panel());
 
     let split_label = if app.split {
         "▥ split [s]"
@@ -205,9 +209,9 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.right() - 1,
         area.y,
         ws_label,
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
-    let split_x = put_right(buf, ws_x - 2, area.y, split_label, base.fg(theme::PURPLE));
+    let split_x = put_right(buf, ws_x - 2, area.y, split_label, base.fg(theme::purple()));
 
     let rows = app.diff_rows();
     let hunks = rows.iter().filter(|r| r.kind == DiffKind::Hdr).count();
@@ -225,7 +229,7 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         split_x.saturating_sub(2),
         area.y,
         &meta,
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     let path = app.diff_file().map(|f| f.path.clone()).unwrap_or_default();
     put_trunc(
@@ -234,9 +238,9 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.y,
         meta_x.saturating_sub(1),
         &path,
-        base.fg(theme::FG),
+        base.fg(theme::fg()),
     );
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     let view = Rect {
         x: area.x,
@@ -312,9 +316,9 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
         let x = area.x + (area.width.saturating_sub(w)) / 2;
         put_trunc(buf, x, y, area.right(), text, style);
     };
-    let base = Style::default().bg(theme::BG);
-    center(&format!("— {title} —"), y, base.fg(theme::DIM), buf);
-    center(&sub, y + 1, base.fg(theme::DIMMER), buf);
+    let base = Style::default().bg(theme::bg());
+    center(&format!("— {title} —"), y, base.fg(theme::dim()), buf);
+    center(&sub, y + 1, base.fg(theme::dimmer()), buf);
 }
 
 /// Both modes share the clipping and the scrolling; only the column layout
@@ -342,7 +346,7 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, rows: &[DiffRow
                 y,
                 area.x + 1,
                 "▌",
-                Style::default().bg(theme::BG).fg(theme::CYAN),
+                Style::default().bg(theme::bg()).fg(theme::cyan()),
             );
         }
     }
@@ -362,8 +366,8 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, r: &DiffRow) {
     );
     let base = Style::default().bg(bg);
     // two numbering columns: original file and new file
-    put_right(buf, area.x + 6, y, &r.lo, base.fg(theme::GUTTER));
-    put_right(buf, area.x + 12, y, &r.ln, base.fg(theme::GUTTER));
+    put_right(buf, area.x + 6, y, &r.lo, base.fg(theme::gutter()));
+    put_right(buf, area.x + 12, y, &r.ln, base.fg(theme::gutter()));
     put_trunc(
         buf,
         area.x + 14,
@@ -390,9 +394,11 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
     };
 
     if let Some(hdr) = &p.hdr {
-        fill(buf, left, theme::TAB_ACTIVE_BG);
-        fill(buf, right, theme::TAB_ACTIVE_BG);
-        let s = Style::default().bg(theme::TAB_ACTIVE_BG).fg(theme::PURPLE);
+        fill(buf, left, theme::tab_active_bg());
+        fill(buf, right, theme::tab_active_bg());
+        let s = Style::default()
+            .bg(theme::tab_active_bg())
+            .fg(theme::purple());
         put_trunc(buf, area.x + 2, y, area.right(), hdr, s);
         return;
     }
@@ -407,15 +413,15 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
             ),
             // the gap of an unbalanced pair gets a duller grey
             None => (
-                theme::DIFF_VOID_BG,
-                theme::DIMMER,
+                theme::diff_void_bg(),
+                theme::dimmer(),
                 String::new(),
                 String::new(),
             ),
         };
         fill(buf, rect, bg);
         let base = Style::default().bg(bg);
-        put_right(buf, rect.x + 5, y, &num, base.fg(theme::GUTTER));
+        put_right(buf, rect.x + 5, y, &num, base.fg(theme::gutter()));
         put_trunc(buf, rect.x + 6, y, rect.right(), &text, base.fg(fg));
     };
 
@@ -430,7 +436,7 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
         "│",
         Style::default()
             .bg(row_bg(p.right.as_ref().map_or(DiffKind::Ctx, |c| c.kind)))
-            .fg(theme::BORDER_SOFT),
+            .fg(theme::border_soft()),
     );
 }
 

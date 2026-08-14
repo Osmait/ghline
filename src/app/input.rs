@@ -48,6 +48,25 @@ impl App {
         self.pane = panes[j as usize];
     }
 
+    /// Opens the theme picker, remembering what to go back to.
+    pub fn open_themes(&mut self) {
+        let current = crate::theme::current();
+        self.theme_before = current;
+        self.theme_sel = crate::theme::Theme::ALL
+            .iter()
+            .position(|t| *t == current)
+            .unwrap_or(0);
+        self.themes_open = true;
+    }
+
+    /// Applies the highlighted theme straight away: the point of the picker is
+    /// to see the interface in it, not to read its name.
+    fn preview_theme(&mut self) {
+        if let Some(t) = crate::theme::Theme::ALL.get(self.theme_sel) {
+            crate::theme::set(*t);
+        }
+    }
+
     /// `g` / `G`: to the start or the end of the focused pane.
     fn goto(&mut self, top: bool) {
         match self.pane {
@@ -189,6 +208,11 @@ impl App {
             self.help_open = false;
             return;
         }
+        if self.themes_open {
+            crate::theme::set(self.theme_before);
+            self.themes_open = false;
+            return;
+        }
         match self.view {
             View::Logs => {
                 if self.pane == Pane::Log {
@@ -237,11 +261,13 @@ impl App {
                 self.pane = Pane::Tree;
             }
             "diff" | "files" => self.open_diff(0),
+            "theme" | "themes" => self.open_themes(),
             "help" | "h" => self.help_open = true,
             "q" | "quit" => {
                 self.view = View::List;
                 self.accounts_open = false;
                 self.help_open = false;
+                self.themes_open = false;
             }
             _ => {}
         }
@@ -334,6 +360,32 @@ impl App {
             return;
         }
 
+        if self.themes_open {
+            let last = crate::theme::Theme::ALL.len() - 1;
+            match ev.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.theme_sel = (self.theme_sel + 1).min(last);
+                    self.preview_theme();
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.theme_sel = self.theme_sel.saturating_sub(1);
+                    self.preview_theme();
+                }
+                KeyCode::Enter => {
+                    self.themes_open = false;
+                    self.flash_ok(format!("theme: {}", crate::theme::current().name()));
+                }
+                KeyCode::Esc | KeyCode::Char('q' | 't') => {
+                    // the picker previews as you move, so leaving it puts back
+                    // whatever was on when it opened
+                    crate::theme::set(self.theme_before);
+                    self.themes_open = false;
+                }
+                _ => {}
+            }
+            return;
+        }
+
         if self.accounts_open {
             match ev.code {
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -373,6 +425,7 @@ impl App {
                 self.accounts_open = true;
                 self.acc_sel = self.acc;
             }
+            KeyCode::Char('t') => self.open_themes(),
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char(':') => {
                 self.cmd = Some(Cmd::Colon);

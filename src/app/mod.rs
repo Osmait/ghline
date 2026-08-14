@@ -154,6 +154,11 @@ pub struct App {
     pub extra_lines: usize,
     pub accounts_open: bool,
     pub acc_sel: usize,
+    /// Theme picker. It previews as you move, so the theme active when it
+    /// opened is kept in order to put it back on `esc`.
+    pub themes_open: bool,
+    pub theme_sel: usize,
+    pub theme_before: crate::theme::Theme,
     pub help_open: bool,
     pub cmd: Option<Cmd>,
     pub cmd_text: String,
@@ -238,6 +243,9 @@ impl App {
             extra_lines: 0,
             accounts_open: false,
             acc_sel: 0,
+            themes_open: false,
+            theme_sel: 0,
+            theme_before: crate::theme::current(),
             help_open: false,
             cmd: None,
             cmd_text: String::new(),

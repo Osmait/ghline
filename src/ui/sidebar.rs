@@ -9,7 +9,7 @@ use crate::app::{App, Pane};
 use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
-    fill(buf, area, theme::PANEL_ALT);
+    fill(buf, area, theme::panel_alt());
 
     let top = Rect {
         x: area.x,
@@ -17,32 +17,32 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width,
         height: 1,
     };
-    fill(buf, top, theme::PANEL);
-    let head = Style::default().bg(theme::PANEL).fg(theme::DIM);
+    fill(buf, top, theme::panel());
+    let head = Style::default().bg(theme::panel()).fg(theme::dim());
     put(buf, area.x + 1, area.y, area.right(), "REPOSITORIES", head);
 
     let repos_len = app.repos().len();
     let idx = app.repo_idx();
     let num = format!("{}/{}", idx + 1, repos_len);
     let mark_color = if app.pane == Pane::Repos {
-        theme::CYAN
+        theme::cyan()
     } else {
-        theme::DIMMER
+        theme::dimmer()
     };
     put_right(buf, area.right() - 1, area.y, &num, head.fg(mark_color));
 
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     // footer with the totals
     let foot_y = area.bottom() - 1;
-    hline(buf, area.x, foot_y - 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, foot_y - 1, area.width, theme::border_soft());
     let foot = Rect {
         x: area.x,
         y: foot_y,
         width: area.width,
         height: 1,
     };
-    fill(buf, foot, theme::PANEL);
+    fill(buf, foot, theme::panel());
     let totals = format!(
         "{} open issues · {} open PRs",
         app.repos().iter().map(|r| r.issues).sum::<u32>(),
@@ -54,7 +54,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         foot_y,
         area.right() - 1,
         &totals,
-        Style::default().bg(theme::PANEL).fg(theme::DIMMER),
+        Style::default().bg(theme::panel()).fg(theme::dimmer()),
     );
 
     // rows
@@ -84,8 +84,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             return;
         }
         let (msg, color) = match app.repos_state.get(app.login()).and_then(|s| s.error()) {
-            Some(e) => (e.to_string(), theme::RED),
-            None => ("no repositories".to_string(), theme::DIMMER),
+            Some(e) => (e.to_string(), theme::red()),
+            None => ("no repositories".to_string(), theme::dimmer()),
         };
         put_trunc(
             buf,
@@ -93,7 +93,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             list.y,
             area.right() - 1,
             &msg,
-            Style::default().bg(theme::PANEL_ALT).fg(color),
+            Style::default().bg(theme::panel_alt()).fg(color),
         );
         return;
     }
@@ -105,7 +105,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let y = list.y + row as u16;
         let r = &app.repos()[i];
         let sel = i == idx;
-        let bg = if sel { theme::SEL } else { theme::PANEL_ALT };
+        let bg = if sel {
+            theme::sel()
+        } else {
+            theme::panel_alt()
+        };
         fill(
             buf,
             Rect {
@@ -120,9 +124,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let base = Style::default().bg(bg);
         if sel {
             let mark = if app.pane == Pane::Repos {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::SEL_MARK_IDLE
+                theme::sel_mark_idle()
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
@@ -133,9 +137,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             theme::PUBLIC_MARK
         };
         let priv_color = if r.private {
-            theme::YELLOW
+            theme::yellow()
         } else {
-            theme::DIMMER
+            theme::dimmer()
         };
         put(
             buf,
@@ -147,10 +151,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
 
         let counts = format!("{}i {}p", r.issues, r.prs);
-        let counts_x = put_right(buf, area.right() - 1, y, &counts, base.fg(theme::DIMMER));
+        let counts_x = put_right(buf, area.right() - 1, y, &counts, base.fg(theme::dimmer()));
         let dot_x = put_right(buf, counts_x - 1, y, "●", base.fg(theme::lang(&r.lang)));
 
-        let fg = if sel { theme::BRIGHT } else { theme::FG };
+        let fg = if sel { theme::bright() } else { theme::fg() };
         put_trunc(
             buf,
             area.x + 4,

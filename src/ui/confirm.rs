@@ -19,17 +19,17 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
 
     let is_merge = matches!(prompt, Prompt::Merge(_));
     let (title, accent) = match prompt {
-        Prompt::Merge(_) => ("MERGE PULL REQUEST", theme::PURPLE),
-        Prompt::Close => ("CLOSE PULL REQUEST", theme::YELLOW),
-        Prompt::Reopen => ("REOPEN PULL REQUEST", theme::GREEN),
-        Prompt::DeleteBranch { .. } => ("DELETE BRANCH", theme::RED),
+        Prompt::Merge(_) => ("MERGE PULL REQUEST", theme::purple()),
+        Prompt::Close => ("CLOSE PULL REQUEST", theme::yellow()),
+        Prompt::Reopen => ("REOPEN PULL REQUEST", theme::green()),
+        Prompt::DeleteBranch { .. } => ("DELETE BRANCH", theme::red()),
     };
 
     let height = if is_merge { 12 } else { 7 };
     let modal = centered(area, 68, height);
     frame(buf, modal, accent);
 
-    let base = Style::default().bg(theme::PANEL);
+    let base = Style::default().bg(theme::panel());
     let x = modal.x + 2;
     let max = modal.right() - 2;
 
@@ -42,7 +42,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             modal.y + 1,
             max - 22,
             &app.repo_key(),
-            base.fg(theme::DIMMER),
+            base.fg(theme::dimmer()),
         );
     }
     put_right(
@@ -54,7 +54,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         } else {
             "y confirm · esc cancel"
         },
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     rule(buf, modal, modal.y + 2, accent);
 
@@ -64,8 +64,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         _ => cur.num,
     };
     let mut y = modal.y + 3;
-    let nx = put(buf, x, y, max, &format!("#{num}  "), base.fg(theme::DIMMER));
-    put_trunc(buf, nx, y, max, &cur.title, base.fg(theme::BRIGHT));
+    let nx = put(
+        buf,
+        x,
+        y,
+        max,
+        &format!("#{num}  "),
+        base.fg(theme::dimmer()),
+    );
+    put_trunc(buf, nx, y, max, &cur.title, base.fg(theme::bright()));
     y += 1;
 
     match prompt {
@@ -76,7 +83,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 y,
                 max,
                 &format!("delete {branch} — this cannot be undone"),
-                base.fg(theme::BODY),
+                base.fg(theme::body()),
             );
         }
         Prompt::Reopen => {
@@ -86,7 +93,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 y,
                 max,
                 &format!("reopen against main from {}", cur.branch()),
-                base.fg(theme::BODY),
+                base.fg(theme::body()),
             );
         }
         _ => {
@@ -102,7 +109,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                     pr.map_or("", |p| p.del.as_str()),
                     pr.map_or(0, |p| p.files)
                 ),
-                base.fg(theme::BODY),
+                base.fg(theme::body()),
             );
         }
     }
@@ -131,7 +138,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             ),
             base.fg(theme::state_color(cur.checks())),
         );
-        let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::DIMMER));
+        let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::dimmer()));
         let cx = put(
             buf,
             cx,
@@ -139,20 +146,20 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             max,
             &format!("{approvals} approvals"),
             base.fg(if approvals > 0 {
-                theme::GREEN
+                theme::green()
             } else {
-                theme::DIMMER
+                theme::dimmer()
             }),
         );
         if blocking > 0 {
-            let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::DIMMER));
+            let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::dimmer()));
             put(
                 buf,
                 cx,
                 y,
                 max,
                 &format!("{blocking} requesting changes"),
-                base.fg(theme::RED),
+                base.fg(theme::red()),
             );
         }
         y += 2;
@@ -166,7 +173,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                     width: modal.width - 2,
                     height: 1,
                 };
-                let bg = if i == sel { theme::SEL } else { theme::PANEL };
+                let bg = if i == sel {
+                    theme::sel()
+                } else {
+                    theme::panel()
+                };
                 fill(buf, row, bg);
                 let s = Style::default().bg(bg);
                 if i == sel {
@@ -179,17 +190,28 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                     y,
                     max,
                     dot,
-                    s.fg(if i == sel { accent } else { theme::DIMMER }),
+                    s.fg(if i == sel { accent } else { theme::dimmer() }),
                 );
                 let cx = put(buf, cx, y, max, " ", s);
-                let cx = put(buf, cx, y, max, &format!("{} ", i + 1), s.fg(theme::DIMMER));
+                let cx = put(
+                    buf,
+                    cx,
+                    y,
+                    max,
+                    &format!("{} ", i + 1),
+                    s.fg(theme::dimmer()),
+                );
                 put_trunc(
                     buf,
                     cx,
                     y,
                     max,
                     m.label(),
-                    s.fg(if i == sel { theme::BRIGHT } else { theme::FG }),
+                    s.fg(if i == sel {
+                        theme::bright()
+                    } else {
+                        theme::fg()
+                    }),
                 );
                 y += 1;
             }

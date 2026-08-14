@@ -83,6 +83,7 @@ back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 | `enter` | enter the pane / open |
 | `esc` `q` | back one level |
 | `a` | switch account |
+| `t` | switch theme |
 | `o` | fold / unfold a job (in the logs) |
 | `/` | filter (list or log) |
 | `e` | jump to the first error in the log |
@@ -103,10 +104,26 @@ On a pull request:
 | `n` / `esc` | cancel |
 
 Commands: `:account`, `:issues`, `:prs`, `:actions`, `:logs`, `:diff`, `:files`,
-`:help`, `:q`.
+`:theme`, `:help`, `:q`.
 
 As in the design, `q` and `:q` go back or close the overlay; to quit the program
 use `ctrl-c`.
+
+## Themes
+
+`t` opens the picker. It applies as you move through it, so what you are judging
+is the interface itself rather than a name in a list — `enter` keeps the one you
+land on, `esc` puts back the one that was on when you opened it.
+
+Two ship for now: the design's own palette, and Catppuccin Mocha. A theme is a
+whole `Palette` and switching one in is a single store, so the change lands on
+the very next frame. Adding a third is a `Palette` literal and one line in
+`Theme::ALL`; a test walks every theme and fails if a role is left undefined,
+which would otherwise show up as an invisible pane.
+
+Mocha is mapped by the role each colour plays rather than by name: the design
+keeps its panels a shade *lighter* than the background, so mantle is the ground
+and base is the panel, not the other way round.
 
 ## Markdown
 

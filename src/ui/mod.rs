@@ -39,7 +39,7 @@ pub fn clear(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
         for x in area.left()..area.right() {
             if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_symbol(" ");
-                cell.set_style(Style::default().bg(bg).fg(theme::FG));
+                cell.set_style(Style::default().bg(bg).fg(theme::fg()));
             }
         }
     }
@@ -104,7 +104,7 @@ pub fn hline(buf: &mut Buffer, x: u16, y: u16, w: u16, color: ratatui::style::Co
         y,
         x + w,
         &s,
-        Style::default().fg(color).bg(theme::BG),
+        Style::default().fg(color).bg(theme::bg()),
     );
 }
 
@@ -116,7 +116,7 @@ pub fn vline(buf: &mut Buffer, x: u16, y: u16, h: u16, color: ratatui::style::Co
             yy,
             x + 1,
             "│",
-            Style::default().fg(color).bg(theme::BG),
+            Style::default().fg(color).bg(theme::bg()),
         );
     }
 }
@@ -211,9 +211,9 @@ pub fn skel_bar(buf: &mut Buffer, x: u16, y: u16, w: u16, row: usize, phase: u64
     const CYCLE: u64 = 16;
     let band = (phase % CYCLE) as i64;
     let color = match (row as i64 - band).abs() {
-        0 => theme::SEL_MARK_IDLE,
-        1 => theme::SEL,
-        _ => theme::PANEL,
+        0 => theme::sel_mark_idle(),
+        1 => theme::sel(),
+        _ => theme::panel(),
     };
     let block = "█".repeat(w as usize);
     put(
@@ -222,7 +222,7 @@ pub fn skel_bar(buf: &mut Buffer, x: u16, y: u16, w: u16, row: usize, phase: u64
         y,
         x + w,
         &block,
-        Style::default().bg(theme::BG).fg(color),
+        Style::default().bg(theme::bg()).fg(color),
     );
 }
 
@@ -255,7 +255,7 @@ pub fn bold(style: Style) -> Style {
 pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     let area = f.area();
     let buf = f.buffer_mut();
-    fill(buf, area, theme::BG);
+    fill(buf, area, theme::bg());
 
     if area.height < 8 || area.width < 40 {
         put(
@@ -264,7 +264,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
             0,
             area.width,
             "terminal too small",
-            Style::default().fg(theme::RED).bg(theme::BG),
+            Style::default().fg(theme::red()).bg(theme::bg()),
         );
         return;
     }
@@ -292,7 +292,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     };
 
     header::draw(buf, header, app);
-    hline(buf, 0, 1, area.width, theme::BORDER);
+    hline(buf, 0, 1, area.width, theme::border());
 
     let sidebar_w: u16 = 34;
     // logs and diff take the full width, as in the design
@@ -306,7 +306,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
             height: body.height,
         };
         sidebar::draw(buf, side, app);
-        vline(buf, sidebar_w, body.y, body.height, theme::BORDER);
+        vline(buf, sidebar_w, body.y, body.height, theme::border());
         let content = Rect {
             x: sidebar_w + 1,
             y: body.y,
@@ -320,6 +320,9 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
 
     if app.accounts_open {
         overlay::accounts(buf, area, app);
+    }
+    if app.themes_open {
+        overlay::themes(buf, area, app);
     }
     if app.help_open {
         overlay::help(buf, area);
@@ -609,7 +612,7 @@ mod tests {
     fn clear_wipes_the_text_underneath() {
         let mut buf = buffer(6, 1);
         put(&mut buf, 0, 0, 6, "abcdef", Style::default());
-        clear(&mut buf, Rect::new(0, 0, 6, 1), theme::PANEL);
+        clear(&mut buf, Rect::new(0, 0, 6, 1), theme::panel());
         assert_eq!(row(&buf, 0), "");
     }
 }

@@ -12,7 +12,7 @@ use crate::theme;
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
 pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
-    fill(buf, area, theme::PANEL);
+    fill(buf, area, theme::panel());
     let y = area.y;
     let repo = app.repo().cloned().unwrap_or_else(crate::data::Repo::empty);
 
@@ -27,9 +27,9 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
             _ => String::new(),
         };
         let bg = if active {
-            theme::TAB_ACTIVE_BG
+            theme::tab_active_bg()
         } else {
-            theme::PANEL
+            theme::panel()
         };
         let label_w = 2
             + 1
@@ -51,7 +51,7 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
 
         let base = Style::default().bg(bg);
         let mut cx = x + 2;
-        cx = put(buf, cx, y, area.right(), t.key, base.fg(theme::DIMMER));
+        cx = put(buf, cx, y, area.right(), t.key, base.fg(theme::dimmer()));
         cx = put(buf, cx, y, area.right(), " ", base);
         cx = put(
             buf,
@@ -59,7 +59,11 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
             y,
             area.right(),
             t.label,
-            base.fg(if active { theme::BRIGHT } else { theme::DIM }),
+            base.fg(if active {
+                theme::bright()
+            } else {
+                theme::dim()
+            }),
         );
         if !count.is_empty() {
             cx = put(buf, cx, y, area.right(), " ", base);
@@ -69,7 +73,11 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
                 y,
                 area.right(),
                 &count,
-                base.fg(if active { theme::CYAN } else { theme::DIMMER }),
+                base.fg(if active {
+                    theme::cyan()
+                } else {
+                    theme::dimmer()
+                }),
             );
         }
 
@@ -93,12 +101,12 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
             area.right() - 2,
             y,
             &filter_label,
-            Style::default().bg(theme::PANEL).fg(theme::DIMMER),
+            Style::default().bg(theme::panel()).fg(theme::dimmer()),
         );
     }
 
     // bottom border, with a cyan underline beneath the active tab
-    hline(buf, area.x, y + 1, area.width, theme::BORDER);
+    hline(buf, area.x, y + 1, area.width, theme::border());
     if active_span.1 > 0 {
         let s = "─".repeat(active_span.1 as usize);
         put(
@@ -107,7 +115,7 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
             y + 1,
             active_span.0 + active_span.1,
             &s,
-            Style::default().fg(theme::CYAN).bg(theme::BG),
+            Style::default().fg(theme::cyan()).bg(theme::bg()),
         );
     }
 }
@@ -183,11 +191,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             return;
         }
         let (msg, color) = if let Some(e) = st.error() {
-            (e.to_string(), theme::RED)
+            (e.to_string(), theme::red())
         } else if !app.filter.is_empty() {
-            ("no matches".to_string(), theme::DIMMER)
+            ("no matches".to_string(), theme::dimmer())
         } else {
-            ("nothing here".to_string(), theme::DIMMER)
+            ("nothing here".to_string(), theme::dimmer())
         };
         put_trunc(
             buf,
@@ -195,7 +203,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             area.y + 1,
             area.right() - 2,
             &msg,
-            Style::default().bg(theme::BG).fg(color),
+            Style::default().bg(theme::bg()).fg(color),
         );
         return;
     }
@@ -207,7 +215,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let y = area.y + (row as u16) * 2;
         let it = items[i];
         let selected = i == sel_pos;
-        let bg = if selected { theme::SEL } else { theme::BG };
+        let bg = if selected { theme::sel() } else { theme::bg() };
         fill(
             buf,
             Rect {
@@ -222,9 +230,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let base = Style::default().bg(bg);
         if selected {
             let mark = if app.pane == Pane::List {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::SEL_MARK_IDLE
+                theme::sel_mark_idle()
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
             put(buf, area.x, y + 1, area.right(), "▌", base.fg(mark));
@@ -242,7 +250,14 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
         let text_x = area.x + 11;
         let num = format!("#{}", it.num);
-        put_trunc(buf, area.x + 4, y, text_x - 1, &num, base.fg(theme::DIMMER));
+        put_trunc(
+            buf,
+            area.x + 4,
+            y,
+            text_x - 1,
+            &num,
+            base.fg(theme::dimmer()),
+        );
 
         // estado (derecha)
         let state_text = if it.kind() == Kind::Pr {
@@ -261,7 +276,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let title_max = state_x.saturating_sub(2);
         let labels_w: u16 = it.labels.iter().map(|l| l.name.width() as u16 + 3).sum();
         let title_room = title_max.saturating_sub(text_x).saturating_sub(labels_w);
-        let fg = if selected { theme::BRIGHT } else { theme::FG };
+        let fg = if selected {
+            theme::bright()
+        } else {
+            theme::fg()
+        };
         let mut lx = put_trunc(buf, text_x, y, text_x + title_room, &it.title, base.fg(fg));
         for l in &it.labels {
             lx = put(buf, lx, y, title_max, " ", base);
@@ -275,7 +294,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             y + 1,
             area.right() - 2,
             &sub_for(it),
-            base.fg(theme::DIMMER),
+            base.fg(theme::dimmer()),
         );
     }
 }

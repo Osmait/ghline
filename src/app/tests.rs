@@ -499,3 +499,75 @@ fn a_pending_body_draws_a_skeleton_but_a_loaded_one_does_not() {
          ({without_body} blocks) and one that has should not ({with_body})"
     );
 }
+
+// --- theme picker ---
+
+#[test]
+fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
+    let _g = crate::theme::tests::LOCK.lock();
+    use crate::theme::{Theme, current, set};
+
+    set(Theme::Design);
+    let mut app = demo();
+    ch(&mut app, 't');
+    assert!(app.themes_open);
+    assert_eq!(current(), Theme::Design, "opening changes nothing yet");
+
+    ch(&mut app, 'j');
+    assert_eq!(current(), Theme::Mocha, "moving applies it straight away");
+
+    press(&mut app, KeyCode::Esc);
+    assert!(!app.themes_open);
+    assert_eq!(current(), Theme::Design, "leaving puts back what was on");
+    set(Theme::Design);
+}
+
+#[test]
+fn enter_keeps_the_previewed_theme() {
+    let _g = crate::theme::tests::LOCK.lock();
+    use crate::theme::{Theme, current, set};
+
+    set(Theme::Design);
+    let mut app = demo();
+    ch(&mut app, 't');
+    ch(&mut app, 'j');
+    press(&mut app, KeyCode::Enter);
+    assert!(!app.themes_open);
+    assert_eq!(current(), Theme::Mocha);
+    set(Theme::Design);
+}
+
+#[test]
+fn the_picker_does_not_run_off_either_end() {
+    let _g = crate::theme::tests::LOCK.lock();
+    use crate::theme::{Theme, set};
+
+    set(Theme::Design);
+    let mut app = demo();
+    ch(&mut app, 't');
+    for _ in 0..10 {
+        ch(&mut app, 'j');
+    }
+    assert_eq!(app.theme_sel, Theme::ALL.len() - 1);
+    for _ in 0..10 {
+        ch(&mut app, 'k');
+    }
+    assert_eq!(app.theme_sel, 0);
+    press(&mut app, KeyCode::Esc);
+    set(Theme::Design);
+}
+
+#[test]
+fn the_picker_swallows_the_keys_beneath_it() {
+    let _g = crate::theme::tests::LOCK.lock();
+    use crate::theme::{Theme, set};
+
+    set(Theme::Design);
+    let mut app = demo();
+    let before = app.item;
+    ch(&mut app, 't');
+    ch(&mut app, 'j'); // moves the theme, not the list
+    assert_eq!(app.item, before);
+    press(&mut app, KeyCode::Esc);
+    set(Theme::Design);
+}

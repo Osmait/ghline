@@ -13,13 +13,13 @@ const TREE_W: u16 = 38;
 
 fn log_color(kind: &str) -> Color {
     match kind {
-        "green" => theme::GREEN,
-        "red" => theme::RED,
-        "yellow" => theme::YELLOW,
-        "dim" => theme::DIM,
-        "group" => theme::PURPLE,
-        "fg" => theme::LOG_FG,
-        _ => theme::FG,
+        "green" => theme::green(),
+        "red" => theme::red(),
+        "yellow" => theme::yellow(),
+        "dim" => theme::dim(),
+        "group" => theme::purple(),
+        "fg" => theme::log_fg(),
+        _ => theme::fg(),
     }
 }
 
@@ -38,28 +38,28 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: area.height,
     };
     draw_tree(buf, tree, app);
-    vline(buf, area.x + tree_w, area.y, area.height, theme::BORDER);
+    vline(buf, area.x + tree_w, area.y, area.height, theme::border());
     draw_pane(buf, pane, app);
 }
 
 fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
-    fill(buf, area, theme::PANEL_ALT);
+    fill(buf, area, theme::panel_alt());
     let head = Rect {
         x: area.x,
         y: area.y,
         width: area.width,
         height: 1,
     };
-    fill(buf, head, theme::PANEL);
+    fill(buf, head, theme::panel());
     put(
         buf,
         area.x + 1,
         area.y,
         area.right(),
         "JOBS & STEPS",
-        Style::default().bg(theme::PANEL).fg(theme::DIM),
+        Style::default().bg(theme::panel()).fg(theme::dim()),
     );
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     let nodes = app.flat_tree();
     let sel = app.tree_sel_idx(nodes.len());
@@ -74,9 +74,9 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         let n = &nodes[i];
         let selected = i == sel;
         let bg = if selected {
-            theme::SEL
+            theme::sel()
         } else {
-            theme::PANEL_ALT
+            theme::panel_alt()
         };
         fill(
             buf,
@@ -91,9 +91,9 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         let base = Style::default().bg(bg);
         if selected {
             let mark = if app.pane == Pane::Tree {
-                theme::CYAN
+                theme::cyan()
             } else {
-                theme::SEL_MARK_IDLE
+                theme::sel_mark_idle()
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
@@ -111,7 +111,7 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             } else {
                 "▾"
             };
-            cx = put(buf, cx, y, area.right(), caret, base.fg(theme::DIMMER));
+            cx = put(buf, cx, y, area.right(), caret, base.fg(theme::dimmer()));
             cx = put(buf, cx, y, area.right(), " ", base);
         }
         cx = put(
@@ -125,17 +125,17 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         cx = put(buf, cx, y, area.right(), " ", base);
 
         let dur_color = if n.status == Status::Running {
-            theme::YELLOW
+            theme::yellow()
         } else {
-            theme::DIMMER
+            theme::dimmer()
         };
         let dur_x = put_right(buf, area.right() - 1, y, &n.dur, base.fg(dur_color));
         let fg = if selected {
-            theme::BRIGHT
+            theme::bright()
         } else if n.kind == NodeKind::Job {
-            theme::FG
+            theme::fg()
         } else {
-            theme::STEP_FG
+            theme::step_fg()
         };
         put_trunc(buf, cx, y, dur_x.saturating_sub(1), &n.name, base.fg(fg));
     }
@@ -156,8 +156,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width,
         height: 1,
     };
-    fill(buf, head, theme::PANEL);
-    let base = Style::default().bg(theme::PANEL);
+    fill(buf, head, theme::panel());
+    let base = Style::default().bg(theme::panel());
     let mut cx = put(
         buf,
         area.x + 1,
@@ -184,7 +184,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.y,
         head_max,
         &format!("{dur} · attempt 1"),
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
 
     let err_x = put_right(
@@ -192,19 +192,19 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.right() - 1,
         area.y,
         "e → first error",
-        base.fg(theme::DIMMER),
+        base.fg(theme::dimmer()),
     );
     let (follow_label, follow_color) = if app.follow {
-        ("● following [f]", theme::GREEN)
+        ("● following [f]", theme::green())
     } else {
-        ("○ paused [f]", theme::DIMMER)
+        ("○ paused [f]", theme::dimmer())
     };
     put_right(buf, err_x - 2, area.y, follow_label, base.fg(follow_color));
-    hline(buf, area.x, area.y + 1, area.width, theme::BORDER_SOFT);
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     // ---- footer with the stats
     let foot_y = area.bottom() - 1;
-    hline(buf, area.x, foot_y - 1, area.width, theme::BORDER);
+    hline(buf, area.x, foot_y - 1, area.width, theme::border());
     fill(
         buf,
         Rect {
@@ -213,7 +213,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             width: area.width,
             height: 1,
         },
-        theme::PANEL,
+        theme::panel(),
     );
 
     let rows = app.log_lines();
@@ -228,14 +228,14 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         },
         dur
     );
-    let fs = Style::default().bg(theme::PANEL);
+    let fs = Style::default().bg(theme::panel());
     let sx = put(
         buf,
         area.x + 1,
         foot_y,
         area.right(),
         &stats,
-        fs.fg(theme::DIMMER),
+        fs.fg(theme::dimmer()),
     );
     if err_count > 0 {
         put(
@@ -244,7 +244,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             foot_y,
             area.right(),
             &format!("{err_count} errors · press e"),
-            fs.fg(theme::RED),
+            fs.fg(theme::red()),
         );
     }
 
@@ -310,8 +310,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             return;
         }
         let (msg, color) = match st.error() {
-            Some(e) => (e.to_string(), theme::RED),
-            None => ("no output for this step".to_string(), theme::DIMMER),
+            Some(e) => (e.to_string(), theme::red()),
+            None => ("no output for this step".to_string(), theme::dimmer()),
         };
         put_trunc(
             buf,
@@ -319,7 +319,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             view.y,
             area.right() - 1,
             &msg,
-            Style::default().bg(theme::BG).fg(color),
+            Style::default().bg(theme::bg()).fg(color),
         );
         return;
     }
@@ -360,14 +360,14 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
                 y,
                 view.x + 1,
                 "▌",
-                Style::default().bg(theme::BG).fg(theme::CYAN),
+                Style::default().bg(theme::bg()).fg(theme::cyan()),
             );
         }
         let d = &disp[i];
         let bg = if d.kind == "red" {
-            theme::ERR_BG
+            theme::err_bg()
         } else {
-            theme::BG
+            theme::bg()
         };
         fill(
             buf,
@@ -382,18 +382,18 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         let base = Style::default().bg(bg);
 
         if d.kind == "tail" {
-            put(buf, text_x, y, area.right(), &d.text, base.fg(theme::DIM));
+            put(buf, text_x, y, area.right(), &d.text, base.fg(theme::dim()));
             continue;
         }
         if let Some(n) = d.n {
-            put_right(buf, n_x + 5, y, &n.to_string(), base.fg(theme::GUTTER));
+            put_right(buf, n_x + 5, y, &n.to_string(), base.fg(theme::gutter()));
             put(
                 buf,
                 time_x,
                 y,
                 area.right(),
                 &d.time,
-                base.fg(theme::DIMMER),
+                base.fg(theme::dimmer()),
             );
         }
         put(
