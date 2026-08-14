@@ -2,6 +2,8 @@
 name = "github-tui"
 version = "0.1.0"
 edition = "2024"
+description = "A GitHub TUI: repositories, issues, pull requests and Actions, over the gh CLI"
+repository = "https://github.com/Osmait/github-tui"
 
 [dependencies]
 crossterm = "0.28"

@@ -1,0 +1,103 @@
+name: Release binaries
+
+# Builds the binaries `install.sh` downloads and attaches them to the release
+# for a `v*` tag. The release is created here if it does not already exist, so
+# tagging is all that is needed to cut one.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v* tag to build and upload"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One broken target must not withhold the three that built.
+      fail-fast: false
+      matrix:
+        include:
+          # Built on the oldest runner still supported rather than the newest:
+          # a glibc-linked binary runs on that version and above, so building
+          # on 24.04 would refuse to start on anything older.
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+          # No Intel Mac build: Apple Silicon is what the project is built
+          # and used on, and an Intel Mac can still build from source.
+          - target: aarch64-apple-darwin
+            runner: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      # rust-toolchain.toml pins the channel; this only adds the target for it.
+      - name: Install the toolchain
+        run: rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Named without a version so install.sh can build the URL from the tag
+      # alone. The checksum rides alongside; install.sh refuses to install
+      # without it.
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="github-tui-${{ matrix.target }}.tar.gz"
+          tar -czf "$archive" -C "target/${{ matrix.target }}/release" github-tui
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$archive" > "$archive.sha256"
+          else
+            shasum -a 256 "$archive" > "$archive.sha256"
+          fi
+          # A checksum file naming a path would not verify after download.
+          test "$(cut -d' ' -f3- < "$archive.sha256")" = "$archive"
+
+      # `--snapshot` renders one frame and exits, so it exercises the real
+      # drawing path rather than just proving the file is executable. Only
+      # where the runner can run what it just built.
+      - name: Smoke test the binary
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-apple-darwin'
+        run: ./target/${{ matrix.target }}/release/github-tui --snapshot "" 100 30 0 > /dev/null
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Four jobs race to be first here, and only one can create the
+          # release — so a create that loses the race is not an error, as long
+          # as the release exists afterwards.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --notes "Prebuilt \`github-tui\` binaries. Install with the one-liner in the README." \
+              --verify-tag || true
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null \
+            || { echo "release $TAG does not exist and could not be created"; exit 1; }
+
+          gh release upload "$TAG" \
+            "github-tui-${{ matrix.target }}.tar.gz" \
+            "github-tui-${{ matrix.target }}.tar.gz.sha256" \
+            --clobber --repo "$GITHUB_REPOSITORY"

@@ -7,11 +7,64 @@ It works against real GitHub through the `gh` CLI: the repos, issues, pull
 requests, workflow runs and Actions logs are yours. It also ships the design's
 fake data as a demo mode.
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh | sh
+```
+
+Downloads the release binary for your machine, checks it against the published
+SHA-256, and puts it in `~/.local/bin`. No toolchain, no root, and nothing
+outside the install directory is touched. Apple Silicon Macs and x86_64/aarch64
+Linux are covered; anywhere else builds from source, which is a `make install`
+away.
+
+Piping a script from the internet into a shell is worth being wary of, so read
+it first if you would rather:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh -o install.sh
+less install.sh
+sh install.sh
+```
+
+To choose the location or pin a version:
+
+```sh
+GITHUB_TUI_INSTALL_DIR=/usr/local/bin GITHUB_TUI_VERSION=v0.1.0 sh install.sh
+```
+
+You also need the [`gh` CLI](https://cli.github.com), signed in — that is how
+this reads GitHub. Without it the demo mode still runs.
+
+### From source
+
+With a Rust toolchain, from a clone:
+
+```sh
+make install
+```
+
+That is `cargo install --path . --locked`: an optimised build put in
+`~/.cargo/bin`, which the Rust installer already adds to your PATH. `make
+uninstall` takes it off again.
+
+`make` on its own lists the rest — `build`, `run`, `demo`, `test`, `lint`,
+`check`. They are thin wrappers over cargo, and `make check` runs exactly what
+CI runs.
+
 ## Usage
 
 ```sh
-cargo run --release            # real data via gh
-cargo run --release -- --demo  # the design's fake data
+github-tui         # real data via gh
+github-tui --demo  # the design's fake data
+```
+
+Or without installing, from a clone:
+
+```sh
+make run           # cargo run --release
+make demo          # cargo run --release -- --demo
 ```
 
 Real mode needs a signed-in `gh`:
