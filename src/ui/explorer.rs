@@ -10,9 +10,10 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use unicode_width::UnicodeWidthStr;
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap};
+use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Load, Pane};
+use crate::icons::{file as icon_file, folder};
 use crate::theme;
 
 /// Width of the tree pane. Wide enough for a nested path, narrow enough that
@@ -50,6 +51,19 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     draw_tree(buf, tree, app);
     vline(buf, area.x + tree_w, area.y, area.height, theme::border());
     draw_file(buf, view, app);
+}
+
+/// What each kind of token looks like. Borrowed from the diff and the logs,
+/// so a comment here is the same colour as a comment there.
+fn kind_color(kind: crate::syntax::Kind) -> ratatui::style::Color {
+    use crate::syntax::Kind;
+    match kind {
+        Kind::Comment => theme::dimmer(),
+        Kind::Str => theme::green(),
+        Kind::Number => theme::orange(),
+        Kind::Keyword => theme::purple(),
+        Kind::Type => theme::cyan_soft(),
+    }
 }
 
 /// A file's size, short enough for the right-hand column.
@@ -139,6 +153,7 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     // A filter flattens the tree, so the indent would be a lie about where the
     // rows sit relative to each other.
     let flat = !app.filter.trim().is_empty();
+    let icon_style = crate::config::file_icons();
     let entries: Vec<crate::data::TreeEntry> = app.fs_rows().into_iter().cloned().collect();
     let focused = app.pane == Pane::FileTree;
 
@@ -181,14 +196,30 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         let size_x = put_right(buf, area.right() - 1, y, &size, base.fg(theme::dimmer()));
 
         // An open directory points down, a closed one points right: the same
-        // convention the jobs tree uses two views away.
-        let (mark, color) = if e.is_dir {
+        // convention the jobs tree uses two views away. The arrow says what
+        // will happen; the icon beside it says what the thing is.
+        let (arrow, color) = if e.is_dir {
             let open = app.fs_open.contains(&e.path);
             (if open { "▾" } else { "▸" }, theme::cyan_soft())
         } else {
-            ("·", theme::dimmer())
+            (" ", theme::dimmer())
         };
-        let mx = put(buf, x, y, area.right(), mark, base.fg(color));
+        let mut mx = put(buf, x, y, area.right(), arrow, base.fg(color));
+
+        let icon = if e.is_dir {
+            folder(icon_style, app.fs_open.contains(&e.path))
+        } else {
+            icon_file(icon_style, &e.path)
+        };
+        if !icon.is_empty() {
+            let icolor = if e.is_dir {
+                theme::cyan_soft()
+            } else {
+                theme::lang(crate::icons::language(&e.path))
+            };
+            mx = put(buf, mx, y, area.right(), icon, base.fg(icolor));
+            mx = put(buf, mx, y, area.right(), " ", base);
+        }
 
         let fg = match (e.is_dir, selected) {
             (true, _) => theme::cyan_soft(),
@@ -196,7 +227,7 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             (false, false) => theme::fg(),
         };
         let label = if flat { &e.path } else { e.name() };
-        put_trunc(buf, mx + 1, y, size_x.saturating_sub(1), label, base.fg(fg));
+        put_trunc(buf, mx, y, size_x.saturating_sub(1), label, base.fg(fg));
     }
 }
 
@@ -275,15 +306,20 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     };
 
     // Wrapped rather than cut: a long line in a config file is still worth
-    // reading, and there is no horizontal scroll in this program.
+    // reading, and there is no horizontal scroll in this program. Wrapped by
+    // byte range rather than by text, so a colour span survives the wrap.
     let gutter = 6u16;
     let width = body.width.saturating_sub(gutter + 2) as usize;
-    let mut rendered: Vec<(usize, String)> = Vec::new();
-    for (n, line) in text.lines().enumerate() {
-        let mut first = true;
-        for part in wrap(line, width.max(1)) {
-            rendered.push((if first { n + 1 } else { 0 }, part));
-            first = false;
+    let spans = app.file_spans().cloned().unwrap_or_default();
+    let source: Vec<&str> = text.lines().collect();
+
+    let mut rendered: Vec<(usize, usize, usize)> = Vec::new(); // line, from, to
+    for (n, line) in source.iter().enumerate() {
+        for (i, (from, to)) in crate::syntax::wrap_ranges(line, width.max(1))
+            .into_iter()
+            .enumerate()
+        {
+            rendered.push((if i == 0 { n + 1 } else { 0 }, from, to));
         }
     }
 
@@ -291,10 +327,10 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     // wrapped line spans several of. Finding the first row of the selected
     // line is what keeps the two in step.
     let height = body.height as usize;
-    let sel_line = app.file_sel.min(text.lines().count().saturating_sub(1));
+    let sel_line = app.file_sel.min(source.len().saturating_sub(1));
     let sel_row = rendered
         .iter()
-        .position(|(n, _)| *n == sel_line + 1)
+        .position(|(n, _, _)| *n == sel_line + 1)
         .unwrap_or(0);
     scroll_into_view(&mut app.file_scroll, sel_row, height, rendered.len());
     let focused = app.pane == Pane::FileView;
@@ -304,19 +340,23 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
             break;
         }
         let y = body.y + row as u16;
-        let (n, ref line) = rendered[i];
+        let (n, from, to) = rendered[i];
+        // a continuation row belongs to the last numbered one above it
+        let owner = if n > 0 {
+            n
+        } else {
+            rendered[..i]
+                .iter()
+                .rev()
+                .find(|(m, _, _)| *m > 0)
+                .map_or(1, |(m, _, _)| *m)
+        };
+        let line = source.get(owner - 1).map_or("", |l| &l[from..to]);
 
         // Every rendered row of the selected line is marked, not just the
         // first: a wrapped line is one line, and highlighting a third of it
         // would read as a different one.
-        let on_cursor = match n {
-            0 => rendered[..i]
-                .iter()
-                .rev()
-                .find(|(m, _)| *m > 0)
-                .is_some_and(|(m, _)| *m == sel_line + 1),
-            m => m == sel_line + 1,
-        };
+        let on_cursor = owner == sel_line + 1;
         let bg = if on_cursor { theme::sel() } else { theme::bg() };
         fill(
             buf,
@@ -346,22 +386,46 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
             };
             put_right(buf, body.x + gutter, y, &n.to_string(), num);
         }
-        put(
-            buf,
-            body.x + gutter + 2,
-            y,
-            area.right(),
-            line,
-            base.fg(if on_cursor {
-                theme::bright()
-            } else {
-                theme::fg()
-            }),
-        );
+        // Colour is per span; a stretch with none over it is ordinary text.
+        let plain = if on_cursor {
+            theme::bright()
+        } else {
+            theme::fg()
+        };
+        let mut cx = body.x + gutter + 2;
+        let mut at = from;
+        let empty = Vec::new();
+        let on_line = spans.get(owner - 1).unwrap_or(&empty);
+
+        for sp in on_line.iter().filter(|s| s.to > from && s.from < to) {
+            let (sf, st) = (sp.from.max(from), sp.to.min(to));
+            if sf > at {
+                cx = put(
+                    buf,
+                    cx,
+                    y,
+                    area.right(),
+                    &line[at - from..sf - from],
+                    base.fg(plain),
+                );
+            }
+            cx = put(
+                buf,
+                cx,
+                y,
+                area.right(),
+                &line[sf - from..st - from],
+                base.fg(kind_color(sp.kind)),
+            );
+            at = st;
+        }
+        if at < to {
+            put(buf, cx, y, area.right(), &line[at - from..], base.fg(plain));
+        }
     }
 
     if rendered.len() > height {
-        let label = format!("{}/{}", sel_line + 1, text.lines().count());
+        let label = format!("{}/{}", sel_line + 1, source.len());
         put_right(
             buf,
             area.right() - 1,

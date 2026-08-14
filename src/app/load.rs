@@ -358,7 +358,10 @@ impl App {
             },
 
             Response::FileText { repo, path, result } => match result {
-                Ok(text) => {
+                Ok((text, spans)) => {
+                    if !spans.is_empty() {
+                        self.file_spans.insert((repo.clone(), path.clone()), spans);
+                    }
                     self.file_text.insert((repo.clone(), path.clone()), text);
                     self.file_state.insert((repo, path), Load::Ready);
                 }

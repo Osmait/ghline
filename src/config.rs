@@ -195,6 +195,17 @@ fn lookup_icon(spec: &str, kind: &str) -> Option<String> {
         .filter(|v| v.chars().count() == 1)
 }
 
+/// How much decoration the file tree gets.
+///
+/// A setting because it depends on a font this program cannot see: a terminal
+/// without a Nerd Font would draw a column of replacement boxes, which is
+/// worse than no icons at all.
+pub fn file_icons() -> crate::icons::Style {
+    load()
+        .get("file-icons")
+        .map_or(crate::icons::Style::Nerd, |v| crate::icons::Style::parse(v))
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

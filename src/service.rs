@@ -136,7 +136,8 @@ pub enum Response {
     FileText {
         repo: String,
         path: String,
-        result: Result<String, Error>,
+        /// The contents, and the colour spans that go with them.
+        result: Result<(String, Vec<Vec<crate::syntax::Span>>), Error>,
     },
     Repos {
         login: String,
@@ -271,11 +272,18 @@ fn handle(req: Request) -> Response {
             repo,
         },
 
-        Request::FileText { repo, path } => Response::FileText {
-            result: crate::gh::file_content(&repo, &path),
-            repo,
-            path,
-        },
+        Request::FileText { repo, path } => {
+            // Lexed here rather than when the answer lands: half a megabyte
+            // takes long enough to be a dropped frame, and this thread exists
+            // so the interface never has to wait for anything.
+            let result = crate::gh::file_content(&repo, &path).map(|text| {
+                let spans = crate::syntax::of_path(&path)
+                    .map(|lang| crate::syntax::highlight(lang, &text))
+                    .unwrap_or_default();
+                (text, spans)
+            });
+            Response::FileText { result, repo, path }
+        }
 
         Request::Scan => Response::Scanned {
             index: crate::clones::scan(),

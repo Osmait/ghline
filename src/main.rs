@@ -12,9 +12,11 @@ mod finder;
 mod fuzzy;
 mod gh;
 mod herdr;
+mod icons;
 mod service;
 mod snapshot;
 mod subject;
+mod syntax;
 mod theme;
 mod ui;
 

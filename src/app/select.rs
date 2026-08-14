@@ -98,6 +98,12 @@ impl App {
         (!e.is_dir && e.size <= crate::gh::FILE_LIMIT).then(|| e.path.clone())
     }
 
+    /// Colour spans for the open file, if its language is one we know.
+    pub fn file_spans(&self) -> Option<&Vec<Vec<crate::syntax::Span>>> {
+        let e = self.fs_current()?;
+        self.file_spans.get(&(self.repo_key(), e.path.clone()))
+    }
+
     /// How many lines the open file has.
     pub fn file_lines(&self) -> usize {
         self.file_body().map(|t| t.lines().count()).unwrap_or(0)

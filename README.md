@@ -205,8 +205,36 @@ split out with `git subtree` when it earns its own repository.
 the whole path rather than the name, and leaves the directories out, since a
 directory is not something you can read or send.
 
-Contents are wrapped rather than cut. A long line in a config file is still
-worth reading, and there is no horizontal scroll here.
+Files and folders carry the same Nerd Font glyphs `nvim-web-devicons` uses, so
+a file looks the same here as in the editor this hands it to — that
+familiarity is the point, and an original set would be one nobody recognises.
+`file-icons = plain` falls back to two marks any terminal can draw, and `none`
+turns them off, because a column of replacement boxes is worse than no icons.
+
+### Colour
+
+Source is coloured by a lexer, not a parser, and that is a deliberate trade.
+tree-sitter would mean a C toolchain in a project that has none, plus one
+grammar crate per language — perfect colour for the languages someone
+remembered to bundle and none at all for the rest. syntect is pure Rust with
+`fancy-regex` but brings forty-nine crates and embeds its own syntax
+definitions.
+
+This pane is read-only. Comments, strings, numbers and keywords are what an eye
+uses to find its place, and a lexer finds those in about a dozen languages and
+approximately in the rest. What it does not find is structure: a type is
+coloured when it *looks* like one, and a macro or a regex will occasionally be
+read as something it is not. That is the honest cost of the trade.
+
+Lexing runs on the service thread with the fetch, not between frames — half a
+megabyte takes long enough to be a dropped frame otherwise. Multi-line
+constructs mean a line cannot be read on its own, so a file is lexed whole when
+it lands.
+
+Contents are wrapped rather than cut — a long line in a config file is still
+worth reading, and there is no horizontal scroll here. The wrap is by column
+rather than by word, which keeps indentation meaning something and, not
+incidentally, keeps the byte offsets a colour span is written in.
 
 ## Agents
 
@@ -289,7 +317,7 @@ go.
 
 ### Settings
 
-Eight keys in `~/.config/github-tui/config`, all optional:
+Nine keys in `~/.config/github-tui/config`, all optional:
 
 ```
 prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
@@ -299,6 +327,7 @@ prompt-diff = Explain this change from {repo}#{num}\n\n{url}\n\n{context}
 prompt-file = Here is a file from {repo}.\n\n{url}\n\n---\n\n{context}
 agents      = claude, codex, opencode, pi
 agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
+file-icons  = nerd
 clone-roots = ~/orca, ~/Projects
 ```
 

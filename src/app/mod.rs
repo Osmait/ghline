@@ -315,6 +315,10 @@ pub struct App {
     /// File contents, keyed by `owner/repo` and path.
     pub file_text: HashMap<(String, String), String>,
     pub file_state: HashMap<(String, String), Load>,
+    /// Colour spans per line, lexed once when the file lands rather than on
+    /// every frame: a block comment means a line cannot be read on its own,
+    /// so the whole file is done at once.
+    pub file_spans: HashMap<(String, String), Vec<Vec<crate::syntax::Span>>>,
     /// Which directories have been opened. Expanded rather than collapsed, so
     /// a repository starts showing its top level and nothing more.
     pub fs_open: HashSet<String>,
@@ -445,6 +449,7 @@ impl App {
             trees_state: HashMap::new(),
             file_text: HashMap::new(),
             file_state: HashMap::new(),
+            file_spans: HashMap::new(),
             fs_open: HashSet::new(),
             fs_sel: 0,
             fs_scroll: 0,
