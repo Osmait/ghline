@@ -62,6 +62,12 @@ the log) put it against the left edge.
 | Diff | Changed files · Diff |
 | Logs | Jobs and steps · Output |
 
+`b` hides the repository pane and gives its width to the content. It stays
+hidden until you ask for it back, and the logs and diff views never show it —
+the design gives them the full width. Below 90 columns there is not enough room
+for it whatever you asked for, and in every one of those cases `h` will not walk
+to it, because a pane that is not on screen is not a pane.
+
 `enter` drills into the focused pane — repos to the list, list to the detail,
 checks to the logs, the tree to the output — and `esc` walks that same path
 back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
@@ -84,6 +90,7 @@ back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 | `esc` `q` | back one level |
 | `a` | switch account |
 | `t` | switch theme |
+| `b` `^b` | hide / show the repository pane |
 | `o` | fold / unfold a job (in the logs) |
 | `/` | filter (list or log) |
 | `e` | jump to the first error in the log |
@@ -104,7 +111,7 @@ On a pull request:
 | `n` / `esc` | cancel |
 
 Commands: `:account`, `:issues`, `:prs`, `:actions`, `:logs`, `:diff`, `:files`,
-`:theme`, `:help`, `:q`.
+`:theme`, `:sidebar`, `:help`, `:q`.
 
 As in the design, `q` and `:q` go back or close the overlay; to quit the program
 use `ctrl-c`.

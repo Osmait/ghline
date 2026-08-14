@@ -571,3 +571,74 @@ fn the_picker_swallows_the_keys_beneath_it() {
     press(&mut app, KeyCode::Esc);
     set(Theme::Design);
 }
+
+// --- sidebar ---
+
+#[test]
+fn b_hides_the_repository_pane_and_the_panes_follow() {
+    let mut app = demo();
+    app.sidebar_shown = true;
+    assert!(app.panes().contains(&Pane::Repos));
+
+    ch(&mut app, 'b');
+    assert!(!app.sidebar);
+    // the render is what actually decides, so mirror what it would do
+    app.sidebar_shown = false;
+    assert!(
+        !app.panes().contains(&Pane::Repos),
+        "a hidden pane must not be walkable"
+    );
+
+    ch(&mut app, 'b');
+    assert!(app.sidebar);
+}
+
+#[test]
+fn hiding_the_sidebar_takes_the_focus_with_it() {
+    let mut app = demo();
+    app.sidebar_shown = true;
+    app.pane = Pane::Repos;
+    ch(&mut app, 'b');
+    assert_ne!(app.pane, Pane::Repos, "focus cannot stay on a hidden pane");
+}
+
+#[test]
+fn h_does_not_reach_a_hidden_sidebar() {
+    let mut app = demo();
+    app.sidebar_shown = false;
+    app.pane = Pane::List;
+    ch(&mut app, 'h');
+    assert_eq!(app.pane, Pane::List);
+}
+
+#[test]
+fn a_narrow_terminal_hides_it_whatever_was_asked_for() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let mut app = demo();
+    assert!(app.sidebar, "asked for");
+
+    let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+    assert!(!app.sidebar_shown, "80 columns is not enough room for it");
+    assert!(app.sidebar, "the preference itself is untouched");
+
+    let mut term = Terminal::new(TestBackend::new(150, 40)).unwrap();
+    term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+    assert!(app.sidebar_shown, "and it comes back when there is room");
+}
+
+#[test]
+fn the_logs_and_diff_views_never_show_it() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let mut app = demo();
+    press(&mut app, KeyCode::Enter);
+    ch(&mut app, 'l');
+    press(&mut app, KeyCode::Enter); // logs
+    let mut term = Terminal::new(TestBackend::new(150, 40)).unwrap();
+    term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+    assert!(!app.sidebar_shown);
+}

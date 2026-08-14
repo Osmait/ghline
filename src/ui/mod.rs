@@ -295,8 +295,11 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     hline(buf, 0, 1, area.width, theme::border());
 
     let sidebar_w: u16 = 34;
-    // logs and diff take the full width, as in the design
-    if matches!(app.view, View::Logs | View::Diff) || area.width < 90 {
+    // logs and diff take the full width, as in the design; below 90 columns
+    // there is not enough room for it whatever the reader asked for
+    app.sidebar_shown =
+        app.sidebar && !matches!(app.view, View::Logs | View::Diff) && area.width >= 90;
+    if !app.sidebar_shown {
         draw_content(buf, body, app);
     } else {
         let side = Rect {

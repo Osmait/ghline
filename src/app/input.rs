@@ -16,7 +16,7 @@ impl App {
 
     /// The current view's panes, left to right. This is what `h` and `l` walk.
     pub fn panes(&self) -> Vec<Pane> {
-        match self.view {
+        let mut panes = match self.view {
             View::Logs => vec![Pane::Tree, Pane::Log],
             View::Diff => vec![Pane::Files, Pane::DiffBody],
             View::List => vec![Pane::Repos, Pane::List],
@@ -31,7 +31,26 @@ impl App {
                     vec![Pane::Repos, Pane::Body, Pane::Checks]
                 }
             }
+        };
+        // a pane that is not on screen is not a pane you can walk to
+        if !self.sidebar_shown {
+            panes.retain(|p| *p != Pane::Repos);
         }
+        panes
+    }
+
+    /// `b`: hides or shows the repository pane. The extra width goes to the
+    /// content, which is the point on a narrow terminal.
+    pub fn toggle_sidebar(&mut self) {
+        self.sidebar = !self.sidebar;
+        if !self.sidebar && self.pane == Pane::Repos {
+            self.pane = Pane::List;
+        }
+        self.flash_ok(if self.sidebar {
+            "repositories shown [b]"
+        } else {
+            "repositories hidden [b]"
+        });
     }
 
     /// Moves focus one pane left (`-1`) or right (`1`). `h`/`l` stop at the
@@ -262,6 +281,7 @@ impl App {
             }
             "diff" | "files" => self.open_diff(0),
             "theme" | "themes" => self.open_themes(),
+            "sidebar" | "repos" => self.toggle_sidebar(),
             "help" | "h" => self.help_open = true,
             "q" | "quit" => {
                 self.view = View::List;
@@ -288,6 +308,11 @@ impl App {
     }
 
     pub fn on_key(&mut self, ev: KeyEvent) {
+        if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('b') {
+            self.toggle_sidebar();
+            return;
+        }
+
         // half a page up/down in the focused pane, vim style
         if ev.modifiers.contains(KeyModifiers::CONTROL)
             && matches!(self.pane, Pane::Body | Pane::Log)
@@ -425,6 +450,7 @@ impl App {
                 self.accounts_open = true;
                 self.acc_sel = self.acc;
             }
+            KeyCode::Char('b') => self.toggle_sidebar(),
             KeyCode::Char('t') => self.open_themes(),
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char(':') => {

@@ -74,8 +74,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         ""
     };
     let hint = match app.pane {
-        Pane::Repos => "j/k repo · l content · enter open · a account · : command".to_string(),
-        Pane::List => format!("j/k move · h repos · enter open · 1/2/3 tabs · / filter{pr_keys}"),
+        Pane::Repos => "j/k repo · l content · enter open · b hide · a account · :".to_string(),
+        Pane::List => {
+            let repos = if app.sidebar_shown {
+                "h repos"
+            } else {
+                "b repos"
+            };
+            format!("j/k move · {repos} · enter open · 1/2/3 tabs · / filter{pr_keys}")
+        }
         Pane::Body => {
             let right = if app.panes().contains(&Pane::Checks) {
                 " · l checks"

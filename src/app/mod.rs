@@ -154,6 +154,12 @@ pub struct App {
     pub extra_lines: usize,
     pub accounts_open: bool,
     pub acc_sel: usize,
+    /// Whether the repository pane is wanted. The view and the terminal width
+    /// have the last word: see `sidebar_shown`.
+    pub sidebar: bool,
+    /// Whether the last frame actually drew it. The pane list reads this, so
+    /// `h` can never land on a sidebar that is not on screen.
+    pub sidebar_shown: bool,
     /// Theme picker. It previews as you move, so the theme active when it
     /// opened is kept in order to put it back on `esc`.
     pub themes_open: bool,
@@ -243,6 +249,8 @@ impl App {
             extra_lines: 0,
             accounts_open: false,
             acc_sel: 0,
+            sidebar: true,
+            sidebar_shown: true,
             themes_open: false,
             theme_sel: 0,
             theme_before: crate::theme::current(),
