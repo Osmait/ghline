@@ -272,17 +272,6 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("CHANGELOG.md", "+0", "-0"),
     ];
     d.files = 6;
-    p.body = body.to_string();
-    d.file_list = vec![
-        fc("src/layout/solver.rs", "+64", "-18"),
-        fc("src/layout/mod.rs", "+12", "-4"),
-        fc("src/app/reducer.rs", "+27", "-9"),
-        fc("src/ui/sidebar.rs", "+18", "-3"),
-        fc("tests/layout.rs", "+7", "-0"),
-        fc("CHANGELOG.md", "+0", "-0"),
-    ];
-    d.files = 6;
-    p.body = "Reads every host from hosts.yml (github.com and GHE) and lets you switch\nwith a modal picker bound to a.\n\nStill draft: the SSO re-auth flow is stubbed.".into();
 
     p.title = "fix(layout): clamp sidebar width to a minimum of 12 cols".into();
     p.state = Status::Open;
@@ -324,7 +313,6 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("CHANGELOG.md", "+4", "-0"),
     ];
     d.files = 4;
-    p.body = "Streams job logs over the Actions API instead of re-fetching the whole\nblob on every tick.\n\n- LogStream with a bounded channel and keepalives\n- follow mode (f) pinned to the bottom of the pane\n- highlight ##[error] lines and index them for e\n\nRefs #388".into();
 
     p.title = "feat(actions): stream job logs with follow mode".into();
     p.state = Status::Open;
@@ -350,7 +338,6 @@ pub fn prs(repo: usize) -> Vec<Item> {
     d.files = 2;
     d.file_list = vec![fc("Cargo.toml", "+1", "-1"), fc("Cargo.lock", "+8", "-8")];
     d.files = 2;
-    p.body = "Bumps crossterm from 0.27.0 to 0.28.1.\n\nRelease notes and changelog omitted — see the upstream repository.".into();
 
     p.title = "chore(deps): bump crossterm to 0.28".into();
     p.state = Status::Open;
@@ -426,7 +413,6 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("CHANGELOG.md", "+2", "-0"),
     ];
     d.files = 5;
-    p.body = "Pure move plus a parser for vim counts (3j). No behaviour change beyond\ncounts now being honoured in every list.\n\nCloses #371".into();
 
     p.title = "refactor: move keymap into its own crate".into();
     p.state = Status::Merged;
