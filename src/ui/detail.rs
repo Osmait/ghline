@@ -4,7 +4,9 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{Seg, bold, fill, hline, markdown, put, put_right, put_trunc, vline, wrap};
+use super::{
+    Seg, bold, fill, hline, markdown, pct, put, put_right, put_trunc, skel_bar, vline, wrap,
+};
 use crate::app::{App, Pane};
 use crate::data::{Kind, Status};
 use crate::theme;
@@ -389,9 +391,19 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     let mut y = area.y + 2;
     if jobs.is_empty() {
         let st = app.jobs_status();
+        if st.is_loading() {
+            let avail = area.width.saturating_sub(18);
+            let names = [32, 48, 42, 37, 27];
+            for (row, &name) in names.iter().enumerate() {
+                let ry = y + row as u16;
+                skel_bar(buf, area.x + 2, ry, 1, row, app.anim);
+                skel_bar(buf, area.x + 4, ry, pct(avail, name), row, app.anim);
+                skel_bar(buf, area.right().saturating_sub(11), ry, 9, row, app.anim);
+            }
+            return;
+        }
         let (msg, color) = match st.error() {
             Some(e) => (e.to_string(), theme::RED),
-            None if st.is_loading() => ("loading checks…".to_string(), theme::DIMMER),
             None => ("no checks for this pull request".to_string(), theme::DIMMER),
         };
         put_trunc(

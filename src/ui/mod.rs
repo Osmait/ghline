@@ -196,6 +196,42 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
 /// A run of text with its style; a line is several of them in a row.
 pub type Seg = (String, Style);
 
+/// One placeholder block of a skeleton.
+///
+/// The design asks for this shape itself: its `sc-for` elements carry a
+/// `hint-placeholder-count`, so a pane that is still loading is meant to show
+/// the outline of what is coming rather than a word.
+///
+/// `row` and `phase` put a highlight band travelling down the rows, which is
+/// what separates "on its way" from "stuck".
+pub fn skel_bar(buf: &mut Buffer, x: u16, y: u16, w: u16, row: usize, phase: u64) {
+    if w == 0 {
+        return;
+    }
+    const CYCLE: u64 = 16;
+    let band = (phase % CYCLE) as i64;
+    let color = match (row as i64 - band).abs() {
+        0 => theme::SEL_MARK_IDLE,
+        1 => theme::SEL,
+        _ => theme::PANEL,
+    };
+    let block = "█".repeat(w as usize);
+    put(
+        buf,
+        x,
+        y,
+        x + w,
+        &block,
+        Style::default().bg(theme::BG).fg(color),
+    );
+}
+
+/// A percentage of the available width, so a skeleton keeps its proportions at
+/// any pane size.
+pub fn pct(avail: u16, p: u16) -> u16 {
+    (u32::from(avail) * u32::from(p) / 100) as u16
+}
+
 /// Keeps `sel` visible inside a window of `height` rows.
 pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usize) {
     if height == 0 {
@@ -521,6 +557,52 @@ mod tests {
         let end = put(&mut buf, 0, 0, 1, "漢", Style::default());
         assert_eq!(end, 0);
         assert_eq!(buf[(0, 0)].symbol(), " ");
+    }
+
+    // --- loading skeletons ---
+
+    #[test]
+    fn a_skeleton_bar_fills_exactly_its_width() {
+        let mut buf = buffer(10, 1);
+        skel_bar(&mut buf, 2, 0, 4, 0, 0);
+        assert_eq!(row(&buf, 0), "  ████");
+    }
+
+    #[test]
+    fn a_zero_width_bar_draws_nothing() {
+        let mut buf = buffer(6, 1);
+        skel_bar(&mut buf, 0, 0, 0, 0, 0);
+        assert_eq!(row(&buf, 0), "");
+    }
+
+    #[test]
+    fn the_highlight_band_travels_with_the_phase() {
+        // the row the band is on is brighter than the rows away from it
+        let lit = |row: usize, phase: u64| {
+            let mut buf = buffer(4, 1);
+            skel_bar(&mut buf, 0, 0, 2, row, phase);
+            buf[(0, 0)].style().fg
+        };
+        assert_ne!(
+            lit(0, 0),
+            lit(5, 0),
+            "row 0 is lit at phase 0, row 5 is not"
+        );
+        assert_eq!(lit(0, 0), lit(3, 3), "the band moved down with the phase");
+    }
+
+    #[test]
+    fn a_bar_never_writes_past_its_width() {
+        let mut buf = buffer(8, 1);
+        skel_bar(&mut buf, 6, 0, 5, 0, 0); // would run off the right edge
+        assert_eq!(row(&buf, 0).chars().count(), 8);
+    }
+
+    #[test]
+    fn pct_keeps_proportions_and_never_overflows() {
+        assert_eq!(pct(100, 50), 50);
+        assert_eq!(pct(0, 80), 0);
+        assert_eq!(pct(u16::MAX, 100), u16::MAX);
     }
 
     #[test]

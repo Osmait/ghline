@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{fill, hline, put, put_right, put_trunc, scroll_into_view};
+use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::{App, Pane};
 use crate::theme;
 
@@ -72,9 +72,19 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             .get(app.login())
             .map(super::super::app::Load::is_loading)
             .unwrap_or(true);
+        if loading {
+            let avail = area.width.saturating_sub(12);
+            let names = [56, 40, 68, 47, 34, 60, 44, 52];
+            for row in 0..(list.height as usize).min(8) {
+                let y = list.y + row as u16;
+                let w = pct(avail, names[row % names.len()]);
+                skel_bar(buf, area.x + 2, y, w, row, app.anim);
+                skel_bar(buf, area.right().saturating_sub(9), y, 7, row, app.anim);
+            }
+            return;
+        }
         let (msg, color) = match app.repos_state.get(app.login()).and_then(|s| s.error()) {
             Some(e) => (e.to_string(), theme::RED),
-            None if loading => ("loading repos…".to_string(), theme::DIMMER),
             None => ("no repositories".to_string(), theme::DIMMER),
         };
         put_trunc(

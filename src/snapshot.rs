@@ -190,6 +190,21 @@ pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::R
     Ok(())
 }
 
+/// Renders the demo with every pane held in its loading state, which is the
+/// only way to look at the skeletons without racing the network.
+pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::Result<()> {
+    let mut app = App::new(Source::Demo);
+    for k in parse_keys(keys) {
+        app.on_key(k);
+    }
+    app.hold_loading(frame);
+
+    let mut term = Terminal::new(TestBackend::new(width, height))?;
+    term.draw(|f| ui::draw(f, &mut app))?;
+    print!("{}", to_svg(term.backend().buffer(), width, height));
+    Ok(())
+}
+
 pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
     let mut app = App::new(Source::Demo);
     for k in parse_keys(keys) {

@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
-use super::{fill, hline, put, put_right, put_trunc, scroll_into_view};
+use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::{App, Pane};
 use crate::data::{Detail, Item, Kind, Status, TABS};
 use crate::theme;
@@ -162,9 +162,27 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     if items.is_empty() {
         let st = app.list_state();
-        let (msg, color) = if st.is_loading() {
-            ("loading…".to_string(), theme::DIMMER)
-        } else if let Some(e) = st.error() {
+        if st.is_loading() {
+            // the outline of the rows that are coming, so the pane does not
+            // jump when they arrive
+            let avail = area.width.saturating_sub(24);
+            let titles = [44, 58, 32, 50, 38, 54];
+            let subs = [26, 20, 30, 23, 28, 18];
+            // the design says how many rows to hint at: `hint-placeholder-count`
+            let rows = ((area.height / 2) as usize).min(10);
+            for row in 0..rows {
+                let y = area.y + (row as u16) * 2;
+                skel_bar(buf, area.x + 2, y, 1, row, app.anim); // icon
+                skel_bar(buf, area.x + 4, y, 5, row, app.anim); // number
+                let tw = pct(avail, titles[row % titles.len()]);
+                skel_bar(buf, area.x + 11, y, tw, row, app.anim);
+                skel_bar(buf, area.right().saturating_sub(12), y, 9, row, app.anim);
+                let sw = pct(avail, subs[row % subs.len()]);
+                skel_bar(buf, area.x + 11, y + 1, sw, row, app.anim);
+            }
+            return;
+        }
+        let (msg, color) = if let Some(e) = st.error() {
             (e.to_string(), theme::RED)
         } else if !app.filter.is_empty() {
             ("no matches".to_string(), theme::DIMMER)

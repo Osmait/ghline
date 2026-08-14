@@ -29,12 +29,17 @@ use app::{App, Source};
 const TICK: Duration = Duration::from_millis(1400);
 /// Command-line cursor blink (`@keyframes om-blink`).
 const BLINK: Duration = Duration::from_millis(500);
+/// Frame rate of the loading skeletons, fast enough to read as motion.
+const ANIM: Duration = Duration::from_millis(110);
 
 fn main() -> io::Result<()> {
     // `--snapshot [keys] [width] [height] [ticks]` prints one render and exits.
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mode = args.first().map(String::as_str).unwrap_or("");
-    if mode == "--snapshot" || mode == "--svg" || mode == "--svg-live" {
+    if matches!(
+        mode,
+        "--snapshot" | "--svg" | "--svg-live" | "--svg-loading"
+    ) {
         let keys = args.get(1).cloned().unwrap_or_default();
         let w = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(160);
         let h = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(44);
@@ -42,6 +47,7 @@ fn main() -> io::Result<()> {
         return match mode {
             "--svg" => snapshot::svg(&keys, w, h, ticks),
             "--svg-live" => snapshot::svg_live(&keys, w, h, ticks),
+            "--svg-loading" => snapshot::svg_loading(&keys, w, h, ticks as u64),
             _ => snapshot::run(&keys, w, h, ticks),
         };
     }
@@ -120,6 +126,7 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
     let mut app = App::new(source);
     let mut last_tick = Instant::now();
     let mut last_blink = Instant::now();
+    let mut last_anim = Instant::now();
 
     loop {
         // request whatever the current view needs (non-blocking: it goes to the gh thread)
@@ -133,7 +140,7 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
             .saturating_sub(last_tick.elapsed())
             .min(BLINK.saturating_sub(last_blink.elapsed()))
             .min(if waiting {
-                Duration::from_millis(60)
+                ANIM.saturating_sub(last_anim.elapsed())
             } else {
                 Duration::MAX
             })
@@ -154,6 +161,10 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
         if last_tick.elapsed() >= TICK {
             app.tick();
             last_tick = Instant::now();
+        }
+        if waiting && last_anim.elapsed() >= ANIM {
+            app.anim = app.anim.wrapping_add(1);
+            last_anim = Instant::now();
         }
         if last_blink.elapsed() >= BLINK {
             app.blink = !app.blink;

@@ -121,6 +121,32 @@ impl App {
         }
     }
 
+    /// Puts every pane of the current view into its loading state, so the
+    /// skeletons can be inspected without a network round trip.
+    pub fn hold_loading(&mut self, frame: u64) {
+        let key = self.repo_key();
+        self.anim = frame;
+        self.accounts_state = Load::Loading;
+        self.repos_state
+            .insert(self.login().to_string(), Load::Loading);
+        for t in 0..3 {
+            self.lists_state.insert((key.clone(), t), Load::Loading);
+        }
+        // only the list view wants its rows gone; the other views need the
+        // selection to stay so their own panes have something to be about
+        if self.view == View::List {
+            for t in 0..3 {
+                self.lists.remove(&(key.clone(), t));
+            }
+        }
+        let id = self.run_id();
+        self.jobs_state.insert((key.clone(), id), Load::Loading);
+        self.logs_state.insert((key.clone(), id), Load::Loading);
+        if let Some(num) = self.current().map(|c| c.num) {
+            self.diff_state.insert((key, num), Load::Loading);
+        }
+    }
+
     /// `r`: drops the active repo's caches so `ensure` asks for them again.
     pub fn refresh(&mut self) {
         if !self.live() {

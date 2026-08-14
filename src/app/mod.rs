@@ -133,6 +133,9 @@ pub struct App {
     pub diff_state: HashMap<(String, i64), Load>,
     /// A write action is in flight.
     pub busy: bool,
+    /// Frame counter for the loading skeletons. It only advances while
+    /// something is actually being waited on.
+    pub anim: u64,
     pub prompt: Option<Prompt>,
     pub flash: Option<Flash>,
     pub acc: usize,
@@ -213,6 +216,7 @@ impl App {
             logs_state: HashMap::new(),
             diff_state: HashMap::new(),
             busy: false,
+            anim: 0,
             accounts,
             prompt: None,
             flash: None,

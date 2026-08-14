@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{fill, hline, put, put_right, put_trunc, scroll_into_view, vline, wrap};
+use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap};
 use crate::app::{App, NodeKind, Pane};
 use crate::data::Status;
 use crate::theme;
@@ -292,9 +292,25 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     if disp.is_empty() {
         let st = app.logs_status();
+        if st.is_loading() {
+            let avail = area.width.saturating_sub(20);
+            let widths = [50, 30, 58, 40, 35, 64, 25, 45];
+            for row in 0..(view.height as usize).min(14) {
+                let ry = view.y + row as u16;
+                skel_bar(buf, n_x + 2, ry, 3, row, app.anim);
+                skel_bar(
+                    buf,
+                    text_x,
+                    ry,
+                    pct(avail, widths[row % widths.len()]),
+                    row,
+                    app.anim,
+                );
+            }
+            return;
+        }
         let (msg, color) = match st.error() {
             Some(e) => (e.to_string(), theme::RED),
-            None if st.is_loading() => ("loading log…".to_string(), theme::DIMMER),
             None => ("no output for this step".to_string(), theme::DIMMER),
         };
         put_trunc(

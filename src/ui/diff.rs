@@ -5,7 +5,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{fill, hline, put, put_right, put_trunc, scroll_into_view, vline};
+use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
 use crate::theme;
@@ -106,6 +106,23 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
     // rows
     let sel = app.file_idx();
     let len = app.diff_files().len();
+    if len == 0 && app.diff_status().is_loading() {
+        let avail = area.width.saturating_sub(14);
+        let names = [58, 44, 70, 50, 38, 62];
+        for row in 0..((foot_y.saturating_sub(area.y + 3)) as usize).min(6) {
+            let y = area.y + 2 + row as u16;
+            skel_bar(
+                buf,
+                area.x + 2,
+                y,
+                pct(avail, names[row % names.len()]),
+                row,
+                app.anim,
+            );
+            skel_bar(buf, area.right().saturating_sub(9), y, 7, row, app.anim);
+        }
+        return;
+    }
     let list_h = foot_y.saturating_sub(area.y + 3) as usize;
     scroll_into_view(&mut app.repo_scroll, sel, list_h, len);
     let scroll = app.repo_scroll;
@@ -249,12 +266,25 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
     let Some(f) = app.diff_file() else { return };
     let binary = f.add == "+0" && f.del == "-0";
     let st = app.diff_status();
-    let (title, sub) = if st.is_loading() {
-        (
-            "loading diff…".to_string(),
-            format!("{} · {} {}", f.path, f.add, f.del),
-        )
-    } else if let Some(e) = st.error() {
+    if st.is_loading() {
+        let avail = area.width.saturating_sub(22);
+        let widths = [44, 56, 34, 50, 38, 60, 29];
+        for row in 0..(area.height as usize).min(16) {
+            let ry = area.y + row as u16;
+            skel_bar(buf, area.x + 2, ry, 3, row, app.anim);
+            skel_bar(buf, area.x + 8, ry, 3, row, app.anim);
+            skel_bar(
+                buf,
+                area.x + 14,
+                ry,
+                pct(avail, widths[row % widths.len()]),
+                row,
+                app.anim,
+            );
+        }
+        return;
+    }
+    let (title, sub) = if let Some(e) = st.error() {
         ("diff unavailable".to_string(), e.to_string())
     } else if binary {
         (

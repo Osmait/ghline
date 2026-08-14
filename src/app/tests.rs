@@ -430,3 +430,31 @@ fn a_flash_fades_after_a_few_ticks() {
     }
     assert!(app.flash.is_none());
 }
+
+#[test]
+fn a_loading_list_draws_a_skeleton_rather_than_a_word() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let mut app = demo();
+    app.hold_loading(0);
+
+    let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+    term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+
+    let buf = term.backend().buffer();
+    let blocks = (0..buf.area.width)
+        .flat_map(|x| (0..buf.area.height).map(move |y| (x, y)))
+        .filter(|&(x, y)| buf[(x, y)].symbol() == "\u{2588}")
+        .count();
+    assert!(
+        blocks > 100,
+        "the pane should be full of placeholder blocks"
+    );
+
+    let text: String = (0..buf.area.width).map(|x| buf[(x, 5)].symbol()).collect();
+    assert!(
+        !text.contains("loading"),
+        "no word where the rows should be"
+    );
+}
