@@ -208,20 +208,27 @@ go.
 
 ### Settings
 
-Three keys in `~/.config/github-tui/config`, all optional:
+Six keys in `~/.config/github-tui/config`, all optional:
 
 ```
-prompt = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{body}
-agents = claude, codex, opencode, pi
+prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
+prompt-pr   = Review {repo}#{num}: {title}\n\n{url}\n\n{context}
+prompt-run  = Diagnose this failing run in {repo}.\n\n{title}\n{url}\n\n{context}
+prompt-diff = Explain this change from {repo}#{num}\n\n{url}\n\n{context}
+agents      = claude, codex, opencode, pi
 clone-roots = ~/orca, ~/Projects
 ```
 
-`prompt` is what an agent is told; the placeholders are `{repo} {num} {title}
-{url} {body}`, and an unknown one is left as itself rather than blanked so a
-typo looks like a typo. The URL is in the default because an agent that can
-read the issue asks fewer questions. `agents` is what to offer for a new
-worktree — herdr decides what it can actually start, so an unsupported name
-comes back as herdr's own refusal rather than a guess at one.
+One template per kind of subject. The placeholders are `{repo} {num} {title}
+{url} {context}`, where `{context}` is the body, the file list or the log
+excerpt depending on what is being sent; an unknown one is left as itself
+rather than blanked, so a typo looks like a typo. `\n` is two characters in a
+config file and becomes a real newline on the way out. The URL is in every
+default because an agent that can read the thing asks fewer questions.
+
+`agents` is what to offer for a new worktree — herdr decides what it can
+actually start, so an unsupported name comes back as herdr's own refusal
+rather than a guess at one.
 
 If the agent then fails to start, whatever was just made is undone: a worktree
 is removed, a workspace is closed. A half-built one would be worse than the

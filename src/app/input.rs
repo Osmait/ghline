@@ -231,22 +231,21 @@ impl App {
             self.flash_warn(why);
             return;
         }
+        let Some(subject) = self.dispatch_subject() else {
+            return;
+        };
         let Some(cur) = self.current() else { return };
         let repo = self.item_repo_key();
-        let (num, title, body) = (cur.num, cur.title.clone(), cur.body_text().to_string());
-        let kind = if cur.kind() == crate::data::Kind::Pr {
-            "pull"
-        } else {
-            "issues"
-        };
-        let url = format!("https://github.com/{repo}/{kind}/{num}");
+        let (num, title, id) = (cur.num, cur.title.clone(), cur.id);
+        let url = permalink(&repo, cur.kind(), num, id);
+        let context = self.dispatch_context(subject);
         let text = crate::config::render_prompt(
-            &crate::config::prompt_template(),
+            &crate::config::prompt_template(subject),
             &repo,
             num,
             &title,
             &url,
-            &body,
+            &context,
         );
 
         self.dispatch_open = false;
@@ -890,6 +889,19 @@ impl App {
         }
         self.poll_agents();
         self.tick = self.tick.wrapping_add(1);
+    }
+}
+
+/// Where a thing lives on github.com.
+///
+/// A run is addressed by its database id under `/actions/runs`, not by the
+/// number the list shows — the number is per workflow and would resolve to
+/// whatever run happens to share it in another workflow.
+fn permalink(repo: &str, kind: crate::data::Kind, num: i64, id: i64) -> String {
+    match kind {
+        crate::data::Kind::Issue => format!("https://github.com/{repo}/issues/{num}"),
+        crate::data::Kind::Pr => format!("https://github.com/{repo}/pull/{num}"),
+        crate::data::Kind::Run => format!("https://github.com/{repo}/actions/runs/{id}"),
     }
 }
 

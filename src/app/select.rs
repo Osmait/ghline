@@ -47,6 +47,98 @@ impl App {
         self.repo().is_some_and(crate::data::Repo::is_all)
     }
 
+    /// What `x` would send from here.
+    ///
+    /// Decided by where the reader is, not chosen from a menu: `x` acts on the
+    /// pane you are in, the same as every other key. Standing in a log means
+    /// the log, standing in a diff means that file.
+    pub fn dispatch_subject(&self) -> Option<crate::subject::Subject> {
+        use crate::subject::Subject;
+        let cur = self.current()?;
+        Some(match self.view {
+            View::Logs => Subject::Run,
+            View::Diff => Subject::FileDiff,
+            _ => match cur.kind() {
+                Kind::Issue => Subject::Issue,
+                Kind::Pr => Subject::Pr,
+                Kind::Run => Subject::Run,
+            },
+        })
+    }
+
+    /// The body of what is being sent: the part that is not the title, the
+    /// number or the link.
+    pub fn dispatch_context(&self, subject: crate::subject::Subject) -> String {
+        use crate::subject::Subject;
+        match subject {
+            Subject::Issue => self
+                .current()
+                .map(|c| c.body_text().to_string())
+                .unwrap_or_default(),
+
+            Subject::Pr => {
+                let files: Vec<(String, String, String)> = self
+                    .diff_files()
+                    .iter()
+                    .map(|f| (f.path.clone(), f.add.clone(), f.del.clone()))
+                    .collect();
+                let body = self
+                    .current()
+                    .map(crate::data::Item::body_text)
+                    .unwrap_or_default();
+                let summary = crate::subject::files_summary(&files);
+                if body.trim().is_empty() {
+                    summary
+                } else {
+                    format!("{body}\n\n---\n\n{summary}")
+                }
+            }
+
+            Subject::Run => {
+                let rows = self.log_lines();
+                let lines: Vec<crate::subject::Line<'_>> = rows
+                    .iter()
+                    .map(|r| crate::subject::Line {
+                        text: &r.text,
+                        is_error: r.kind == "red",
+                    })
+                    .collect();
+                let excerpt = crate::subject::log_excerpt(&lines);
+                match self.log_job_label() {
+                    Some(job) => format!("job: {job}\n\n{excerpt}"),
+                    None => excerpt,
+                }
+            }
+
+            Subject::FileDiff => match self.diff_file() {
+                Some(f) => {
+                    let rows = self.diff_rows();
+                    let mut out = format!("{}  {}/{}\n\n", f.path, f.add, f.del);
+                    for r in rows.iter().take(400) {
+                        out.push_str(&r.text);
+                        out.push('\n');
+                    }
+                    if rows.len() > 400 {
+                        out.push_str(&format!("\n… {} of {} lines shown\n", 400, rows.len()));
+                    }
+                    out
+                }
+                None => "(no file selected)".to_string(),
+            },
+        }
+    }
+
+    /// The job, and step, whose log is on screen.
+    fn log_job_label(&self) -> Option<String> {
+        let tree = self.flat_tree();
+        let node = tree.get(self.tree_sel_idx(tree.len()))?;
+        let job = self.jobs().get(node.ji)?.name.clone();
+        Some(match node.kind {
+            NodeKind::Step => format!("{job} › {}", node.name),
+            NodeKind::Job => job,
+        })
+    }
+
     /// Everywhere the selected issue could go, running agents first.
     ///
     /// Ordered by what you are most likely to want: an agent that is free, an

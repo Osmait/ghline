@@ -237,11 +237,13 @@ fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
 
     let accent = theme::cyan();
     let width = area.width.saturating_sub(8).min(76);
-    let preview: Vec<String> = super::wrap(text, width.saturating_sub(6) as usize)
-        .into_iter()
-        .take(6)
-        .collect();
-    let modal = centered(area, width, preview.len() as u16 + 8);
+    // Enough lines to reach past the template's own header into the content:
+    // a preview that only ever shows the boilerplate proves nothing about what
+    // is actually being sent.
+    const PREVIEW: usize = 14;
+    let all = super::wrap(text, width.saturating_sub(6) as usize);
+    let preview: Vec<String> = all.iter().take(PREVIEW).cloned().collect();
+    let modal = centered(area, width, preview.len() as u16 + 9);
     frame(buf, modal, accent);
 
     let base = Style::default().bg(theme::panel());
@@ -265,13 +267,17 @@ fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
         put_trunc(buf, x + 2, y, max, line, base.fg(theme::dimmer()));
         y += 1;
     }
-    rule(buf, modal, modal.bottom() - 2, accent);
-    put(
-        buf,
-        x,
-        modal.bottom() - 1,
-        max,
-        "it starts working immediately",
-        base.fg(theme::dimmer()),
-    );
+    // the frame's own border is on `bottom() - 1`
+    let foot_y = modal.bottom() - 2;
+    rule(buf, modal, foot_y - 1, accent);
+    let size = if all.len() > PREVIEW {
+        format!(
+            "it starts working immediately · {} more lines, {} characters in all",
+            all.len() - PREVIEW,
+            text.chars().count()
+        )
+    } else {
+        "it starts working immediately".to_string()
+    };
+    put_trunc(buf, x, foot_y, max, &size, base.fg(theme::dimmer()));
 }

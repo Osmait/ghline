@@ -1690,6 +1690,75 @@ mod dispatch {
         assert!(app.prompt.is_none());
     }
 
+    // --- what `x` sends depends on where you are standing ---
+
+    #[test]
+    fn the_subject_follows_the_tab_in_the_list() {
+        use crate::subject::Subject;
+        for (tab, want) in [(0, Subject::Issue), (1, Subject::Pr), (2, Subject::Run)] {
+            let mut app = demo();
+            app.tab = tab;
+            app.view = View::List;
+            assert_eq!(app.dispatch_subject(), Some(want), "tab {tab}");
+        }
+    }
+
+    #[test]
+    fn standing_in_a_log_sends_the_log_whatever_the_tab_says() {
+        use crate::subject::Subject;
+        let mut app = demo();
+        app.tab = 1; // a pull request's checks lead here too
+        app.view = View::Logs;
+        assert_eq!(app.dispatch_subject(), Some(Subject::Run));
+    }
+
+    #[test]
+    fn standing_in_a_diff_sends_that_file() {
+        use crate::subject::Subject;
+        let mut app = demo();
+        app.tab = 1;
+        app.view = View::Diff;
+        assert_eq!(app.dispatch_subject(), Some(Subject::FileDiff));
+    }
+
+    #[test]
+    fn a_pull_request_carries_its_files_not_only_its_body() {
+        use crate::subject::Subject;
+        let mut app = demo();
+        app.tab = 1;
+        app.view = View::Detail;
+
+        let ctx = app.dispatch_context(Subject::Pr);
+        assert!(
+            ctx.contains("changed file"),
+            "the file list is what makes a review actionable: {ctx}"
+        );
+    }
+
+    #[test]
+    fn a_run_carries_the_job_its_log_came_from() {
+        use crate::subject::Subject;
+        let mut app = demo();
+        app.tab = 2;
+        app.view = View::Logs;
+
+        let ctx = app.dispatch_context(Subject::Run);
+        assert!(
+            ctx.starts_with("job: "),
+            "an excerpt with no job named is hard to act on: {ctx}"
+        );
+    }
+
+    #[test]
+    fn each_subject_gets_its_own_wording() {
+        use crate::subject::Subject;
+        let issue = crate::config::prompt_template(Subject::Issue);
+        let run = crate::config::prompt_template(Subject::Run);
+        assert!(issue.starts_with("Work on"));
+        assert!(run.starts_with("Diagnose"));
+        assert_ne!(issue, run, "the first line is what an agent leans on");
+    }
+
     #[test]
     fn the_picker_does_not_open_on_demo_data() {
         let mut app = demo();

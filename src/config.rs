@@ -111,21 +111,20 @@ pub fn save_theme(theme: Theme) -> io::Result<()> {
 
 // ------------------------------------------------------------------ agents
 
-const PROMPT: &str = "prompt";
-
-/// What an agent is told when an issue is handed to it.
+/// What an agent is told, per kind of thing it is being handed.
 ///
 /// A setting rather than a constant because what a coding agent needs in its
-/// first message is a matter of taste and will change. The URL is in the
-/// default on purpose: an agent that can read the issue itself asks fewer
+/// first message is a matter of taste and will change. The URL is in every
+/// default on purpose: an agent that can read the thing itself asks fewer
 /// questions than one working from a paraphrase.
-const DEFAULT_PROMPT: &str = "Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{body}";
-
-pub fn prompt_template() -> String {
+///
+/// A config file is one line per key, so `\n` in a value is those two
+/// characters; they become real newlines on the way out.
+pub fn prompt_template(subject: crate::subject::Subject) -> String {
     load()
-        .get(PROMPT)
+        .get(subject.key())
         .map(|t| t.replace("\\n", "\n"))
-        .unwrap_or_else(|| DEFAULT_PROMPT.replace("\\n", "\n"))
+        .unwrap_or_else(|| subject.default_template().to_string())
 }
 
 /// Fills the template in. An unknown placeholder is left alone rather than
@@ -136,14 +135,16 @@ pub fn render_prompt(
     num: i64,
     title: &str,
     url: &str,
-    body: &str,
+    context: &str,
 ) -> String {
+    // `{context}` is substituted last, so a body that happens to contain
+    // `{repo}` arrives as it was written rather than expanded.
     template
         .replace("{repo}", repo)
         .replace("{num}", &num.to_string())
         .replace("{title}", title)
         .replace("{url}", url)
-        .replace("{body}", body)
+        .replace("{context}", context)
 }
 
 const AGENTS: &str = "agents";
@@ -236,7 +237,7 @@ mod tests {
     #[test]
     fn the_default_prompt_carries_what_an_agent_needs() {
         let out = render_prompt(
-            &DEFAULT_PROMPT.replace("\\n", "\n"),
+            crate::subject::Subject::Issue.default_template(),
             "Osmait/sbql",
             14,
             "Fix the parser",
@@ -257,7 +258,7 @@ mod tests {
     #[test]
     fn a_placeholder_that_is_not_a_placeholder_survives() {
         // a typo should look like a typo, not like an empty string
-        let out = render_prompt("{repo} {nope}", "a/b", 1, "t", "u", "body");
+        let out = render_prompt("{repo} {nope}", "a/b", 1, "t", "u", "ctx");
         assert_eq!(out, "a/b {nope}");
     }
 
@@ -265,7 +266,7 @@ mod tests {
     fn a_body_containing_braces_is_not_re_expanded() {
         // substitution runs once per placeholder, left to right, so a body
         // that happens to contain `{repo}` stays as it was written
-        let out = render_prompt("{body}", "a/b", 1, "t", "u", "see {repo}");
+        let out = render_prompt("{context}", "a/b", 1, "t", "u", "see {repo}");
         assert_eq!(out, "see {repo}");
     }
 

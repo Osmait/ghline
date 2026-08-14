@@ -14,6 +14,7 @@ mod gh;
 mod herdr;
 mod service;
 mod snapshot;
+mod subject;
 mod theme;
 mod ui;
 

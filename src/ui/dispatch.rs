@@ -28,11 +28,18 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let base = Style::default().bg(theme::panel());
     let max = modal.right() - 2;
 
-    let subject = app
+    // What is being sent, not just which row is selected: standing in a log
+    // and standing in the list of runs send very different things.
+    let kind = app
+        .dispatch_subject()
+        .map(crate::subject::Subject::label)
+        .unwrap_or("nothing");
+    let what = app
         .current()
         .map(|c| format!("#{}  {}", c.num, c.title))
         .unwrap_or_default();
-    put(
+
+    let mut cx = put(
         buf,
         modal.x + 2,
         modal.y + 1,
@@ -40,12 +47,20 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         "SEND",
         base.fg(theme::cyan()),
     );
+    cx = put(
+        buf,
+        cx + 1,
+        modal.y + 1,
+        max,
+        kind,
+        base.fg(theme::yellow()),
+    );
     put_trunc(
         buf,
-        modal.x + 8,
+        cx + 2,
         modal.y + 1,
-        max.saturating_sub(20),
-        &subject,
+        max.saturating_sub(14),
+        &what,
         base.fg(theme::bright()),
     );
     put_right(
