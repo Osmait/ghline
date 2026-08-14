@@ -141,6 +141,24 @@ pub fn slug_of(url: &str) -> Option<String> {
     Some(format!("{owner}/{repo}"))
 }
 
+/// The branch a checkout currently has out.
+///
+/// Read rather than assumed because "work in the checkout" means working on
+/// whatever is there — usually `main`, sometimes not, and the difference is
+/// the reader's to know before they agree to it.
+pub fn head_branch(repo_root: &str) -> Option<String> {
+    let head = std::fs::read_to_string(Path::new(repo_root).join(".git").join("HEAD")).ok()?;
+    branch_of_head(&head)
+}
+
+/// `ref: refs/heads/main` → `main`. A detached HEAD is a sha, which is not a
+/// branch and is reported as none.
+fn branch_of_head(head: &str) -> Option<String> {
+    let name = head.trim().strip_prefix("ref:")?.trim();
+    let name = name.strip_prefix("refs/heads/")?;
+    (!name.is_empty()).then(|| name.to_string())
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -226,6 +244,31 @@ mod tests {
     fn spacing_in_the_section_header_does_not_matter() {
         assert!(origin_url("[remote \"origin\"]\nurl=git@github.com:a/b\n").is_some());
         assert!(origin_url("[ remote \"origin\" ]\nurl = git@github.com:a/b\n").is_some());
+    }
+
+    // --- which branch is out ---
+
+    #[test]
+    fn a_head_pointing_at_a_branch_names_it() {
+        assert_eq!(
+            branch_of_head("ref: refs/heads/main\n").as_deref(),
+            Some("main")
+        );
+        assert_eq!(
+            branch_of_head("ref: refs/heads/feature/a-b\n").as_deref(),
+            Some("feature/a-b")
+        );
+    }
+
+    #[test]
+    fn a_detached_head_is_not_a_branch() {
+        assert_eq!(branch_of_head("9a8b7c6d5e4f3a2b1c0d\n"), None);
+    }
+
+    #[test]
+    fn a_head_that_makes_no_sense_is_not_a_branch() {
+        assert_eq!(branch_of_head(""), None);
+        assert_eq!(branch_of_head("ref: refs/tags/v1\n"), None);
     }
 
     // --- the walk, against a real directory tree ---

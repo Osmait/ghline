@@ -63,11 +63,25 @@ impl App {
         // agents above: open in herdr, cloned here, or nowhere at all.
         let repo = self.item_repo_key();
         if let Some(root) = self.clone_path(&repo) {
-            for kind in crate::config::agent_kinds() {
+            let kinds = crate::config::agent_kinds();
+            for kind in &kinds {
                 out.push(Dest::Fresh {
-                    kind,
+                    kind: kind.clone(),
                     repo_root: root.clone(),
+                    in_place: None,
                 });
+            }
+            // Working in the checkout comes last: it is the one that can
+            // collide with whatever the reader has open, so it should be
+            // chosen rather than landed on.
+            if let Some(branch) = crate::clones::head_branch(&root) {
+                for kind in &kinds {
+                    out.push(Dest::Fresh {
+                        kind: kind.clone(),
+                        repo_root: root.clone(),
+                        in_place: Some(branch.clone()),
+                    });
+                }
             }
         } else if self.clones_state == Load::Ready {
             out.push(Dest::NotCloned(repo));

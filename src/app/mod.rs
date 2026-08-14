@@ -96,12 +96,19 @@ pub enum Pane {
 pub enum Dest {
     /// An agent already running, addressed by the pane it lives in.
     Running(crate::data::Agent),
-    /// A fresh worktree of a local clone, with a new agent started in it.
+    /// A new agent on a local clone.
+    ///
+    /// Either in a worktree branched off it, or in the checkout itself. The
+    /// difference is one field because it is one decision — where the agent's
+    /// edits land — and everything else about the two is identical.
     Fresh {
         /// `claude`, `codex`, … — what to start.
         kind: String,
-        /// The checkout to branch from.
+        /// The checkout to work from.
         repo_root: String,
+        /// The branch the checkout has out, when working in it directly.
+        /// `None` means a worktree of its own.
+        in_place: Option<String>,
     },
     /// The repository is not on this disk, so nothing can be started in it.
     /// Listed rather than omitted, because "clone it first" is an answer and
@@ -113,6 +120,11 @@ impl Dest {
     pub fn title(&self) -> String {
         match self {
             Self::Running(a) => format!("{}  ·  {}", a.kind, a.where_short()),
+            Self::Fresh {
+                kind,
+                in_place: Some(branch),
+                ..
+            } => format!("new {kind} on {branch}, in the checkout"),
             Self::Fresh { kind, .. } => format!("new worktree with {kind}"),
             Self::NotCloned(repo) => format!("{repo} is not on this machine"),
         }
@@ -121,6 +133,14 @@ impl Dest {
     pub fn detail(&self) -> String {
         match self {
             Self::Running(a) => format!("{}   {}", a.cwd, a.pane),
+            // Working in place is the one destination that can collide with
+            // the reader: same files, same branch, no isolation. Saying so is
+            // the whole reason the detail line exists.
+            Self::Fresh {
+                repo_root,
+                in_place: Some(_),
+                ..
+            } => format!("{repo_root}   ·   alongside your own work, uncommitted changes included"),
             Self::Fresh { repo_root, .. } => repo_root.clone(),
             Self::NotCloned(repo) => format!("gh repo clone {repo}"),
         }
@@ -153,7 +173,8 @@ impl Dest {
 #[derive(Clone)]
 pub struct Fresh {
     pub repo_root: String,
-    pub branch: String,
+    /// The branch to create, or `None` to work in the checkout as it is.
+    pub branch: Option<String>,
     pub label: String,
     pub kind: String,
 }

@@ -1554,10 +1554,107 @@ mod dispatch {
         let plan = app.pending_fresh.expect("a worktree needs a plan");
         assert_eq!(plan.repo_root, "/home/x/orca/thing");
         assert!(
-            plan.branch.starts_with("issue-"),
+            plan.branch
+                .as_deref()
+                .is_some_and(|b| b.starts_with("issue-")),
             "the branch names the issue, so a second dispatch collides loudly"
         );
         assert!(app.prompt.is_some(), "and it still asks first");
+    }
+
+    #[test]
+    fn a_cloned_repository_also_offers_working_in_the_checkout() {
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        // a real checkout, so its HEAD can be read
+        app.clones_state = Load::Ready;
+        app.clones
+            .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+
+        let dests = app.dispatch_dests();
+        let in_place: Vec<&Dest> = dests
+            .iter()
+            .filter(|d| {
+                matches!(
+                    d,
+                    Dest::Fresh {
+                        in_place: Some(_),
+                        ..
+                    }
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            in_place.len(),
+            crate::config::agent_kinds().len(),
+            "one per agent, alongside the worktrees"
+        );
+        assert!(
+            in_place[0].detail().contains("alongside your own work"),
+            "and it warns that it is not isolated"
+        );
+        assert!(
+            in_place[0].title().contains(", in the checkout"),
+            "the title says where it lands: {}",
+            in_place[0].title()
+        );
+    }
+
+    #[test]
+    fn working_in_the_checkout_makes_no_branch() {
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        app.clones_state = Load::Ready;
+        app.clones
+            .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+
+        let dests = app.dispatch_dests();
+        let i = dests
+            .iter()
+            .position(|d| {
+                matches!(
+                    d,
+                    Dest::Fresh {
+                        in_place: Some(_),
+                        ..
+                    }
+                )
+            })
+            .expect("the checkout should be offered");
+        app.dispatch_open = true;
+        app.dispatch_sel = i;
+        app.dispatch_accept();
+
+        let plan = app.pending_fresh.expect("a plan");
+        assert_eq!(plan.branch, None, "nothing is created on disk");
+        assert_eq!(plan.repo_root, env!("CARGO_MANIFEST_DIR"));
+    }
+
+    #[test]
+    fn the_worktree_is_offered_before_the_checkout() {
+        // in place can collide with what the reader has open, so it should be
+        // chosen rather than landed on
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        app.clones_state = Load::Ready;
+        app.clones
+            .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+
+        let dests = app.dispatch_dests();
+        let first_worktree = dests
+            .iter()
+            .position(|d| matches!(d, Dest::Fresh { in_place: None, .. }));
+        let first_in_place = dests.iter().position(|d| {
+            matches!(
+                d,
+                Dest::Fresh {
+                    in_place: Some(_),
+                    ..
+                }
+            )
+        });
+        assert!(first_worktree < first_in_place);
     }
 
     #[test]

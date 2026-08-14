@@ -35,7 +35,8 @@ pub enum Request {
     /// the handler cleans it up rather than leaving it.
     DispatchFresh {
         repo_root: String,
-        branch: String,
+        /// `Some` to branch a worktree, `None` to work in the checkout.
+        branch: Option<String>,
         label: String,
         kind: String,
         text: String,
@@ -230,7 +231,7 @@ fn handle(req: Request) -> Response {
             kind,
             text,
         } => Response::Dispatched {
-            result: fresh(&repo_root, &branch, &label, &kind, &text),
+            result: fresh(&repo_root, branch.as_deref(), &label, &kind, &text),
         },
 
         Request::Scan => Response::Scanned {
@@ -357,15 +358,35 @@ fn handle(req: Request) -> Response {
 /// Leaving a half-built workspace behind would be worse than the failure: the
 /// next dispatch would offer a branch that already exists, and the reader
 /// would have a workspace they did not ask for and did not see appear.
-fn fresh(repo_root: &str, branch: &str, label: &str, kind: &str, text: &str) -> Result<(), Error> {
-    let pane = crate::herdr::create_worktree(repo_root, branch, label)?;
+fn fresh(
+    repo_root: &str,
+    branch: Option<&str>,
+    label: &str,
+    kind: &str,
+    text: &str,
+) -> Result<(), Error> {
+    // The only difference between the two: one makes a branch and a checkout,
+    // the other opens on the one that is already there.
+    let pane = match branch {
+        Some(b) => crate::herdr::create_worktree(repo_root, b, label)?,
+        None => crate::herdr::create_workspace(repo_root, label)?,
+    };
+    // Undoing a worktree deletes what was just made; undoing a workspace only
+    // closes a window. Neither ever touches the reader's own checkout.
+    let undo = |pane: &str| {
+        let _ = if branch.is_some() {
+            crate::herdr::remove_worktree(pane)
+        } else {
+            crate::herdr::close_workspace(pane)
+        };
+    };
 
     if let Err(e) = crate::herdr::start_agent(&pane, kind) {
-        let _ = crate::herdr::remove_worktree(&pane);
+        undo(&pane);
         return Err(e);
     }
     if let Err(e) = crate::herdr::prompt(&pane, text) {
-        let _ = crate::herdr::remove_worktree(&pane);
+        undo(&pane);
         return Err(e);
     }
     Ok(())

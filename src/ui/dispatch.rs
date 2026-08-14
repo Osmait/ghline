@@ -124,6 +124,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             let (mark, mark_color) = match d {
                 Dest::Running { .. } if refusal.is_some() => ("○", theme::dimmer()),
                 Dest::Running { .. } => ("◉", theme::green()),
+                // a different mark, because the two do different things to
+                // the reader's disk
+                Dest::Fresh {
+                    in_place: Some(_), ..
+                } => ("⌂", theme::yellow()),
                 Dest::Fresh { .. } => ("+", theme::cyan_soft()),
                 Dest::NotCloned(_) => ("⊘", theme::dimmer()),
             };
@@ -159,7 +164,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         modal.x + 2,
         foot_y,
         max,
-        "a new worktree branches off the default branch",
+        "+ branches a worktree · ⌂ works in the checkout you already have",
         base.fg(theme::dimmer()),
     );
 }

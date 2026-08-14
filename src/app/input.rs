@@ -259,13 +259,22 @@ impl App {
                     text,
                 });
             }
-            crate::app::Dest::Fresh { kind, repo_root } => {
-                // The branch name is the issue, so a second dispatch of the
-                // same one collides loudly instead of quietly making a second
-                // worktree nobody asked for.
-                let branch = format!("issue-{num}");
+            crate::app::Dest::Fresh {
+                kind,
+                repo_root,
+                in_place,
+            } => {
+                // In a worktree the branch name is the issue, so a second
+                // dispatch of the same one collides loudly instead of quietly
+                // making a second worktree nobody asked for. In place there is
+                // no branch to make: the agent works on what is checked out.
+                let branch = in_place.is_none().then(|| format!("issue-{num}"));
+                let who = match &in_place {
+                    Some(b) => format!("a new {kind} on {b} in {repo_root}"),
+                    None => format!("a new {kind} in a worktree of {repo_root}"),
+                };
                 self.prompt = Some(Prompt::Dispatch {
-                    who: format!("a new {kind} in a worktree of {repo_root}"),
+                    who,
                     pane: String::new(),
                     text,
                 });

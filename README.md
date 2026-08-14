@@ -166,8 +166,16 @@ run inside herdr, and says `(this window)` so.
 destination in one list, because it is one question:
 
 - **an agent already running** — one call, `herdr agent prompt <pane>`;
-- **a new worktree** with claude, codex, opencode or pi — three chained calls,
-  branching `issue-<n>` off the checkout and starting the agent in it.
+- **a new worktree** with claude, codex, opencode or pi — branching `issue-<n>`
+  off the checkout and starting the agent in it, isolated from your own work;
+- **a new agent in the checkout itself** — no branch, no new files, working on
+  whatever is currently checked out and alongside whatever you have open.
+
+The last one is offered after the worktrees, because it is the only destination
+that can collide with you, and it is labelled with the branch it would actually
+land on — read from `.git/HEAD` rather than assumed to be `main`, since a
+checkout sitting on someone's feature branch is common and the difference
+matters before you agree to it.
 
 Both go through the confirmation dialog, which shows the first lines of what
 would be sent. Merging works this way for the same reason: it makes something
@@ -215,10 +223,11 @@ read the issue asks fewer questions. `agents` is what to offer for a new
 worktree — herdr decides what it can actually start, so an unsupported name
 comes back as herdr's own refusal rather than a guess at one.
 
-If a worktree is created and the agent then fails to start, the worktree is
-removed again. A half-built workspace would be worse than the failure: the next
-dispatch would collide with a branch that already exists, and you would have a
-workspace you never saw appear.
+If the agent then fails to start, whatever was just made is undone: a worktree
+is removed, a workspace is closed. A half-built one would be worse than the
+failure — the next dispatch would collide with a branch that already exists,
+and you would have a window you never saw appear. Undoing never touches your
+own checkout either way.
 
 ## The mouse
 

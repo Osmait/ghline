@@ -171,6 +171,41 @@ pub fn create_worktree(repo_root: &str, branch: &str, label: &str) -> Res<String
     Ok(pane)
 }
 
+/// Opens a workspace on an existing checkout and returns its pane.
+///
+/// The counterpart to `create_worktree` for working where you already are:
+/// same shape of answer, no branch, and nothing created on disk.
+pub fn create_workspace(cwd: &str, label: &str) -> Res<String> {
+    let v = call(&[
+        "workspace",
+        "create",
+        "--cwd",
+        cwd,
+        "--label",
+        label,
+        "--no-focus",
+    ])?;
+    let pane = v
+        .pointer("/root_pane/pane_id")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default()
+        .to_string();
+    if pane.is_empty() {
+        return Err(Error::Field {
+            args: "workspace create".into(),
+            field: "root_pane.pane_id",
+        });
+    }
+    Ok(pane)
+}
+
+/// Undoes `create_workspace`. Unlike removing a worktree this touches no
+/// files: the checkout was already there and stays exactly as it was.
+pub fn close_workspace(pane: &str) -> Res<()> {
+    let workspace = pane.split(':').next().unwrap_or(pane);
+    call(&["workspace", "close", workspace]).map(|_| ())
+}
+
 /// Starts an interactive agent of `kind` in an existing pane.
 pub fn start_agent(pane: &str, kind: &str) -> Res<()> {
     call(&["agent", "start", kind, "--kind", kind, "--pane", pane]).map(|_| ())
