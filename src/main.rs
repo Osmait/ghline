@@ -2,6 +2,7 @@
 
 mod actions;
 mod app;
+mod config;
 mod data;
 mod demo;
 mod demo_diffs;
@@ -17,7 +18,9 @@ mod ui;
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -57,6 +60,11 @@ fn main() -> io::Result<()> {
         };
     }
 
+    // Deliberately after the headless modes: a snapshot has to render the same
+    // frame on any machine, so it stays on the default theme regardless of
+    // what this user picked.
+    config::apply_theme();
+
     // `--demo` forces the design's data; with no signed-in `gh` we fall back to
     // demo anyway rather than starting an empty interface.
     let source = if args.iter().any(|a| a == "--demo") {
@@ -69,7 +77,12 @@ fn main() -> io::Result<()> {
         Source::Demo
     };
 
-    let mut term = TerminalGuard::enter()?;
+    // Capturing the mouse takes the terminal's own click-to-select with it,
+    // so anyone who copies text out of here more than they click needs a way
+    // to say no.
+    let mouse = !args.iter().any(|a| a == "--no-mouse");
+
+    let mut term = TerminalGuard::enter(mouse)?;
     let res = run(term.inner(), source);
     // the guard restores the terminal even if `run` returns an error
     drop(term);
@@ -88,10 +101,15 @@ struct TerminalGuard {
 }
 
 impl TerminalGuard {
-    fn enter() -> io::Result<Self> {
+    fn enter(mouse: bool) -> io::Result<Self> {
         enable_raw_mode()?;
         let mut out = io::stdout();
-        if let Err(e) = execute!(out, EnterAlternateScreen) {
+        let entered = if mouse {
+            execute!(out, EnterAlternateScreen, EnableMouseCapture)
+        } else {
+            execute!(out, EnterAlternateScreen)
+        };
+        if let Err(e) = entered {
             let _ = disable_raw_mode();
             return Err(e);
         }
@@ -124,7 +142,9 @@ impl Drop for TerminalGuard {
 /// from the panic hook, where there is nobody to return an error to.
 fn restore() {
     let _ = disable_raw_mode();
-    let _ = execute!(io::stdout(), LeaveAlternateScreen);
+    // Mouse capture is released first: leaving it on would keep the terminal
+    // sending escape sequences at a shell that has no idea what they are.
+    let _ = execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
 }
 
 fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io::Result<()> {
@@ -160,6 +180,9 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
         if event::poll(timeout)? {
             match event::read()? {
                 Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
+                // Moves arrive for every cell the pointer crosses and mean
+                // nothing here; dropping them early keeps the loop quiet.
+                Event::Mouse(m) if !matches!(m.kind, MouseEventKind::Moved) => app.on_mouse(m),
                 Event::Resize(_, _) => {}
                 _ => {}
             }

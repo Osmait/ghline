@@ -101,7 +101,7 @@ impl App {
     }
 
     /// Goes wherever the highlighted row lives.
-    fn finder_accept(&mut self) {
+    pub(super) fn finder_accept(&mut self) {
         let Some(hit) = self.finder_results().get(self.finder_sel).cloned() else {
             return;
         };
@@ -214,9 +214,22 @@ impl App {
 
     /// Applies the highlighted theme straight away: the point of the picker is
     /// to see the interface in it, not to read its name.
-    fn preview_theme(&mut self) {
+    pub(super) fn preview_theme(&mut self) {
         if let Some(t) = crate::theme::Theme::ALL.get(self.theme_sel) {
             crate::theme::set(*t);
+        }
+    }
+
+    /// Keeps the previewed theme, and remembers it for the next run.
+    ///
+    /// A theme that cannot be written is still applied — losing the setting at
+    /// the next start is a smaller problem than refusing the one you asked
+    /// for — but it says so, because silently forgetting looks like a bug.
+    pub fn accept_theme(&mut self) {
+        let theme = crate::theme::current();
+        match crate::config::save_theme(theme) {
+            Ok(()) => self.flash_ok(format!("theme: {}", theme.name())),
+            Err(e) => self.flash_warn(format!("theme: {} · not saved: {e}", theme.name())),
         }
     }
 
@@ -256,44 +269,84 @@ impl App {
 
     /// `j`/`k`: always on the focused pane.
     fn move_by(&mut self, d: i64) {
-        match self.pane {
+        self.move_pane_by(self.pane, d);
+    }
+
+    /// Moves within a named pane, which need not be the focused one — the
+    /// wheel turns whatever the pointer is over without stealing focus.
+    pub fn move_pane_by(&mut self, pane: Pane, d: i64) {
+        match pane {
             Pane::Repos => {
-                let n = self.repos().len() as i64;
-                self.repo = (self.repo as i64 + d).clamp(0, (n - 1).max(0)) as usize;
-                self.item = 0;
-                self.item_scroll = 0;
-                self.view = View::List;
+                let i = step(self.repo, d, self.repos().len());
+                self.select_in(pane, i);
             }
             Pane::List => {
-                let n = self.visible().len() as i64;
-                self.item = (self.item as i64 + d).clamp(0, (n - 1).max(0)) as usize;
-                self.detail_scroll = 0;
+                let i = step(self.item, d, self.visible().len());
+                self.select_in(pane, i);
             }
-            Pane::Body => self.scroll_detail(d),
             Pane::Checks => {
-                let n = self.jobs().len() as i64;
-                self.check = (self.check as i64 + d).clamp(0, (n - 1).max(0)) as usize;
+                let i = step(self.check, d, self.jobs().len());
+                self.select_in(pane, i);
             }
             Pane::Tree => {
-                let len = self.flat_tree().len() as i64;
-                self.tree_sel = (self.tree_sel as i64 + d).clamp(0, (len - 1).max(0)) as usize;
-                self.extra_lines = 0;
-                self.log_scroll = 0;
+                let i = step(self.tree_sel, d, self.flat_tree().len());
+                self.select_in(pane, i);
             }
+            Pane::Files => {
+                let i = step(self.file_idx, d, self.diff_files().len());
+                self.select_in(pane, i);
+            }
+            // the panes below hold flowing text rather than entries: there is
+            // nothing to select, only somewhere to be
+            Pane::Body => self.scroll_detail(d),
             Pane::Log => {
                 // moving through the log by hand takes over from follow mode
                 self.follow = false;
                 self.log_scroll = (self.log_scroll as i64 + d).max(0) as usize;
             }
-            Pane::Files => {
-                let n = self.diff_files().len() as i64;
-                self.file_idx = (self.file_idx as i64 + d).clamp(0, (n - 1).max(0)) as usize;
-                self.diff_scroll = 0;
-            }
             Pane::DiffBody => {
                 self.diff_scroll = (self.diff_scroll as i64 + d).max(0) as usize;
             }
         }
+    }
+
+    /// Puts a pane's selection on entry `i`, with whatever else that implies.
+    ///
+    /// Selecting is defined once, here, because a keypress and a click have to
+    /// mean the same thing: landing on a repository must reset the list under
+    /// it either way, or clicking would leave the two out of step.
+    pub fn select_in(&mut self, pane: Pane, i: usize) {
+        match pane {
+            Pane::Repos => {
+                self.repo = i;
+                self.item = 0;
+                self.item_scroll = 0;
+                self.view = View::List;
+            }
+            Pane::List => {
+                self.item = i;
+                self.detail_scroll = 0;
+            }
+            Pane::Checks => self.check = i,
+            Pane::Tree => {
+                self.tree_sel = i;
+                self.extra_lines = 0;
+                self.log_scroll = 0;
+            }
+            Pane::Files => {
+                self.file_idx = i;
+                self.diff_scroll = 0;
+            }
+            Pane::Body | Pane::Log | Pane::DiffBody => {}
+        }
+    }
+
+    /// Switches to a tab and shows its list.
+    pub fn pick_tab(&mut self, i: usize) {
+        self.tab = i.min(TABS.len() - 1);
+        self.view = View::List;
+        self.item = 0;
+        self.pane = Pane::List;
     }
 
     /// Half a page or a whole one, on the panes that scroll.
@@ -313,7 +366,7 @@ impl App {
     }
 
     /// `enter`: drills into the focused pane.
-    fn enter(&mut self) {
+    pub(super) fn enter(&mut self) {
         if self.accounts_open {
             return;
         }
@@ -350,7 +403,7 @@ impl App {
     }
 
     /// `esc` / `q`: leaves the pane, and the view once on the first one.
-    fn back(&mut self) {
+    pub(super) fn back(&mut self) {
         if self.cmd.is_some() {
             self.cmd = None;
             self.cmd_text.clear();
@@ -409,10 +462,7 @@ impl App {
                 self.acc_sel = self.acc;
             }
             "issues" | "prs" | "actions" => {
-                self.tab = TABS.iter().position(|t| t.id == c).unwrap_or(0);
-                self.view = View::List;
-                self.item = 0;
-                self.pane = Pane::List;
+                self.pick_tab(TABS.iter().position(|t| t.id == c).unwrap_or(0));
             }
             "logs" => {
                 self.view = View::Logs;
@@ -435,7 +485,7 @@ impl App {
         self.cmd_text.clear();
     }
 
-    fn pick_account(&mut self, i: usize) {
+    pub(super) fn pick_account(&mut self, i: usize) {
         self.acc = i;
         self.repo = 0;
         self.item = 0;
@@ -550,7 +600,7 @@ impl App {
                 }
                 KeyCode::Enter => {
                     self.themes_open = false;
-                    self.flash_ok(format!("theme: {}", crate::theme::current().name()));
+                    self.accept_theme();
                 }
                 KeyCode::Esc | KeyCode::Char('q' | 't') => {
                     // the picker previews as you move, so leaving it puts back
@@ -709,6 +759,12 @@ impl App {
         }
         self.tick = self.tick.wrapping_add(1);
     }
+}
+
+/// Moves an index by `d` within `len`, staying inside it. An empty list has
+/// nowhere to go, and index 0 is the honest answer for it.
+fn step(current: usize, d: i64, len: usize) -> usize {
+    (current as i64 + d).clamp(0, (len as i64 - 1).max(0)) as usize
 }
 
 /// Drops the +/- pairs whose contents differ only in whitespace, which is what

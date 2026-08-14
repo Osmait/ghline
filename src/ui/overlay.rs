@@ -6,6 +6,7 @@ use ratatui::style::{Color, Style};
 
 use super::{clear, fill, hline, put, put_right, put_trunc};
 use crate::app::App;
+use crate::app::hit::{Region, Target};
 use crate::data::HELP;
 use crate::theme;
 
@@ -70,7 +71,7 @@ pub fn rule(buf: &mut Buffer, area: Rect, y: u16, color: Color) {
     }
 }
 
-pub fn accounts(buf: &mut Buffer, area: Rect, app: &App) {
+pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let rows = app.accounts.len() as u16 * 2;
@@ -94,6 +95,22 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &App) {
         base.fg(theme::dimmer()),
     );
     rule(buf, modal, modal.y + 2, theme::cyan());
+
+    // The modal as a whole first, so a click on its chrome is absorbed
+    // rather than falling through to the pane behind it; the rows go on top.
+    app.hits.push(Region::plain(Target::Accounts, modal));
+    app.hits.push(Region::rows(
+        Target::Accounts,
+        Rect {
+            x: modal.x + 1,
+            y: modal.y + 3,
+            width: modal.width - 2,
+            height: modal.bottom().saturating_sub(modal.y + 3),
+        },
+        2,
+        0,
+        app.accounts.len(),
+    ));
 
     for (i, a) in app.accounts.iter().enumerate() {
         let y = modal.y + 3 + i as u16 * 2;
@@ -167,7 +184,7 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &App) {
 
 /// The theme picker. It previews live, so the point of the modal is to be
 /// small enough that the interface behind it is what you are judging.
-pub fn themes(buf: &mut Buffer, area: Rect, app: &App) {
+pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     use crate::theme::Theme;
 
     let rows = Theme::ALL.len() as u16 * 2;
@@ -191,6 +208,22 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &App) {
         base.fg(theme::dimmer()),
     );
     rule(buf, modal, modal.y + 2, theme::purple());
+
+    // The modal as a whole first, so a click on its chrome is absorbed
+    // rather than falling through to the pane behind it; the rows go on top.
+    app.hits.push(Region::plain(Target::Themes, modal));
+    app.hits.push(Region::rows(
+        Target::Themes,
+        Rect {
+            x: modal.x + 1,
+            y: modal.y + 3,
+            width: modal.width - 2,
+            height: modal.bottom().saturating_sub(modal.y + 3),
+        },
+        2,
+        0,
+        Theme::ALL.len(),
+    ));
 
     for (i, t) in Theme::ALL.iter().enumerate() {
         let y = modal.y + 3 + i as u16 * 2;

@@ -6,12 +6,13 @@ use ratatui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
 use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
+use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{Detail, Item, Kind, Status, TABS};
 use crate::theme;
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
-pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
+pub fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel());
     let y = area.y;
     let repo = app.repo().cloned().unwrap_or_else(crate::data::Repo::empty);
@@ -84,6 +85,7 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
         if active {
             active_span = (x, cell.width);
         }
+        app.hits.push(Region::plain(Target::Tab(i), cell));
         x += cell.width;
     }
 
@@ -166,6 +168,15 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let rows = (area.height / 2) as usize;
     scroll_into_view(&mut app.item_scroll, sel_pos, rows, visible.len());
     let scroll = app.item_scroll;
+    // registered even when the list is empty, so clicking a loading or empty
+    // pane still moves the focus there
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::List),
+        area,
+        2,
+        scroll,
+        visible.len(),
+    ));
     let items: Vec<&Item> = visible.iter().map(|&i| &app.list()[i]).collect();
 
     if items.is_empty() {

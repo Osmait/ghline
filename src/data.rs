@@ -559,6 +559,9 @@ pub const HELP: &[(&str, &str)] = &[
     ("c", "close / reopen the PR"),
     ("D", "delete the branch"),
     ("y / n", "confirm / cancel"),
+    ("click", "focus pane, select row"),
+    ("2x click", "open it"),
+    ("wheel", "scroll under pointer"),
 ];
 
 /// A log line already split by job and step.

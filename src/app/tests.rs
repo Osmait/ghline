@@ -792,3 +792,365 @@ fn stepping_to_another_repository_resets_the_view() {
     assert_eq!(app.view, View::List);
     assert_eq!(app.item, 0, "the selection cannot follow to another repo");
 }
+
+// ---------------------------------------------------------------- the mouse
+//
+// These render into an off-screen terminal first, because the click regions
+// are a product of the frame: aiming at a pane the renderer did not draw is
+// exactly the case that has to keep working.
+
+mod mouse {
+    use super::*;
+    use crate::app::hit::{Region, Target};
+    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use std::time::{Duration, Instant};
+
+    /// Wide enough that the repository pane is allowed on screen.
+    const W: u16 = 120;
+    const H: u16 = 40;
+
+    fn render(app: &mut App) {
+        render_sized(app, W, H);
+    }
+
+    fn render_sized(app: &mut App, w: u16, h: u16) {
+        let mut term = Terminal::new(TestBackend::new(w, h)).unwrap();
+        term.draw(|f| crate::ui::draw(f, app)).unwrap();
+    }
+
+    /// Where the last frame put something. Panics rather than returning an
+    /// option: a test that cannot find its target is a broken test, and the
+    /// message should say which one.
+    fn region(app: &App, target: Target) -> Region {
+        app.hits
+            .iter()
+            .rev()
+            .find(|r| r.target == target)
+            .copied()
+            .unwrap_or_else(|| panic!("the last frame drew no {target:?}"))
+    }
+
+    fn event(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
+        MouseEvent {
+            kind,
+            column: col,
+            row,
+            modifiers: KeyModifiers::NONE,
+        }
+    }
+
+    fn click_at(app: &mut App, col: u16, row: u16) {
+        app.on_mouse(event(MouseEventKind::Down(MouseButton::Left), col, row));
+    }
+
+    /// Clicks the nth row of a target, wherever the renderer put it.
+    fn click_row(app: &mut App, target: Target, n: u16) {
+        let r = region(app, target);
+        click_at(app, r.area.x + 1, r.area.y + n * r.row_h);
+    }
+
+    fn wheel(app: &mut App, col: u16, row: u16, down: bool) {
+        let kind = if down {
+            MouseEventKind::ScrollDown
+        } else {
+            MouseEventKind::ScrollUp
+        };
+        app.on_mouse(event(kind, col, row));
+    }
+
+    // --- focus and selection ---
+
+    #[test]
+    fn a_click_focuses_the_pane_it_landed_on() {
+        let mut app = demo_with_sidebar();
+        app.pane = Pane::List;
+        render(&mut app);
+
+        click_row(&mut app, Target::Pane(Pane::Repos), 0);
+        assert_eq!(app.pane, Pane::Repos);
+    }
+
+    #[test]
+    fn a_click_selects_the_row_under_the_pointer() {
+        let mut app = demo();
+        render(&mut app);
+        assert!(app.visible().len() > 2, "the fixture needs rows to click");
+
+        click_row(&mut app, Target::Pane(Pane::List), 2);
+        assert_eq!(app.item, 2);
+    }
+
+    #[test]
+    fn a_click_reads_through_the_scroll() {
+        // A short terminal with the selection at the bottom is what actually
+        // scrolls a list; setting the offset by hand would just be undone by
+        // the next frame, which is the render's job.
+        let mut app = demo();
+        render(&mut app);
+        let last = app.visible().len() - 1;
+        app.item = last;
+        render_sized(&mut app, W, 14);
+
+        let r = region(&app, Target::Pane(Pane::List));
+        assert!(r.scroll > 0, "the fixture is too short to scroll");
+
+        // the top row drawn is no longer entry zero
+        click_row(&mut app, Target::Pane(Pane::List), 0);
+        assert_eq!(app.item, r.scroll);
+    }
+
+    #[test]
+    fn a_click_on_the_blank_space_below_the_rows_keeps_the_selection() {
+        let mut app = demo();
+        render(&mut app);
+        app.item = 1;
+
+        let r = region(&app, Target::Pane(Pane::List));
+        // the last row of the pane, well past a short fixture list
+        click_at(&mut app, r.area.x + 1, r.area.bottom() - 1);
+        assert_eq!(app.item, 1, "the selection stayed put");
+        assert_eq!(app.pane, Pane::List, "but the focus still moved");
+    }
+
+    #[test]
+    fn selecting_a_repository_by_click_resets_the_list_under_it() {
+        let mut app = demo_with_sidebar();
+        app.item = 3;
+        app.item_scroll = 3;
+        render(&mut app);
+
+        click_row(&mut app, Target::Pane(Pane::Repos), 1);
+        assert_eq!(app.repo, 1);
+        assert_eq!(app.item, 0, "a click means what `j` means");
+        assert_eq!(app.item_scroll, 0);
+    }
+
+    #[test]
+    fn a_click_before_the_first_frame_does_nothing() {
+        let mut app = demo();
+        let before = app.pane;
+        click_at(&mut app, 10, 10);
+        assert_eq!(app.pane, before, "there are no regions yet");
+    }
+
+    // --- the double click ---
+
+    #[test]
+    fn a_double_click_opens_what_it_selected() {
+        let mut app = demo();
+        render(&mut app);
+        let r = region(&app, Target::Pane(Pane::List));
+        let (col, row) = (r.area.x + 1, r.area.y);
+
+        let now = Instant::now();
+        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        app.on_mouse_at(down(col, row), now);
+        assert_eq!(app.view, View::List, "one click only selects");
+
+        app.on_mouse_at(down(col, row), now + Duration::from_millis(120));
+        assert_eq!(app.view, View::Detail, "the second one opens it");
+    }
+
+    #[test]
+    fn two_slow_clicks_are_two_clicks() {
+        let mut app = demo();
+        render(&mut app);
+        let r = region(&app, Target::Pane(Pane::List));
+        let (col, row) = (r.area.x + 1, r.area.y);
+
+        let now = Instant::now();
+        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        app.on_mouse_at(down(col, row), now);
+        app.on_mouse_at(down(col, row), now + Duration::from_secs(2));
+        assert_eq!(app.view, View::List);
+    }
+
+    #[test]
+    fn two_clicks_on_different_rows_are_not_a_double_click() {
+        let mut app = demo();
+        render(&mut app);
+        if app.visible().len() < 2 {
+            return;
+        }
+        let r = region(&app, Target::Pane(Pane::List));
+        let now = Instant::now();
+        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+
+        app.on_mouse_at(down(r.area.x + 1, r.area.y), now);
+        app.on_mouse_at(
+            down(r.area.x + 1, r.area.y + r.row_h),
+            now + Duration::from_millis(120),
+        );
+        assert_eq!(app.view, View::List, "the hand moved; it was two clicks");
+        assert_eq!(app.item, 1, "and the second one selected");
+    }
+
+    #[test]
+    fn a_third_click_does_not_open_a_second_time() {
+        let mut app = demo();
+        render(&mut app);
+        let r = region(&app, Target::Pane(Pane::List));
+        let (col, row) = (r.area.x + 1, r.area.y);
+        let now = Instant::now();
+        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+
+        app.on_mouse_at(down(col, row), now);
+        app.on_mouse_at(down(col, row), now + Duration::from_millis(100));
+        app.on_mouse_at(down(col, row), now + Duration::from_millis(200));
+        // the third click starts a fresh pair rather than completing another
+        assert_eq!(app.view, View::Detail);
+    }
+
+    // --- the wheel ---
+
+    #[test]
+    fn the_wheel_moves_the_pane_under_the_pointer() {
+        let mut app = demo();
+        render(&mut app);
+        if app.visible().len() < 4 {
+            return;
+        }
+        let r = region(&app, Target::Pane(Pane::List));
+
+        wheel(&mut app, r.area.x + 1, r.area.y + 1, true);
+        assert_eq!(app.item, 3, "three rows per notch");
+        wheel(&mut app, r.area.x + 1, r.area.y + 1, false);
+        assert_eq!(app.item, 0);
+    }
+
+    #[test]
+    fn the_wheel_does_not_steal_the_focus() {
+        let mut app = demo_with_sidebar();
+        app.pane = Pane::List;
+        render(&mut app);
+
+        let r = region(&app, Target::Pane(Pane::Repos));
+        wheel(&mut app, r.area.x + 1, r.area.y + 1, true);
+        assert_eq!(app.pane, Pane::List, "reading a pane is not entering it");
+        assert!(app.repo > 0, "but it still moved");
+    }
+
+    #[test]
+    fn the_wheel_stops_at_the_end_rather_than_wrapping() {
+        let mut app = demo();
+        render(&mut app);
+        let r = region(&app, Target::Pane(Pane::List));
+        let last = app.visible().len() - 1;
+
+        for _ in 0..50 {
+            wheel(&mut app, r.area.x + 1, r.area.y + 1, true);
+        }
+        assert_eq!(app.item, last);
+    }
+
+    // --- the tab bar ---
+
+    #[test]
+    fn clicking_a_tab_switches_to_it() {
+        let mut app = demo();
+        render(&mut app);
+
+        let r = region(&app, Target::Tab(1));
+        click_at(&mut app, r.area.x + 1, r.area.y);
+        assert_eq!(app.tab, 1);
+        assert_eq!(app.view, View::List);
+        assert_eq!(app.pane, Pane::List);
+    }
+
+    // --- modals ---
+
+    #[test]
+    fn a_click_on_a_finder_row_selects_it() {
+        let mut app = demo();
+        app.open_finder();
+        render(&mut app);
+        if app.finder_len() < 3 {
+            return;
+        }
+
+        click_row(&mut app, Target::Finder, 2);
+        assert_eq!(app.finder_sel, 2);
+        assert!(app.finder_open, "one click selects, it does not accept");
+    }
+
+    #[test]
+    fn a_click_outside_a_modal_closes_it() {
+        let mut app = demo();
+        app.open_finder();
+        render(&mut app);
+
+        click_at(&mut app, 1, 3); // the far top left, outside the modal
+        assert!(!app.finder_open);
+    }
+
+    #[test]
+    fn a_click_inside_a_modal_but_off_its_rows_changes_nothing() {
+        let mut app = demo();
+        app.open_finder();
+        render(&mut app);
+        let before = app.finder_sel;
+
+        let r = region(&app, Target::Finder);
+        click_at(&mut app, r.area.x + 2, r.area.y.saturating_sub(2)); // its header
+        assert!(app.finder_open, "the modal absorbed the click");
+        assert_eq!(app.finder_sel, before);
+    }
+
+    #[test]
+    fn a_modal_shadows_the_panes_behind_it() {
+        let mut app = demo();
+        app.open_finder();
+        render(&mut app);
+        let before = app.item;
+
+        // straight through the middle of the modal, where the list would be
+        let r = region(&app, Target::Finder);
+        click_at(&mut app, r.area.x + 3, r.area.y + r.row_h);
+        assert_eq!(app.item, before, "the list underneath was not touched");
+    }
+
+    #[test]
+    fn clicking_a_theme_previews_it_the_way_moving_to_it_does() {
+        let mut app = demo();
+        app.open_themes();
+        render(&mut app);
+
+        click_row(&mut app, Target::Themes, 1);
+        assert_eq!(app.theme_sel, 1);
+        assert_eq!(crate::theme::current(), crate::theme::Theme::ALL[1]);
+
+        // put it back: the theme is process-wide state
+        crate::theme::set(app.theme_before);
+    }
+
+    // --- what the mouse must not do ---
+
+    #[test]
+    fn a_click_cannot_answer_a_confirmation() {
+        let mut app = demo();
+        render(&mut app);
+        app.prompt = Some(Prompt::Close);
+
+        click_at(&mut app, 10, 10);
+        assert!(app.prompt.is_some(), "a stray click is not an answer");
+    }
+
+    #[test]
+    fn every_pane_of_every_view_is_reachable_by_click() {
+        // a pane the renderer forgot to register is a pane the mouse cannot
+        // reach, and nothing else would notice
+        for view in [View::List, View::Detail, View::Logs, View::Diff] {
+            let mut app = demo_with_sidebar();
+            app.view = view;
+            render(&mut app);
+            for pane in app.panes() {
+                assert!(
+                    app.hits.iter().any(|r| r.target == Target::Pane(pane)),
+                    "{pane:?} is on screen in {view:?} but records no region"
+                );
+            }
+        }
+    }
+}

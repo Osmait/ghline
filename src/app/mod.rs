@@ -13,12 +13,16 @@
 )]
 mod tests;
 
+pub mod hit;
 mod input;
 mod load;
+mod mouse;
 mod select;
 
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
+use self::hit::Region;
 use crate::actions::{Flash, Prompt};
 use crate::data::{Account, Item, Job, RawLog, Status};
 use crate::demo;
@@ -201,6 +205,12 @@ pub struct App {
     pub detail_scroll: usize,
     /// True height of the scrollable pane, which only the render knows.
     pub detail_height: u16,
+    /// What the last frame drew and where, for the mouse to aim at. Rebuilt
+    /// every frame; empty before the first one, which is why a click that
+    /// arrives before a render simply does nothing.
+    pub hits: Vec<Region>,
+    /// Where and when the last click landed, for spotting a double click.
+    pub last_click: Option<(u16, u16, Instant)>,
 }
 
 impl App {
@@ -294,6 +304,8 @@ impl App {
             diff_scroll: 0,
             detail_scroll: 0,
             detail_height: 10,
+            hits: Vec::new(),
+            last_click: None,
         }
     }
 

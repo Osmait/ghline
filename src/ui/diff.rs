@@ -6,6 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
 use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
+use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
 use crate::theme;
@@ -126,6 +127,18 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
     let list_h = foot_y.saturating_sub(area.y + 3) as usize;
     scroll_into_view(&mut app.repo_scroll, sel, list_h, len);
     let scroll = app.repo_scroll;
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::Files),
+        Rect {
+            x: area.x,
+            y: area.y + 2,
+            width: area.width,
+            height: list_h as u16,
+        },
+        1,
+        scroll,
+        len,
+    ));
     let focused = app.pane == Pane::Files;
 
     for (row, i) in (scroll..len).enumerate() {
@@ -184,6 +197,16 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
 }
 
 fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
+    // below the header row; the diff scrolls rather than selects
+    app.hits.push(Region::plain(
+        Target::Pane(Pane::DiffBody),
+        Rect {
+            x: area.x,
+            y: area.y + 1,
+            width: area.width,
+            height: area.height.saturating_sub(1),
+        },
+    ));
     // ---- header
     let head = Rect {
         x: area.x,

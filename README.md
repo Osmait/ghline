@@ -127,6 +127,31 @@ to it, because a pane that is not on screen is not a pane.
 checks to the logs, the tree to the output — and `esc` walks that same path
 back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 
+## The mouse
+
+It is there if you want it, and it adds nothing the keyboard cannot already do.
+A click is `h`/`l` then `j`/`k`: it focuses the pane it landed on and selects
+the row under the pointer. A double click is `enter`. The wheel is `j`/`k`, on
+whatever the pointer is over — reaching for a pane to read it is not a decision
+to work in it, so scrolling never takes the focus. Tabs are clickable, and so
+are the rows of the finder, the theme picker and the account switcher; clicking
+away from one closes it, on the same terms as `esc`.
+
+A confirmation ignores the mouse entirely. "Merge this?" wants a deliberate
+answer, and a stray click is not one.
+
+Only the renderer knows where anything ended up, so each pane records the
+rectangle it drew and enough to turn a row back into an index (`src/app/hit.rs`).
+They are rebuilt every frame and read newest-first, which is what puts a modal
+in front of the panes it covers without either having to know about the other. A
+pane the renderer forgets to register is a pane the mouse cannot reach and
+nothing else would notice, so a test walks every pane of every view and fails if
+one is missing.
+
+Capturing the mouse takes the terminal's own click-to-select with it. Most
+terminals still select with `shift` held down; `--no-mouse` turns the whole
+thing off if you would rather have it back.
+
 ## Keys
 
 | Key | Action |
@@ -204,6 +229,14 @@ documented where it could otherwise look like a bug.
 `t` opens the picker. It applies as you move through it, so what you are judging
 is the interface itself rather than a name in a list — `enter` keeps the one you
 land on, `esc` puts back the one that was on when you opened it.
+
+The one you keep is remembered: `enter` writes it to
+`~/.config/github-tui/config` (or `$XDG_CONFIG_HOME`), and the next start reads
+it back. The file is `key = value` lines, safe to edit by hand; keys it does not
+recognise are left alone rather than dropped, so a config written by a newer
+version survives an older one. A theme that cannot be written is still applied,
+and says so — silently forgetting looks like a bug. The headless render modes
+deliberately ignore it, so a snapshot is the same frame on any machine.
 
 Two ship for now: the design's own palette, and Catppuccin Mocha. A theme is a
 whole `Palette` and switching one in is a single store, so the change lands on

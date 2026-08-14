@@ -5,6 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
+use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::theme;
 
@@ -65,6 +66,13 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: foot_y.saturating_sub(area.y + 3),
     };
     scroll_into_view(&mut app.repo_scroll, idx, list.height as usize, repos_len);
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::Repos),
+        list,
+        1,
+        app.repo_scroll,
+        repos_len,
+    ));
 
     if repos_len == 0 {
         let loading = app

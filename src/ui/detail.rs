@@ -7,6 +7,7 @@ use ratatui::style::Style;
 use super::{
     Seg, bold, fill, hline, markdown, pct, put, put_right, put_trunc, skel_bar, vline, wrap,
 };
+use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{Kind, Status};
 use crate::theme;
@@ -186,6 +187,8 @@ fn issue(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
     app.detail_height = inner.height;
     app.detail_scroll = app.detail_scroll.min(max_offset(lines.len(), inner.height));
+    app.hits
+        .push(Region::plain(Target::Pane(Pane::Body), inner));
     window(
         buf,
         inner,
@@ -312,6 +315,21 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
     vline(buf, area.x + left_w, y, body_h, theme::border());
 
     description(buf, left, app);
+    // The jobs are one row each from the pane header down, and nothing is
+    // scrolled off: the pane stops drawing when it runs out of room.
+    let jobs = app.jobs().len();
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::Checks),
+        Rect {
+            x: right.x,
+            y: right.y + 2,
+            width: right.width,
+            height: right.height.saturating_sub(2),
+        },
+        1,
+        0,
+        jobs,
+    ));
     checks_pane(buf, right, app);
 }
 
@@ -384,6 +402,8 @@ fn description(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
     app.detail_height = inner.height;
     app.detail_scroll = app.detail_scroll.min(max_offset(lines.len(), inner.height));
+    app.hits
+        .push(Region::plain(Target::Pane(Pane::Body), inner));
     window(
         buf,
         inner,

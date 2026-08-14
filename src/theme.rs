@@ -143,6 +143,19 @@ impl Theme {
         }
     }
 
+    /// The name this theme is stored under. Kept apart from `name()` so that
+    /// rewording the picker cannot invalidate everyone's saved config.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Design => "design",
+            Self::Mocha => "mocha",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|t| t.key() == key)
+    }
+
     /// One line about where the palette comes from, for the picker.
     pub fn about(self) -> &'static str {
         match self {

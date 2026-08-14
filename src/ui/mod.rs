@@ -258,6 +258,11 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     let buf = f.buffer_mut();
     fill(buf, area, theme::bg());
 
+    // The mouse aims at what is on screen, so the regions are rebuilt from
+    // scratch each frame: a pane not drawn this time is not there to click.
+    // They are pushed in drawing order, which is what puts a modal in front.
+    app.hits.clear();
+
     if area.height < 8 || area.width < 40 {
         put(
             buf,

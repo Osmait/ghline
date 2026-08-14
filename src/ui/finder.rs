@@ -11,6 +11,7 @@ use ratatui::style::{Modifier, Style};
 use super::overlay::{centered, frame, rule, scrim};
 use super::{fill, put, put_right, put_trunc, scroll_into_view};
 use crate::app::App;
+use crate::app::hit::{Region, Target};
 use crate::finder::{HitKind, Source};
 use crate::fuzzy;
 use crate::theme;
@@ -22,6 +23,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let height = area.height.saturating_sub(4).min(28);
     let modal = centered(area, width, height);
     frame(buf, modal, theme::cyan());
+    app.hits.push(Region::plain(Target::Finder, modal));
 
     let base = Style::default().bg(theme::panel());
     let inner_right = modal.right() - 2;
@@ -106,6 +108,13 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         put_trunc(buf, list.x + 2, list.y, inner_right, &msg, base.fg(color));
     } else {
         scroll_into_view(&mut app.finder_scroll, app.finder_sel, rows, hits.len());
+        app.hits.push(Region::rows(
+            Target::Finder,
+            list,
+            2,
+            app.finder_scroll,
+            hits.len(),
+        ));
         for (row, i) in (app.finder_scroll..hits.len()).enumerate() {
             if row >= rows {
                 break;
