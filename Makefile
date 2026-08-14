@@ -4,7 +4,7 @@
 BIN := github-tui
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall build run demo test lint fmt check clean
+.PHONY: help install uninstall build run demo test test-nvim lint fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -34,6 +34,9 @@ demo: ## Run on the design's fixture, no network needed
 
 test: ## The test suite
 	cargo test
+
+test-nvim: ## The neovim plugin's tests (needs nvim and a running herdr)
+	cd nvim/agent-send.nvim && nvim --headless -u NONE -c "set rtp+=." -c "luafile tests/run.lua"
 
 lint: ## Formatting and lints, exactly as CI runs them
 	cargo fmt --all --check

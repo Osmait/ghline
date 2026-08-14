@@ -194,6 +194,13 @@ in the checkout at all it says that instead of opening an empty buffer.
 It does **not** switch branches for you. Moving someone off their branch to
 satisfy a keypress is a far worse surprise than a warning.
 
+Once you are in the editor, [`nvim/agent-send.nvim`](nvim/agent-send.nvim)
+closes the loop: select some lines, ask a question, and it goes to a running
+agent with the file, the range and the text. It is a separate thing that only
+needs herdr — it lives here to keep the flow in one place, and is meant to be
+split out with `git subtree` when it earns its own repository.
+
+
 `/` finds a file without walking to it: the filter flattens the tree, matches on
 the whole path rather than the name, and leaves the directories out, since a
 directory is not something you can read or send.
