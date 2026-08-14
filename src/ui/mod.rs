@@ -6,6 +6,7 @@ mod diff;
 mod header;
 mod list;
 mod logs;
+mod markdown;
 pub mod overlay;
 mod sidebar;
 mod status;
@@ -191,6 +192,9 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
     }
     out
 }
+
+/// A run of text with its style; a line is several of them in a row.
+pub type Seg = (String, Style);
 
 /// Keeps `sel` visible inside a window of `height` rows.
 pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usize) {

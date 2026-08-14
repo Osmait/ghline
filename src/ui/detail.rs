@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{bold, fill, hline, put, put_right, put_trunc, vline, wrap};
+use super::{Seg, bold, fill, hline, markdown, put, put_right, put_trunc, vline, wrap};
 use crate::app::{App, Pane};
 use crate::data::{Kind, Status};
 use crate::theme;
@@ -24,9 +24,6 @@ fn state_badge(buf: &mut Buffer, x: u16, y: u16, max: u16, state: Status) -> u16
     let text = format!("[ {} ]", state.label().to_uppercase());
     put(buf, x, y, max, &text, base)
 }
-
-/// A run of text with its style; a line is several of them in a row.
-type Seg = (String, Style);
 
 /// Draws a window into `lines` starting at `offset` and, if there is more
 /// content than fits, a scrollbar down the right edge.
@@ -116,9 +113,7 @@ fn issue_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
     out.push(vec![("┄".repeat(width), base.fg(theme::BORDER))]);
     out.push(Vec::new());
 
-    for l in wrap(&cur.body_text(), width.min(76)) {
-        out.push(vec![(l, base.fg(theme::BODY))]);
-    }
+    out.extend(markdown::render(&cur.body_text(), width.min(76)));
     out.push(Vec::new());
     out.push(vec![("COMMENTS".into(), base.fg(theme::DIM))]);
     out.push(Vec::new());
@@ -285,9 +280,7 @@ fn description_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
     let mut out: Vec<Vec<Seg>> = Vec::new();
 
     out.push(vec![("DESCRIPTION".into(), base.fg(theme::DIM))]);
-    for l in wrap(&cur.body_text(), width) {
-        out.push(vec![(l, base.fg(theme::BODY))]);
-    }
+    out.extend(markdown::render(&cur.body_text(), width));
 
     out.push(Vec::new());
     out.push(vec![
