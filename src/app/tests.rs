@@ -1767,3 +1767,197 @@ mod dispatch {
         assert!(app.flash.is_some(), "and it says why");
     }
 }
+
+// ------------------------------------------------------------- the explorer
+//
+// The tree arrives flat — a list of paths — and what is on screen is decided
+// by which directories have been opened. That mapping is the whole feature.
+
+mod explorer {
+    use super::*;
+    use crate::data::TreeEntry;
+
+    fn entry(path: &str, is_dir: bool, size: u64) -> TreeEntry {
+        TreeEntry {
+            path: path.into(),
+            is_dir,
+            size,
+        }
+    }
+
+    /// A small repository, in the order GitHub returns one: parents first.
+    fn tree() -> Vec<TreeEntry> {
+        vec![
+            entry("README.md", false, 120),
+            entry("src", true, 0),
+            entry("src/main.rs", false, 900),
+            entry("src/ui", true, 0),
+            entry("src/ui/list.rs", false, 400),
+            entry("tests", true, 0),
+            entry("tests/e2e.rs", false, 200),
+        ]
+    }
+
+    fn with_tree() -> App {
+        let mut app = demo();
+        app.tab = crate::data::FILES_TAB;
+        app.view = View::List;
+        let key = app.repo_key();
+        app.trees.insert(key.clone(), tree());
+        app.trees_state.insert(key, Load::Ready);
+        app
+    }
+
+    fn paths(app: &App) -> Vec<String> {
+        app.fs_rows().iter().map(|e| e.path.clone()).collect()
+    }
+
+    // --- what an entry knows about itself ---
+
+    #[test]
+    fn an_entry_knows_its_name_and_how_deep_it_sits() {
+        let e = entry("src/ui/list.rs", false, 0);
+        assert_eq!(e.name(), "list.rs");
+        assert_eq!(e.depth(), 2);
+    }
+
+    #[test]
+    fn a_top_level_entry_has_no_ancestors() {
+        assert!(entry("README.md", false, 0).ancestors().is_empty());
+    }
+
+    #[test]
+    fn ancestors_are_the_directories_above_it_outermost_first() {
+        assert_eq!(
+            entry("src/ui/list.rs", false, 0).ancestors(),
+            vec!["src", "src/ui"]
+        );
+    }
+
+    // --- what is on screen ---
+
+    #[test]
+    fn a_repository_opens_showing_its_top_level_and_nothing_more() {
+        let app = with_tree();
+        assert_eq!(paths(&app), vec!["README.md", "src", "tests"]);
+    }
+
+    #[test]
+    fn opening_a_directory_reveals_its_children_but_not_its_grandchildren() {
+        let mut app = with_tree();
+        app.fs_open.insert("src".into());
+        assert_eq!(
+            paths(&app),
+            vec!["README.md", "src", "src/main.rs", "src/ui", "tests"]
+        );
+    }
+
+    #[test]
+    fn a_child_stays_hidden_while_its_parent_is_closed() {
+        // `src/ui` open but `src` closed: the grandchild must not leak out
+        let mut app = with_tree();
+        app.fs_open.insert("src/ui".into());
+        assert!(!paths(&app).iter().any(|p| p == "src/ui/list.rs"));
+    }
+
+    #[test]
+    fn enter_opens_a_directory_and_enter_again_closes_it() {
+        let mut app = with_tree();
+        app.pane = Pane::FileTree;
+        app.fs_sel = 1; // src
+
+        press(&mut app, KeyCode::Enter);
+        assert!(app.fs_open.contains("src"));
+        press(&mut app, KeyCode::Enter);
+        assert!(!app.fs_open.contains("src"), "the same key closes it");
+    }
+
+    #[test]
+    fn enter_on_a_file_moves_to_the_contents() {
+        let mut app = with_tree();
+        app.pane = Pane::FileTree;
+        app.fs_sel = 0; // README.md
+
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(app.pane, Pane::FileView);
+        assert!(app.fs_open.is_empty(), "and opened no directory");
+    }
+
+    // --- filtering ---
+
+    #[test]
+    fn a_filter_reaches_files_no_directory_has_been_opened_for() {
+        // the point of the filter: find a file without walking to it
+        let mut app = with_tree();
+        app.filter = "list".into();
+        assert_eq!(paths(&app), vec!["src/ui/list.rs"]);
+    }
+
+    #[test]
+    fn a_filter_matches_the_path_not_only_the_name() {
+        let mut app = with_tree();
+        app.filter = "tests/".into();
+        assert_eq!(paths(&app), vec!["tests/e2e.rs"]);
+    }
+
+    #[test]
+    fn a_filter_leaves_the_directories_out() {
+        // a directory is not something you can read or send
+        let mut app = with_tree();
+        app.filter = "src".into();
+        assert!(paths(&app).iter().all(|p| p.ends_with(".rs")));
+    }
+
+    // --- what can be read, and what cannot ---
+
+    #[test]
+    fn a_directory_is_not_a_file_to_fetch() {
+        let mut app = with_tree();
+        app.fs_sel = 1; // src
+        assert_eq!(app.fs_selected_file(), None);
+    }
+
+    #[test]
+    fn a_file_too_large_to_read_says_so_instead_of_being_fetched() {
+        let mut app = with_tree();
+        let key = app.repo_key();
+        app.trees.insert(
+            key,
+            vec![entry("huge.bin", false, crate::gh::FILE_LIMIT + 1)],
+        );
+        app.fs_sel = 0;
+
+        assert_eq!(app.fs_selected_file(), None, "it is never asked for");
+        match app.file_body() {
+            Err(Load::Failed(msg)) => assert!(msg.contains("too large"), "{msg}"),
+            _ => panic!("the reason should reach the pane"),
+        }
+    }
+
+    // --- and sending it ---
+
+    #[test]
+    fn standing_in_the_explorer_sends_the_file() {
+        use crate::subject::Subject;
+        let mut app = with_tree();
+        app.fs_sel = 0; // README.md
+        assert_eq!(app.dispatch_subject(), Some(Subject::File));
+    }
+
+    #[test]
+    fn a_directory_is_nothing_to_send() {
+        let mut app = with_tree();
+        app.fs_sel = 1; // src
+        assert_eq!(app.dispatch_subject(), None);
+    }
+
+    #[test]
+    fn the_picker_refuses_to_open_over_a_directory() {
+        let mut app = with_tree();
+        app.source = Source::Live;
+        app.fs_sel = 1;
+        app.open_dispatch();
+        assert!(!app.dispatch_open);
+        assert!(app.flash.is_some(), "and says why");
+    }
+}

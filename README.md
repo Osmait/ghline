@@ -154,6 +154,28 @@ to it, because a pane that is not on screen is not a pane.
 checks to the logs, the tree to the output — and `esc` walks that same path
 back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 
+## Files
+
+`4` is the repository's file tree, read straight off GitHub — no clone needed.
+A tree on the left, the file on the right, the same two-pane shape as the logs
+and the diff. Directories start closed; `enter` or `o` opens one, `enter` on a
+file moves to its contents, and `x` sends the file to an agent.
+
+The whole tree comes down in one request against `HEAD`, so nothing has to know
+what the default branch is called and opening a directory costs nothing. Only
+the file you actually select is fetched, and only if it is under half a
+megabyte — past that the pane says how big it is rather than stalling on it. A
+file that turns out to be binary says so instead of painting the pane with
+replacement characters, and a tree GitHub truncated says that too, because a
+partial listing that stays quiet reads as a smaller repository.
+
+`/` finds a file without walking to it: the filter flattens the tree, matches on
+the whole path rather than the name, and leaves the directories out, since a
+directory is not something you can read or send.
+
+Contents are wrapped rather than cut. A long line in a config file is still
+worth reading, and there is no horizontal scroll here.
+
 ## Agents
 
 `4` is a fourth tab listing every coding agent [herdr](https://herdr.dev) is
@@ -162,8 +184,35 @@ is doing. It re-asks on the heartbeat while you are looking at it, so a state
 change shows up without a keypress. This program appears in its own list when
 run inside herdr, and says `(this window)` so.
 
-`x` on an issue or pull request asks where to send it. Two kinds of
-destination in one list, because it is one question:
+`x` asks where to send it. **What** gets sent is decided by where you are
+standing, the same way every other key in this program works:
+
+| Standing in | What travels |
+|---|---|
+| Issues | the issue and its body |
+| Pull Requests | the description and the list of changed files |
+| Actions | the run, with the selected job's log excerpted |
+| Files | that file, up to 600 lines |
+| a log | that job or step's log, wherever you came from |
+| a diff | that one file's change |
+
+The wording differs with it — "work on this issue" and "diagnose this failing
+run" ask for different things, and the first line of a prompt is what an agent
+leans on hardest.
+
+A log is the one that needs care. A failing run is routinely tens of thousands
+of lines, almost all of it packages resolving, so what travels is the flagged
+errors with six lines of lead-in and three of follow-on, merged where they
+overlap, capped, and **labelled with what was left out** — `140 of 244 lines
+shown`. A truncation the agent cannot see is worse than a shorter excerpt,
+because it will reason confidently about a log it thinks it has all of. With
+nothing flagged, the tail travels instead, and says so.
+
+The confirmation shows the first fourteen lines of what would be sent and the
+total size, so a template that renders badly is caught before an agent reads it.
+
+**Where** it goes is three kinds of destination in one list, because that is one
+question:
 
 - **an agent already running** — one call, `herdr agent prompt <pane>`;
 - **a new worktree** with claude, codex, opencode or pi — branching `issue-<n>`
@@ -177,9 +226,9 @@ land on — read from `.git/HEAD` rather than assumed to be `main`, since a
 checkout sitting on someone's feature branch is common and the difference
 matters before you agree to it.
 
-Both go through the confirmation dialog, which shows the first lines of what
-would be sent. Merging works this way for the same reason: it makes something
-happen outside this program, so it should take a deliberate `y`.
+All three go through the confirmation dialog. Merging works this way for the
+same reason: it makes something happen outside this program, so it should take
+a deliberate `y`.
 
 A destination that cannot take the issue is **listed with the reason** rather
 than hidden — knowing every agent is busy beats an empty box. An agent that is
@@ -208,13 +257,14 @@ go.
 
 ### Settings
 
-Seven keys in `~/.config/github-tui/config`, all optional:
+Eight keys in `~/.config/github-tui/config`, all optional:
 
 ```
 prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
 prompt-pr   = Review {repo}#{num}: {title}\n\n{url}\n\n{context}
 prompt-run  = Diagnose this failing run in {repo}.\n\n{title}\n{url}\n\n{context}
 prompt-diff = Explain this change from {repo}#{num}\n\n{url}\n\n{context}
+prompt-file = Here is a file from {repo}.\n\n{url}\n\n---\n\n{context}
 agents      = claude, codex, opencode, pi
 agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
 clone-roots = ~/orca, ~/Projects

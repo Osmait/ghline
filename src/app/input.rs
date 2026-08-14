@@ -22,6 +22,9 @@ impl App {
             View::List if self.tab == crate::data::AGENTS_TAB => {
                 vec![Pane::Repos, Pane::Agents]
             }
+            View::List if self.tab == crate::data::FILES_TAB => {
+                vec![Pane::Repos, Pane::FileTree, Pane::FileView]
+            }
             View::List => vec![Pane::Repos, Pane::List],
             View::Detail => {
                 let issue = self
@@ -210,7 +213,10 @@ impl App {
             self.flash_warn("dispatching needs live mode — demo data has no issues to send");
             return;
         }
-        if self.current().is_none() {
+        // Whether there is anything to send is the subject's question, not the
+        // item list's: standing in the file explorer there is no item at all.
+        if self.dispatch_subject().is_none() {
+            self.flash_warn("nothing here to send");
             return;
         }
         // The list is only as fresh as the last look at it, and this is a
@@ -234,10 +240,19 @@ impl App {
         let Some(subject) = self.dispatch_subject() else {
             return;
         };
-        let Some(cur) = self.current() else { return };
-        let repo = self.item_repo_key();
-        let (num, title, id) = (cur.num, cur.title.clone(), cur.id);
-        let url = permalink(&repo, cur.kind(), num, id);
+        // A file has no number and no item behind it, so what identifies it
+        // has to come from the explorer instead.
+        let (repo, num, title, url) = if subject == crate::subject::Subject::File {
+            let repo = self.repo_key();
+            let path = self.fs_selected_file().unwrap_or_default();
+            let url = format!("https://github.com/{repo}/blob/HEAD/{path}");
+            (repo, 0, path, url)
+        } else {
+            let Some(cur) = self.current() else { return };
+            let repo = self.item_repo_key();
+            let url = permalink(&repo, cur.kind(), cur.num, cur.id);
+            (repo, cur.num, cur.title.clone(), url)
+        };
         let context = self.dispatch_context(subject);
         let text = crate::config::render_prompt(
             &crate::config::prompt_template(subject),
@@ -404,6 +419,13 @@ impl App {
                 let i = step(self.agent_sel, d, self.agents_visible().len());
                 self.select_in(pane, i);
             }
+            Pane::FileTree => {
+                let i = step(self.fs_sel, d, self.fs_rows().len());
+                self.select_in(pane, i);
+            }
+            Pane::FileView => {
+                self.file_scroll = (self.file_scroll as i64 + d).max(0) as usize;
+            }
             // the panes below hold flowing text rather than entries: there is
             // nothing to select, only somewhere to be
             Pane::Body => self.scroll_detail(d),
@@ -446,7 +468,13 @@ impl App {
                 self.diff_scroll = 0;
             }
             Pane::Agents => self.agent_sel = i,
-            Pane::Body | Pane::Log | Pane::DiffBody => {}
+            Pane::FileTree => {
+                self.fs_sel = i;
+                // a different file starts at its own top, not where the last
+                // one happened to be scrolled to
+                self.file_scroll = 0;
+            }
+            Pane::Body | Pane::Log | Pane::DiffBody | Pane::FileView => {}
         }
     }
 
@@ -455,11 +483,7 @@ impl App {
         self.tab = i.min(TABS.len() - 1);
         self.view = View::List;
         self.item = 0;
-        self.pane = if self.tab == crate::data::AGENTS_TAB {
-            Pane::Agents
-        } else {
-            Pane::List
-        };
+        self.pane = pane_for_tab(self.tab);
     }
 
     /// Half a page or a whole one, on the panes that scroll.
@@ -511,8 +535,19 @@ impl App {
             Pane::Tree => self.pane = Pane::Log,
             Pane::Files => self.pane = Pane::DiffBody,
             Pane::Body => self.open_diff(0),
+            // `enter` on a directory opens it; on a file it moves to the
+            // contents, which is the only place left to go
+            Pane::FileTree => match self.fs_current().map(|e| (e.is_dir, e.path.clone())) {
+                Some((true, path)) => {
+                    if !self.fs_open.remove(&path) {
+                        self.fs_open.insert(path);
+                    }
+                }
+                Some((false, _)) => self.pane = Pane::FileView,
+                None => {}
+            },
             // an agent is a leaf: there is no deeper view of one here
-            Pane::Agents | Pane::Log | Pane::DiffBody => {}
+            Pane::Agents | Pane::Log | Pane::DiffBody | Pane::FileView => {}
         }
     }
 
@@ -812,7 +847,7 @@ impl App {
                 self.extra_lines = 0;
                 self.refresh();
             }
-            KeyCode::Char(c @ '1'..='4') => {
+            KeyCode::Char(c @ '1'..='5') => {
                 self.tab = c as usize - '1' as usize;
                 self.view = View::List;
                 self.item = 0;
@@ -820,13 +855,16 @@ impl App {
                 self.check = 0;
                 // the Agents tab has its own pane, so landing on `List` would
                 // leave the focus on something that is not drawn
-                self.pane = if self.tab == TABS.len() - 1 {
-                    Pane::Agents
-                } else {
-                    Pane::List
-                };
+                self.pane = pane_for_tab(self.tab);
             }
             KeyCode::Char('x') => self.open_dispatch(),
+            KeyCode::Char('o') if self.pane == Pane::FileTree => {
+                if let Some((true, path)) = self.fs_current().map(|e| (e.is_dir, e.path.clone()))
+                    && !self.fs_open.remove(&path)
+                {
+                    self.fs_open.insert(path);
+                }
+            }
             KeyCode::Char('o') if self.view == View::Logs => {
                 let tree = self.flat_tree();
                 if let Some(node) = tree.get(self.tree_sel_idx(tree.len())) {
@@ -889,6 +927,15 @@ impl App {
         }
         self.poll_agents();
         self.tick = self.tick.wrapping_add(1);
+    }
+}
+
+/// The pane a tab lands on. Two of the five are not the item list.
+fn pane_for_tab(tab: usize) -> Pane {
+    match tab {
+        crate::data::AGENTS_TAB => Pane::Agents,
+        crate::data::FILES_TAB => Pane::FileTree,
+        _ => Pane::List,
     }
 }
 

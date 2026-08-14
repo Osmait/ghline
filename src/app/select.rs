@@ -47,6 +47,79 @@ impl App {
         self.repo().is_some_and(crate::data::Repo::is_all)
     }
 
+    // --- the file explorer ---
+
+    pub fn repo_tree(&self) -> &[crate::data::TreeEntry] {
+        self.trees
+            .get(&self.repo_key())
+            .map(std::vec::Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
+    pub fn tree_state(&self) -> Load {
+        self.trees_state
+            .get(&self.repo_key())
+            .cloned()
+            .unwrap_or(Load::Idle)
+    }
+
+    /// The entries on screen: everything whose directories have all been
+    /// opened, or everything matching the filter when there is one.
+    ///
+    /// A filter flattens the tree on purpose. Someone typing `parser` wants
+    /// the file, not the three directories they would have to open to reach
+    /// it, and the path is shown in full so the location is not lost.
+    pub fn fs_rows(&self) -> Vec<&crate::data::TreeEntry> {
+        let filtering = !self.filter.trim().is_empty();
+        self.repo_tree()
+            .iter()
+            .filter(|e| {
+                if filtering {
+                    !e.is_dir && self.matches(&e.path)
+                } else {
+                    e.ancestors().iter().all(|a| self.fs_open.contains(*a))
+                }
+            })
+            .collect()
+    }
+
+    pub fn fs_idx(&self) -> usize {
+        self.fs_sel.min(self.fs_rows().len().saturating_sub(1))
+    }
+
+    pub fn fs_current(&self) -> Option<&crate::data::TreeEntry> {
+        let rows = self.fs_rows();
+        rows.get(self.fs_idx()).copied()
+    }
+
+    /// The path under the cursor, if it is a file worth fetching.
+    pub fn fs_selected_file(&self) -> Option<String> {
+        let e = self.fs_current()?;
+        (!e.is_dir && e.size <= crate::gh::FILE_LIMIT).then(|| e.path.clone())
+    }
+
+    /// The selected file's contents, or why they are not here.
+    pub fn file_body(&self) -> Result<&str, Load> {
+        let Some(e) = self.fs_current() else {
+            return Err(Load::Ready);
+        };
+        if e.is_dir {
+            return Err(Load::Ready);
+        }
+        if e.size > crate::gh::FILE_LIMIT {
+            return Err(Load::Failed(format!(
+                "{} is {} KB — too large to open here",
+                e.name(),
+                e.size / 1024
+            )));
+        }
+        let key = (self.repo_key(), e.path.clone());
+        match self.file_text.get(&key) {
+            Some(text) => Ok(text),
+            None => Err(self.file_state.get(&key).cloned().unwrap_or(Load::Idle)),
+        }
+    }
+
     /// What `x` would send from here.
     ///
     /// Decided by where the reader is, not chosen from a menu: `x` acts on the
@@ -54,6 +127,11 @@ impl App {
     /// the log, standing in a diff means that file.
     pub fn dispatch_subject(&self) -> Option<crate::subject::Subject> {
         use crate::subject::Subject;
+        // Checked before the selection, because the explorer has no issue or
+        // pull request behind it — the file itself is the subject.
+        if self.tab == crate::data::FILES_TAB && self.view == View::List {
+            return self.fs_selected_file().map(|_| Subject::File);
+        }
         let cur = self.current()?;
         Some(match self.view {
             View::Logs => Subject::Run,
@@ -109,6 +187,22 @@ impl App {
                     None => excerpt,
                 }
             }
+
+            Subject::File => match (self.fs_current(), self.file_body()) {
+                (Some(e), Ok(text)) => {
+                    let lines: Vec<&str> = text.lines().collect();
+                    let mut out = format!("{}\n\n", e.path);
+                    for l in lines.iter().take(600) {
+                        out.push_str(l);
+                        out.push('\n');
+                    }
+                    if lines.len() > 600 {
+                        out.push_str(&format!("\n… 600 of {} lines shown\n", lines.len()));
+                    }
+                    out
+                }
+                _ => "(the file has not loaded yet)".to_string(),
+            },
 
             Subject::FileDiff => match self.diff_file() {
                 Some(f) => {

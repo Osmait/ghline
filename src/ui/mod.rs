@@ -5,6 +5,7 @@ mod confirm;
 mod detail;
 mod diff;
 mod dispatch;
+mod explorer;
 mod finder;
 mod header;
 mod list;
@@ -377,6 +378,7 @@ fn draw_content(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     match app.view {
         View::List if app.tab == crate::data::AGENTS_TAB => agents::draw(buf, inner, app),
+        View::List if app.tab == crate::data::FILES_TAB => explorer::draw(buf, inner, app),
         View::List => list::draw(buf, inner, app),
         View::Detail => detail::draw(buf, inner, app),
         View::Diff | View::Logs => {}

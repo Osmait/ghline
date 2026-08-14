@@ -87,6 +87,10 @@ pub enum Pane {
     Files,
     /// The list of running agents.
     Agents,
+    /// The repository's file tree.
+    FileTree,
+    /// The contents of the selected file.
+    FileView,
     /// The diff contents.
     DiffBody,
 }
@@ -305,6 +309,18 @@ pub struct App {
     /// by repository: agents belong to the machine, not to a repo.
     pub agents: Vec<crate::data::Agent>,
     pub agents_state: Load,
+    /// A repository's file tree, keyed by `owner/repo`.
+    pub trees: HashMap<String, Vec<crate::data::TreeEntry>>,
+    pub trees_state: HashMap<String, Load>,
+    /// File contents, keyed by `owner/repo` and path.
+    pub file_text: HashMap<(String, String), String>,
+    pub file_state: HashMap<(String, String), Load>,
+    /// Which directories have been opened. Expanded rather than collapsed, so
+    /// a repository starts showing its top level and nothing more.
+    pub fs_open: HashSet<String>,
+    pub fs_sel: usize,
+    pub fs_scroll: usize,
+    pub file_scroll: usize,
     /// `owner/repo` → checkout, built by walking the disk once.
     pub clones: crate::clones::Index,
     pub clones_state: Load,
@@ -417,6 +433,14 @@ impl App {
             diff_scroll: 0,
             detail_scroll: 0,
             detail_height: 10,
+            trees: HashMap::new(),
+            trees_state: HashMap::new(),
+            file_text: HashMap::new(),
+            file_state: HashMap::new(),
+            fs_open: HashSet::new(),
+            fs_sel: 0,
+            fs_scroll: 0,
+            file_scroll: 0,
             clones: crate::clones::Index::new(),
             clones_state: Load::Idle,
             pending_fresh: None,
@@ -455,6 +479,8 @@ impl App {
             || self.finder_state.is_loading()
             || self.agents_state.is_loading()
             || self.clones_state.is_loading()
+            || self.trees_state.values().any(Load::is_loading)
+            || self.file_state.values().any(Load::is_loading)
     }
 
     // --- selectores ---

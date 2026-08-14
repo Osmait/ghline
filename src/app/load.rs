@@ -84,6 +84,29 @@ impl App {
             return;
         }
 
+        // The file tree is per repository, and the gathering row has no tree
+        // of its own — there is no such thing as the files of everything.
+        if self.tab == crate::data::FILES_TAB {
+            if self.is_all() {
+                return;
+            }
+            let key = self.repo_key();
+            if self.trees_state.get(&key).unwrap_or(&Load::Idle) == &Load::Idle {
+                self.trees_state.insert(key.clone(), Load::Loading);
+                self.ask(Request::Tree { repo: key });
+                return;
+            }
+            // and the file under the cursor, once there is one to ask for
+            if let Some(path) = self.fs_selected_file() {
+                let k = (key.clone(), path.clone());
+                if self.file_state.get(&k).unwrap_or(&Load::Idle) == &Load::Idle {
+                    self.file_state.insert(k, Load::Loading);
+                    self.ask(Request::FileText { repo: key, path });
+                }
+            }
+            return;
+        }
+
         let key = self.repo_key();
         let tab = self.tab;
         if self
@@ -310,6 +333,27 @@ impl App {
                     Err(e) => self.flash_warn(self.advice(&e)),
                 }
             }
+
+            Response::Tree { repo, result } => match result {
+                Ok(entries) => {
+                    self.trees.insert(repo.clone(), entries);
+                    self.trees_state.insert(repo, Load::Ready);
+                }
+                Err(e) => {
+                    self.trees_state.insert(repo, Load::Failed(e.brief()));
+                }
+            },
+
+            Response::FileText { repo, path, result } => match result {
+                Ok(text) => {
+                    self.file_text.insert((repo.clone(), path.clone()), text);
+                    self.file_state.insert((repo, path), Load::Ready);
+                }
+                Err(e) => {
+                    self.file_state
+                        .insert((repo, path), Load::Failed(e.brief()));
+                }
+            },
 
             Response::Scanned { index } => {
                 self.clones = index;

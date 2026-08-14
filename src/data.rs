@@ -134,6 +134,41 @@ impl std::fmt::Display for AgentStatus {
     }
 }
 
+/// One entry of a repository's file tree, as GitHub reports it.
+#[derive(Clone)]
+pub struct TreeEntry {
+    /// Full path from the repository root; the only identity an entry has.
+    pub path: String,
+    pub is_dir: bool,
+    /// Bytes, for a file. Directories report none.
+    pub size: u64,
+}
+
+impl TreeEntry {
+    pub fn name(&self) -> &str {
+        self.path.rsplit('/').next().unwrap_or(&self.path)
+    }
+
+    pub fn depth(&self) -> usize {
+        self.path.matches('/').count()
+    }
+
+    /// Every directory this entry sits inside, outermost first.
+    ///
+    /// What decides whether a row is on screen: an entry is visible only when
+    /// all of these have been opened.
+    pub fn ancestors(&self) -> Vec<&str> {
+        let mut out = Vec::new();
+        let mut at = 0;
+        while let Some(i) = self.path[at..].find('/') {
+            at += i;
+            out.push(&self.path[..at]);
+            at += 1;
+        }
+        out
+    }
+}
+
 /// A coding agent herdr is running.
 #[derive(Clone)]
 pub struct Agent {
@@ -659,12 +694,15 @@ pub struct Tab {
     pub key: &'static str,
 }
 
-/// Index of the Agents tab, which is unlike the other three: it is about this
-/// machine rather than about a repository, so nothing keyed by `owner/repo`
-/// applies to it.
-pub const AGENTS_TAB: usize = 3;
+/// The repository's file tree.
+pub const FILES_TAB: usize = 3;
 
-pub const TABS: [Tab; 4] = [
+/// Index of the Agents tab, which is unlike the others: it is about this
+/// machine rather than about a repository, so nothing keyed by `owner/repo`
+/// applies to it. Last on purpose, so the repository-scoped tabs stay together.
+pub const AGENTS_TAB: usize = 4;
+
+pub const TABS: [Tab; 5] = [
     Tab {
         id: "issues",
         label: "Issues",
@@ -681,9 +719,14 @@ pub const TABS: [Tab; 4] = [
         key: "3",
     },
     Tab {
+        id: "files",
+        label: "Files",
+        key: "4",
+    },
+    Tab {
         id: "agents",
         label: "Agents",
-        key: "4",
+        key: "5",
     },
 ];
 
@@ -726,7 +769,8 @@ pub const HELP: &[(&str, &str)] = &[
     ("click", "focus pane, select row"),
     ("2x click", "open it"),
     ("wheel", "scroll under pointer"),
-    ("4", "agents running here"),
+    ("4", "the repo's files"),
+    ("5", "agents running here"),
     ("x", "send this to an agent"),
 ];
 

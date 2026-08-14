@@ -90,10 +90,10 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 
     // filter label on the right, counting whatever the active tab is showing
-    let count = if app.tab == crate::data::AGENTS_TAB {
-        app.agents_visible().len()
-    } else {
-        app.visible().len()
+    let count = match app.tab {
+        crate::data::AGENTS_TAB => app.agents_visible().len(),
+        crate::data::FILES_TAB => app.fs_rows().len(),
+        _ => app.visible().len(),
     };
     let filter_label = if app.filter.is_empty() {
         format!("{count} items · / to filter")

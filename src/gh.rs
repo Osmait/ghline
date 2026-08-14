@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::data::{
     Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
-    Repo, Review, ReviewState, RunDetail, Status, Step,
+    Repo, Review, ReviewState, RunDetail, Status, Step, TreeEntry,
 };
 
 pub use crate::error::{Error, Result as Res};
@@ -1074,6 +1074,67 @@ pub fn all_runs(repos: &[String]) -> Res<Vec<Item>> {
     // list was built with rather than the text.
     out.sort_by_key(|i| std::cmp::Reverse(i.id));
     Ok(out)
+}
+
+// -------------------------------------------------------------------- files
+
+/// A repository's whole file tree, in one call.
+///
+/// `HEAD` rather than a branch name, so nothing has to know what the default
+/// branch is called. Recursive because a tree walked one directory per request
+/// makes every keypress wait on the network; a thousand entries arrive in
+/// about half a second and navigation is then instant.
+pub fn repo_tree(repo: &str) -> Res<Vec<TreeEntry>> {
+    let v = json(&["api", &format!("repos/{repo}/git/trees/HEAD?recursive=1")])?;
+
+    let mut out: Vec<TreeEntry> = v
+        .get("tree")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|e| TreeEntry {
+            path: s(e, "path"),
+            is_dir: s(e, "type") == "tree",
+            size: e.get("size").and_then(Value::as_u64).unwrap_or(0),
+        })
+        .collect();
+
+    // GitHub caps a recursive tree; a partial listing that does not say so
+    // would read as a repository with fewer files than it has.
+    if v.get("truncated").and_then(Value::as_bool).unwrap_or(false) {
+        out.push(TreeEntry {
+            path: "… truncated by GitHub, not everything is listed".into(),
+            is_dir: false,
+            size: 0,
+        });
+    }
+    Ok(out)
+}
+
+/// How much of a file to fetch. Past this it is not something to read in a
+/// pane, and pulling it would only stall the service thread.
+pub const FILE_LIMIT: u64 = 512 * 1024;
+
+/// One file's contents.
+///
+/// Asked for raw rather than as JSON: the contents API otherwise returns
+/// base64, and decoding it here would be a decoder to write and get wrong for
+/// no gain.
+pub fn file_content(repo: &str, path: &str) -> Res<String> {
+    let raw = run(&[
+        "api",
+        &format!("repos/{repo}/contents/{path}"),
+        "-H",
+        "Accept: application/vnd.github.raw",
+    ])?;
+
+    // A binary file comes back as bytes that are not text. Saying so beats
+    // painting the pane with replacement characters.
+    if raw.contains('\0') {
+        return Ok(format!("(binary file, {} bytes)", raw.len()));
+    }
+    Ok(raw)
 }
 
 #[cfg(test)]

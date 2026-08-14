@@ -21,6 +21,15 @@ pub enum Request {
         repo: String,
         tab: usize,
     },
+    /// A repository's whole file tree.
+    Tree {
+        repo: String,
+    },
+    /// One file's contents.
+    FileText {
+        repo: String,
+        path: String,
+    },
     /// Walk the disk for local checkouts.
     Scan,
     /// Hand a rendered prompt to the agent in `pane`.
@@ -110,6 +119,15 @@ pub enum Response {
     },
     Scanned {
         index: crate::clones::Index,
+    },
+    Tree {
+        repo: String,
+        result: Result<Vec<crate::data::TreeEntry>, Error>,
+    },
+    FileText {
+        repo: String,
+        path: String,
+        result: Result<String, Error>,
     },
     Repos {
         login: String,
@@ -232,6 +250,17 @@ fn handle(req: Request) -> Response {
             text,
         } => Response::Dispatched {
             result: fresh(&repo_root, branch.as_deref(), &label, &kind, &text),
+        },
+
+        Request::Tree { repo } => Response::Tree {
+            result: crate::gh::repo_tree(&repo),
+            repo,
+        },
+
+        Request::FileText { repo, path } => Response::FileText {
+            result: crate::gh::file_content(&repo, &path),
+            repo,
+            path,
         },
 
         Request::Scan => Response::Scanned {

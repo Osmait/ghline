@@ -22,6 +22,8 @@ pub enum Subject {
     Run,
     /// One file's diff out of a pull request.
     FileDiff,
+    /// A file from the repository, read straight off GitHub.
+    File,
 }
 
 impl Subject {
@@ -32,6 +34,7 @@ impl Subject {
             Self::Pr => "prompt-pr",
             Self::Run => "prompt-run",
             Self::FileDiff => "prompt-diff",
+            Self::File => "prompt-file",
         }
     }
 
@@ -42,6 +45,7 @@ impl Subject {
             Self::Pr => "pull request",
             Self::Run => "failing run",
             Self::FileDiff => "diff",
+            Self::File => "file",
         }
     }
 
@@ -64,6 +68,10 @@ impl Subject {
             Self::FileDiff => {
                 "Explain this change from {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}"
             }
+            // No number, because a file is not an issue. The template still
+            // takes {num} so someone can add it back if their repository
+            // convention wants it.
+            Self::File => "Here is a file from {repo}.\n\n{url}\n\n---\n\n{context}",
         }
     }
 }
@@ -352,7 +360,13 @@ mod tests {
 
     #[test]
     fn each_subject_has_its_own_template_and_key() {
-        let subjects = [Subject::Issue, Subject::Pr, Subject::Run, Subject::FileDiff];
+        let subjects = [
+            Subject::Issue,
+            Subject::Pr,
+            Subject::Run,
+            Subject::FileDiff,
+            Subject::File,
+        ];
         let keys: Vec<&str> = subjects.iter().map(|s| s.key()).collect();
         let mut sorted = keys.clone();
         sorted.sort_unstable();
