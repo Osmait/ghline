@@ -2,8 +2,8 @@
 //! logs. It is a fixture, kept apart from the model it fills in.
 
 use crate::data::{
-    Account, Comment, DemoLine, FileChange, Hunk, Item, Job, Kind, Label, Repo, Review,
-    ReviewState, Status, Step,
+    Account, Comment, DemoLine, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail,
+    Repo, Review, ReviewState, RunDetail, Status, Step,
 };
 use crate::demo_diffs;
 
@@ -214,27 +214,30 @@ pub fn issues(repo: usize) -> Vec<Item> {
 
     base.into_iter()
         .map(|(num, title, state, author, (n, u), comments, labels)| {
-            let mut it = Item::blank(Kind::Issue);
+            let mut it = Item::issue();
             it.num = num - r * 13;
             it.title = title.to_string();
             it.state = Status::parse(state);
             it.author = author.into();
             it.when = ago(n, u);
-            it.comments = comments;
             it.labels = labels;
             it.body = body.clone();
-            it.comment_list = vec![
-                Comment {
-                    author: "lmoreno".into(),
-                    when: ago(2, "h"),
-                    body: "Reproduced on kitty 0.35 and on wezterm. Only when the sidebar is focused.".into(),
-                },
-                Comment {
-                    author: "marasanz".into(),
-                    when: ago(1, "h"),
-                    body: "Likely the layout solver clamping to a negative width. I will guard it in the reducer.".into(),
-                },
-            ];
+            let detail = IssueDetail {
+                comments,
+                comment_list: vec![
+                    Comment {
+                        author: "lmoreno".into(),
+                        when: ago(2, "h"),
+                        body: "Reproduced on kitty 0.35 and on wezterm. Only when the sidebar is focused.".into(),
+                    },
+                    Comment {
+                        author: "marasanz".into(),
+                        when: ago(1, "h"),
+                        body: "Likely the layout solver clamping to a negative width. I will guard it in the reducer.".into(),
+                    },
+                ],
+            };
+            it.detail = Detail::Issue(detail);
             it
         })
         .collect()
@@ -256,10 +259,11 @@ pub fn prs(repo: usize) -> Vec<Item> {
 
     let mut out = Vec::new();
 
-    let mut p = Item::blank(Kind::Pr);
+    let mut p = Item::pr();
+    let mut d = PrDetail::default();
     p.num = 219 - r;
     p.body = body.to_string();
-    p.file_list = vec![
+    d.file_list = vec![
         fc("src/layout/solver.rs", "+64", "-18"),
         fc("src/layout/mod.rs", "+12", "-4"),
         fc("src/app/reducer.rs", "+27", "-9"),
@@ -267,9 +271,9 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("tests/layout.rs", "+7", "-0"),
         fc("CHANGELOG.md", "+0", "-0"),
     ];
-    p.files = 6;
+    d.files = 6;
     p.body = body.to_string();
-    p.file_list = vec![
+    d.file_list = vec![
         fc("src/layout/solver.rs", "+64", "-18"),
         fc("src/layout/mod.rs", "+12", "-4"),
         fc("src/app/reducer.rs", "+27", "-9"),
@@ -277,18 +281,18 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("tests/layout.rs", "+7", "-0"),
         fc("CHANGELOG.md", "+0", "-0"),
     ];
-    p.files = 6;
+    d.files = 6;
     p.body = "Reads every host from hosts.yml (github.com and GHE) and lets you switch\nwith a modal picker bound to a.\n\nStill draft: the SSO re-auth flow is stubbed.".into();
 
     p.title = "fix(layout): clamp sidebar width to a minimum of 12 cols".into();
     p.state = Status::Open;
     p.author = "marasanz".into();
     p.when = ago(26, "m");
-    p.checks = Status::Failure;
-    p.add = "+128".into();
-    p.del = "-34".into();
-    p.branch = "fix/sidebar-clamp".into();
-    p.reviews = vec![
+    d.checks = Status::Failure;
+    d.add = "+128".into();
+    d.del = "-34".into();
+    d.branch = "fix/sidebar-clamp".into();
+    d.reviews = vec![
         Review {
             author: "tsuki".into(),
             state: ReviewState::ChangesRequested,
@@ -299,70 +303,76 @@ pub fn prs(repo: usize) -> Vec<Item> {
         },
     ];
     p.labels = vec![Label::new("bug", (0xf0, 0x71, 0x78))];
+    p.detail = Detail::Pr(Box::new(d));
     out.push(p);
 
-    let mut p = Item::blank(Kind::Pr);
+    let mut p = Item::pr();
+    let mut d = PrDetail::default();
     p.num = 216 - r;
     p.body = "Streams job logs over the Actions API instead of re-fetching the whole\nblob on every tick.\n\n- LogStream with a bounded channel and keepalives\n- follow mode (f) pinned to the bottom of the pane\n- highlight ##[error] lines and index them for e\n\nRefs #388".into();
-    p.file_list = vec![
+    d.file_list = vec![
         fc("src/actions/stream.rs", "+188", "-0"),
         fc("src/actions/mod.rs", "+9", "-2"),
         fc("src/ui/logs.rs", "+141", "-7"),
         fc("CHANGELOG.md", "+4", "-0"),
     ];
-    p.files = 4;
-    p.file_list = vec![
+    d.files = 4;
+    d.file_list = vec![
         fc("src/actions/stream.rs", "+188", "-0"),
         fc("src/actions/mod.rs", "+9", "-2"),
         fc("src/ui/logs.rs", "+141", "-7"),
         fc("CHANGELOG.md", "+4", "-0"),
     ];
-    p.files = 4;
+    d.files = 4;
     p.body = "Streams job logs over the Actions API instead of re-fetching the whole\nblob on every tick.\n\n- LogStream with a bounded channel and keepalives\n- follow mode (f) pinned to the bottom of the pane\n- highlight ##[error] lines and index them for e\n\nRefs #388".into();
 
     p.title = "feat(actions): stream job logs with follow mode".into();
     p.state = Status::Open;
     p.author = "kdev".into();
     p.when = ago(5, "h");
-    p.checks = Status::Running;
-    p.add = "+342".into();
-    p.del = "-9".into();
-    p.branch = "feat/log-stream".into();
-    p.reviews = vec![Review {
+    d.checks = Status::Running;
+    d.add = "+342".into();
+    d.del = "-9".into();
+    d.branch = "feat/log-stream".into();
+    d.reviews = vec![Review {
         author: "marasanz".into(),
         state: ReviewState::Commented,
     }];
     p.labels = vec![Label::new("feature", (0x7f, 0xd9, 0x62))];
+    p.detail = Detail::Pr(Box::new(d));
     out.push(p);
 
-    let mut p = Item::blank(Kind::Pr);
+    let mut p = Item::pr();
+    let mut d = PrDetail::default();
     p.num = 211 - r;
     p.body = "Bumps crossterm from 0.27.0 to 0.28.1.\n\nRelease notes and changelog omitted — see the upstream repository.".into();
-    p.file_list = vec![fc("Cargo.toml", "+1", "-1"), fc("Cargo.lock", "+8", "-8")];
-    p.files = 2;
-    p.file_list = vec![fc("Cargo.toml", "+1", "-1"), fc("Cargo.lock", "+8", "-8")];
-    p.files = 2;
+    d.file_list = vec![fc("Cargo.toml", "+1", "-1"), fc("Cargo.lock", "+8", "-8")];
+    d.files = 2;
+    d.file_list = vec![fc("Cargo.toml", "+1", "-1"), fc("Cargo.lock", "+8", "-8")];
+    d.files = 2;
     p.body = "Bumps crossterm from 0.27.0 to 0.28.1.\n\nRelease notes and changelog omitted — see the upstream repository.".into();
 
     p.title = "chore(deps): bump crossterm to 0.28".into();
     p.state = Status::Open;
     p.author = "dependabot".into();
     p.when = ago(1, "d");
-    p.checks = Status::Success;
-    p.add = "+9".into();
-    p.del = "-9".into();
-    p.branch = "dependabot/crossterm".into();
-    p.reviews = vec![Review {
+    d.checks = Status::Success;
+    d.add = "+9".into();
+    d.del = "-9".into();
+    d.branch = "dependabot/crossterm".into();
+    d.reviews = vec![Review {
         author: "kdev".into(),
         state: ReviewState::Approved,
     }];
     p.labels = vec![Label::new("deps", (0xd2, 0xa6, 0xff))];
+    p.detail = Detail::Pr(Box::new(d));
     out.push(p);
 
-    let mut p = Item::blank(Kind::Pr);
+    let mut p = Item::pr();
+    let mut d = PrDetail::default();
     p.num = 205 - r;
     p.body = "Reads every host from hosts.yml (github.com and GHE) and lets you switch\nwith a modal picker bound to a.\n\nStill draft: the SSO re-auth flow is stubbed.".into();
-    p.file_list = vec![
+    d.file_list = vec![
         fc("src/auth/hosts.rs", "+164", "-0"),
         fc("src/auth/switcher.rs", "+97", "-0"),
         fc("src/ui/account_modal.rs", "+212", "-14"),
@@ -370,8 +380,8 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("tests/auth.rs", "+75", "-0"),
         fc("CHANGELOG.md", "+0", "-0"),
     ];
-    p.files = 6;
-    p.file_list = vec![
+    d.files = 6;
+    d.file_list = vec![
         fc("src/auth/hosts.rs", "+164", "-0"),
         fc("src/auth/switcher.rs", "+97", "-0"),
         fc("src/ui/account_modal.rs", "+212", "-14"),
@@ -379,52 +389,54 @@ pub fn prs(repo: usize) -> Vec<Item> {
         fc("tests/auth.rs", "+75", "-0"),
         fc("CHANGELOG.md", "+0", "-0"),
     ];
-    p.files = 6;
+    d.files = 6;
 
     p.title = "feat(auth): multi-account switcher with GHE hosts".into();
     p.state = Status::Draft;
     p.author = "sofi".into();
     p.when = ago(2, "d");
-    p.checks = Status::Pending;
-    p.add = "+611".into();
-    p.del = "-56".into();
-    p.branch = "feat/multi-account".into();
+    d.checks = Status::Pending;
+    d.add = "+611".into();
+    d.del = "-56".into();
+    d.branch = "feat/multi-account".into();
     p.labels = vec![
         Label::new("feature", (0x7f, 0xd9, 0x62)),
         Label::new("auth", (0x39, 0xba, 0xe6)),
     ];
+    p.detail = Detail::Pr(Box::new(d));
     out.push(p);
 
-    let mut p = Item::blank(Kind::Pr);
+    let mut p = Item::pr();
+    let mut d = PrDetail::default();
     p.num = 198 - r;
     p.body = "Pure move plus a parser for vim counts (3j). No behaviour change beyond\ncounts now being honoured in every list.\n\nCloses #371".into();
-    p.file_list = vec![
+    d.file_list = vec![
         fc("src/keymap/lib.rs", "+318", "-0"),
         fc("src/app/keys.rs", "+22", "-641"),
         fc("Cargo.toml", "+6", "-1"),
         fc("Cargo.lock", "+22", "-6"),
         fc("CHANGELOG.md", "+2", "-0"),
     ];
-    p.files = 5;
-    p.file_list = vec![
+    d.files = 5;
+    d.file_list = vec![
         fc("src/keymap/lib.rs", "+318", "-0"),
         fc("src/app/keys.rs", "+22", "-641"),
         fc("Cargo.toml", "+6", "-1"),
         fc("Cargo.lock", "+22", "-6"),
         fc("CHANGELOG.md", "+2", "-0"),
     ];
-    p.files = 5;
+    d.files = 5;
     p.body = "Pure move plus a parser for vim counts (3j). No behaviour change beyond\ncounts now being honoured in every list.\n\nCloses #371".into();
 
     p.title = "refactor: move keymap into its own crate".into();
     p.state = Status::Merged;
     p.author = "tsuki".into();
     p.when = ago(4, "d");
-    p.checks = Status::Success;
-    p.add = "+370".into();
-    p.del = "-648".into();
-    p.branch = "refactor/keymap-crate".into();
-    p.reviews = vec![
+    d.checks = Status::Success;
+    d.add = "+370".into();
+    d.del = "-648".into();
+    d.branch = "refactor/keymap-crate".into();
+    d.reviews = vec![
         Review {
             author: "marasanz".into(),
             state: ReviewState::Approved,
@@ -434,6 +446,7 @@ pub fn prs(repo: usize) -> Vec<Item> {
             state: ReviewState::Approved,
         },
     ];
+    p.detail = Detail::Pr(Box::new(d));
     out.push(p);
 
     out
@@ -500,14 +513,17 @@ pub fn runs(repo: usize) -> Vec<Item> {
 
     base.into_iter()
         .map(|(num, title, state, author, (n, u), event, dur)| {
-            let mut it = Item::blank(Kind::Run);
+            let mut it = Item::run();
             it.num = num - r * 7;
             it.title = title.to_string();
             it.state = Status::parse(state);
             it.author = author.into();
             it.when = ago(n, u);
-            it.event = event.into();
-            it.dur = dur.into();
+            it.detail = Detail::Run(RunDetail {
+                event: event.into(),
+                workflow: String::new(),
+                dur: dur.into(),
+            });
             it
         })
         .collect()
@@ -819,7 +835,12 @@ pub fn step_log(name: &str) -> Option<Vec<(String, &'static str)>> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "assertions")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
 mod tests {
     use super::*;
 
@@ -841,13 +862,14 @@ mod tests {
     #[test]
     fn demo_pr_file_counts_match_their_lists() {
         for p in prs(0) {
+            let pr = p.as_pr().expect("prs() only builds pull requests");
             assert_eq!(
-                p.files as usize,
-                p.file_list.len(),
+                pr.files as usize,
+                pr.file_list.len(),
                 "PR #{} says {} files but lists {}",
                 p.num,
-                p.files,
-                p.file_list.len()
+                pr.files,
+                pr.file_list.len()
             );
         }
     }

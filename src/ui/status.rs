@@ -26,7 +26,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     );
     let base = Style::default().bg(theme::PANEL);
 
-    let kind = app.current().map(|c| c.kind).unwrap_or(Kind::Issue);
+    let kind = app
+        .current()
+        .map(super::super::data::Item::kind)
+        .unwrap_or(Kind::Issue);
     let (mode_label, mode_color) = match app.cmd {
         Some(Cmd::Colon) => ("COMMAND", theme::YELLOW),
         Some(Cmd::Slash) => ("SEARCH", theme::YELLOW),

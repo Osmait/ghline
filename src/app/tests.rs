@@ -228,13 +228,16 @@ fn a_merge_updates_the_pr_and_offers_the_branch() {
 
     let pr = app.current().unwrap();
     assert_eq!(pr.state, Status::Merged);
-    assert_eq!(pr.merged_with.as_deref(), Some("merge commit"));
+    assert_eq!(
+        pr.as_pr().and_then(|p| p.merged_with.as_deref()),
+        Some("merge commit")
+    );
     assert_eq!(app.repo().unwrap().prs, open_prs - 1, "one less open PR");
     // GitHub offers to delete the branch right after
     assert!(matches!(app.prompt, Some(Prompt::DeleteBranch { .. })));
 
     app.confirm();
-    assert!(app.current().unwrap().branch_deleted);
+    assert!(app.current().unwrap().as_pr().unwrap().branch_deleted);
 }
 
 #[test]

@@ -290,22 +290,24 @@ pub struct DiffRow {
     pub ln: String,
 }
 
+/// The parts of an item that only make sense for one kind. Keeping them inside
+/// the variant is what stops an issue from carrying check results, or a run
+/// from carrying a branch to delete.
 #[derive(Clone)]
-pub struct Item {
-    pub kind: Kind,
-    pub num: i64,
-    /// Internal identifier (the run's databaseId); 0 for issues and PRs.
-    pub id: i64,
-    pub title: String,
-    pub state: Status,
-    pub author: String,
-    pub when: String,
-    pub body: String,
-    pub labels: Vec<Label>,
-    // issue
+pub enum Detail {
+    Issue(IssueDetail),
+    Pr(Box<PrDetail>),
+    Run(RunDetail),
+}
+
+#[derive(Clone, Default)]
+pub struct IssueDetail {
     pub comments: u32,
     pub comment_list: Vec<Comment>,
-    // pull request
+}
+
+#[derive(Clone, Default)]
+pub struct PrDetail {
     pub checks: Status,
     pub add: String,
     pub del: String,
@@ -313,40 +315,43 @@ pub struct Item {
     pub branch: String,
     pub reviews: Vec<Review>,
     pub file_list: Vec<FileChange>,
-    // workflow run
-    pub event: String,
     /// Name of the workflow the checks belong to.
     pub workflow: String,
-    pub dur: String,
-    /// The detail (body, files, reviews) has already been fetched.
-    pub detail_loaded: bool,
-    // outcome of the actions taken on the PR
+    /// How it was merged, once it has been.
     pub merged_with: Option<String>,
     pub branch_deleted: bool,
 }
 
-impl Item {
-    /// The design's `cur.body || 'Workflow run triggered by …'`. The filler
-    /// only applies to runs, which have no body of their own.
-    pub fn body_text(&self) -> String {
-        if self.kind != Kind::Run && self.body.is_empty() {
-            return "no description".to_string();
-        }
-        if self.body.is_empty() {
-            let event = if self.event.is_empty() {
-                "push"
-            } else {
-                self.event.as_str()
-            };
-            format!("Workflow run triggered by {event}.")
-        } else {
-            self.body.clone()
-        }
-    }
+#[derive(Clone, Default)]
+pub struct RunDetail {
+    pub event: String,
+    pub workflow: String,
+    pub dur: String,
+}
 
-    pub fn blank(kind: Kind) -> Self {
+/// An issue, a pull request or a workflow run. The fields every kind shares
+/// live here; the rest are in `detail`.
+#[derive(Clone)]
+pub struct Item {
+    pub num: i64,
+    /// Internal identifier (the run's databaseId); 0 for issues.
+    pub id: i64,
+    pub title: String,
+    pub state: Status,
+    pub author: String,
+    pub when: String,
+    pub body: String,
+    pub labels: Vec<Label>,
+    /// The detail (body, files, reviews) has already been fetched.
+    pub detail_loaded: bool,
+    pub detail: Detail,
+}
+
+impl Item {
+    /// A blank item of the given shape. Callers fill in the shared fields and
+    /// reach into `detail` for the rest.
+    pub fn new(detail: Detail) -> Self {
         Self {
-            kind,
             num: 0,
             id: 0,
             title: String::new(),
@@ -355,21 +360,119 @@ impl Item {
             when: String::new(),
             body: String::new(),
             labels: Vec::new(),
-            comments: 0,
-            comment_list: Vec::new(),
-            checks: Status::Unknown,
-            add: String::new(),
-            del: String::new(),
-            files: 0,
-            branch: String::new(),
-            reviews: Vec::new(),
-            file_list: Vec::new(),
-            event: String::new(),
-            workflow: String::new(),
-            dur: String::new(),
             detail_loaded: false,
-            merged_with: None,
-            branch_deleted: false,
+            detail,
+        }
+    }
+
+    pub fn issue() -> Self {
+        Self::new(Detail::Issue(IssueDetail::default()))
+    }
+
+    pub fn pr() -> Self {
+        Self::new(Detail::Pr(Box::default()))
+    }
+
+    pub fn run() -> Self {
+        Self::new(Detail::Run(RunDetail::default()))
+    }
+
+    pub fn kind(&self) -> Kind {
+        match self.detail {
+            Detail::Issue(_) => Kind::Issue,
+            Detail::Pr(_) => Kind::Pr,
+            Detail::Run(_) => Kind::Run,
+        }
+    }
+
+    pub fn as_issue(&self) -> Option<&IssueDetail> {
+        match &self.detail {
+            Detail::Issue(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    pub fn as_issue_mut(&mut self) -> Option<&mut IssueDetail> {
+        match &mut self.detail {
+            Detail::Issue(i) => Some(i),
+            _ => None,
+        }
+    }
+
+    pub fn as_pr(&self) -> Option<&PrDetail> {
+        match &self.detail {
+            Detail::Pr(p) => Some(p),
+            _ => None,
+        }
+    }
+
+    pub fn as_pr_mut(&mut self) -> Option<&mut PrDetail> {
+        match &mut self.detail {
+            Detail::Pr(p) => Some(p),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn as_run_mut(&mut self) -> Option<&mut RunDetail> {
+        match &mut self.detail {
+            Detail::Run(r) => Some(r),
+            _ => None,
+        }
+    }
+
+    pub fn as_run(&self) -> Option<&RunDetail> {
+        match &self.detail {
+            Detail::Run(r) => Some(r),
+            _ => None,
+        }
+    }
+
+    // --- shorthands for the fields the shared render reaches for most ---
+
+    /// Rolled-up check state of a pull request; `Unknown` for anything else.
+    pub fn checks(&self) -> Status {
+        self.as_pr().map_or(Status::Unknown, |p| p.checks)
+    }
+
+    /// Head branch of a pull request; empty for anything else.
+    pub fn branch(&self) -> &str {
+        self.as_pr().map_or("", |p| p.branch.as_str())
+    }
+
+    /// Workflow name, which both a pull request's checks and a run carry.
+    pub fn workflow(&self) -> &str {
+        match &self.detail {
+            Detail::Pr(p) => &p.workflow,
+            Detail::Run(r) => &r.workflow,
+            Detail::Issue(_) => "",
+        }
+    }
+
+    /// The changed files of a pull request; empty for anything else.
+    pub fn files(&self) -> &[FileChange] {
+        self.as_pr().map_or(&[], |p| p.file_list.as_slice())
+    }
+
+    /// The design's `cur.body || 'Workflow run triggered by …'`. The filler
+    /// only applies to runs, which have no body of their own.
+    pub fn body_text(&self) -> String {
+        let Detail::Run(run) = &self.detail else {
+            return if self.body.is_empty() {
+                "no description".to_string()
+            } else {
+                self.body.clone()
+            };
+        };
+        if self.body.is_empty() {
+            let event = if run.event.is_empty() {
+                "push"
+            } else {
+                run.event.as_str()
+            };
+            format!("Workflow run triggered by {event}.")
+        } else {
+            self.body.clone()
         }
     }
 }
@@ -522,7 +625,12 @@ impl MergeMethod {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "assertions")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
 mod tests {
     use super::*;
 
@@ -558,16 +666,18 @@ mod tests {
 
     #[test]
     fn a_run_falls_back_to_a_generated_body_but_a_pr_does_not() {
-        let mut run = Item::blank(Kind::Run);
-        run.event = "schedule".into();
+        let mut run = Item::run();
+        if let Some(d) = run.as_run_mut() {
+            d.event = "schedule".into();
+        }
         assert_eq!(run.body_text(), "Workflow run triggered by schedule.");
 
         // a run with no event still reads sensibly
-        let bare = Item::blank(Kind::Run);
+        let bare = Item::run();
         assert_eq!(bare.body_text(), "Workflow run triggered by push.");
 
         // an empty PR body is an empty PR body, not a workflow message
-        let pr = Item::blank(Kind::Pr);
+        let pr = Item::pr();
         assert_eq!(pr.body_text(), "no description");
     }
 

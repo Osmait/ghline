@@ -82,9 +82,7 @@ impl App {
 
     /// Changed files of the selected PR.
     pub fn diff_files(&self) -> &[crate::data::FileChange] {
-        self.current()
-            .map(|c| c.file_list.as_slice())
-            .unwrap_or(&[])
+        self.current().map_or(&[], Item::files)
     }
 
     pub fn file_idx(&self) -> usize {
@@ -121,7 +119,7 @@ impl App {
 
     /// Opens the PR's diff at the given file.
     pub fn open_diff(&mut self, idx: usize) {
-        if self.current().map(|c| c.kind != Kind::Pr).unwrap_or(true) {
+        if self.current().map(|c| c.kind() != Kind::Pr).unwrap_or(true) {
             self.flash_warn("the diff is only available for pull requests");
             return;
         }
@@ -147,8 +145,8 @@ impl App {
         }
         let all = demo::job_templates();
         let only_success = match self.current() {
-            Some(c) if c.kind == Kind::Run && c.state == Status::Success => true,
-            Some(c) if c.kind == Kind::Pr && c.checks == Status::Success => true,
+            Some(c) if c.kind() == Kind::Run && c.state == Status::Success => true,
+            Some(c) if c.kind() == Kind::Pr && c.checks() == Status::Success => true,
             _ => false,
         };
         if only_success {

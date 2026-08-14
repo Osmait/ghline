@@ -23,7 +23,7 @@ impl App {
             View::Detail => {
                 let issue = self
                     .current()
-                    .map(|c| c.kind == Kind::Issue)
+                    .map(|c| c.kind() == Kind::Issue)
                     .unwrap_or(true);
                 if issue {
                     vec![Pane::Repos, Pane::Body]

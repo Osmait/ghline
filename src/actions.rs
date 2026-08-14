@@ -57,7 +57,10 @@ impl App {
     /// Is there a selected PR to act on?
     pub fn actionable_pr(&self) -> bool {
         self.view != crate::app::View::Logs
-            && self.current().map(|c| c.kind == Kind::Pr).unwrap_or(false)
+            && self
+                .current()
+                .map(|c| c.kind() == Kind::Pr)
+                .unwrap_or(false)
     }
 
     /// `m`: opens the merge confirmation if the PR allows it.
@@ -88,12 +91,12 @@ impl App {
     /// `D`: deletes the branch, only once the PR is resolved.
     pub fn ask_delete_branch(&mut self) {
         let Some(cur) = self.current() else { return };
-        if cur.branch_deleted {
-            let branch = cur.branch.clone();
+        if cur.as_pr().is_some_and(|p| p.branch_deleted) {
+            let branch = cur.branch().to_string();
             self.flash_warn(format!("branch {branch} is already deleted"));
             return;
         }
-        let (num, branch) = (cur.num, cur.branch.clone());
+        let (num, branch) = (cur.num, cur.branch().to_string());
         match cur.state {
             Status::Merged | Status::Closed => {
                 self.prompt = Some(Prompt::DeleteBranch { num, branch });
@@ -113,7 +116,7 @@ impl App {
         let (num, branch) = match &prompt {
             Prompt::DeleteBranch { num, branch } => (*num, branch.clone()),
             _ => match self.current() {
-                Some(cur) => (cur.num, cur.branch.clone()),
+                Some(cur) => (cur.num, cur.branch().to_string()),
                 None => return,
             },
         };
@@ -172,7 +175,9 @@ impl App {
             Prompt::Merge(m) => {
                 let method = MERGE_METHODS[*m];
                 item.state = Status::Merged;
-                item.merged_with = Some(method.short().into());
+                if let Some(pr) = item.as_pr_mut() {
+                    pr.merged_with = Some(method.short().into());
+                }
                 self.bump_open_prs(-1);
                 self.flash_ok(format!("#{num} merged into main via {}", method.short()));
                 if !branch.is_empty() {
@@ -190,7 +195,9 @@ impl App {
                 self.flash_ok(format!("#{num} reopened"));
             }
             Prompt::DeleteBranch { .. } => {
-                item.branch_deleted = true;
+                if let Some(pr) = item.as_pr_mut() {
+                    pr.branch_deleted = true;
+                }
                 self.flash_ok(format!("deleted branch {branch}"));
             }
         }

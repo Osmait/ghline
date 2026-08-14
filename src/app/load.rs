@@ -58,7 +58,7 @@ impl App {
         // the diff is fetched whole: `gh pr diff` returns it in one go
         if self.view == View::Diff {
             if let Some(cur) = self.current() {
-                let (num, kind) = (cur.num, cur.kind);
+                let (num, kind) = (cur.num, cur.kind());
                 let idle = self
                     .diff_state
                     .get(&(key.clone(), num))
@@ -74,7 +74,7 @@ impl App {
 
         // detail: the selection's body, files and reviews
         let Some(cur) = self.current() else { return };
-        let (kind, num, id, loaded) = (cur.kind, cur.num, cur.id, cur.detail_loaded);
+        let (kind, num, id, loaded) = (cur.kind(), cur.num, cur.id, cur.detail_loaded);
         if !loaded && kind != Kind::Run {
             if let Some(item) = self.current_item_mut() {
                 item.detail_loaded = true; // avoids repeating the request
@@ -111,7 +111,7 @@ impl App {
             self.logs_state.insert((key.clone(), id), Load::Loading);
             let finished = self
                 .current()
-                .map(|c| c.state.is_settled() && c.checks.is_settled())
+                .map(|c| c.state.is_settled() && c.checks().is_settled())
                 .unwrap_or(true);
             self.ask(Request::RunLog {
                 repo: key,
@@ -203,8 +203,10 @@ impl App {
                     && let Some(it) = items.iter_mut().find(|i| i.num == num)
                 {
                     it.body = body;
-                    it.comments = comments.len() as u32;
-                    it.comment_list = comments;
+                    if let Some(d) = it.as_issue_mut() {
+                        d.comments = comments.len() as u32;
+                        d.comment_list = comments;
+                    }
                 }
             }
 
@@ -214,8 +216,10 @@ impl App {
                     && let Some(it) = items.iter_mut().find(|i| i.num == num)
                 {
                     it.body = body;
-                    it.file_list = files;
-                    it.reviews = reviews;
+                    if let Some(pr) = it.as_pr_mut() {
+                        pr.file_list = files;
+                        pr.reviews = reviews;
+                    }
                 }
             }
 
@@ -226,7 +230,7 @@ impl App {
                     if let Some(items) = self.lists.get_mut(&(repo, 1))
                         && let Some(it) = items.iter_mut().find(|i| i.num == num)
                     {
-                        for f in &mut it.file_list {
+                        for f in it.as_pr_mut().into_iter().flat_map(|p| &mut p.file_list) {
                             if let Some((_, hunks)) = files.iter().find(|(p, _)| *p == f.path) {
                                 f.hunks = hunks.clone();
                             }

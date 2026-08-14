@@ -84,7 +84,9 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         theme::PANEL,
     );
     let stats = match app.current() {
-        Some(cur) => format!("{} files changed · {} {}", cur.files, cur.add, cur.del),
+        Some(cur) => cur.as_pr().map_or_else(String::new, |p| {
+            format!("{} files changed · {} {}", p.files, p.add, p.del)
+        }),
         None => String::new(),
     };
     let stats = if app.ws {
@@ -192,7 +194,10 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     let rows = app.diff_rows();
     let hunks = rows.iter().filter(|r| r.kind == DiffKind::Hdr).count();
-    let branch = app.current().map(|c| c.branch.clone()).unwrap_or_default();
+    let branch = app
+        .current()
+        .map(super::super::data::Item::branch)
+        .unwrap_or_default();
     let meta = if branch.is_empty() {
         format!("{hunks} hunks")
     } else {
@@ -394,9 +399,7 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
         right.x + 1,
         "│",
         Style::default()
-            .bg(row_bg(
-                p.right.as_ref().map(|c| c.kind).unwrap_or(DiffKind::Ctx),
-            ))
+            .bg(row_bg(p.right.as_ref().map_or(DiffKind::Ctx, |c| c.kind)))
             .fg(theme::BORDER_SOFT),
     );
 }
@@ -478,7 +481,12 @@ fn split_rows(rows: &[DiffRow]) -> Vec<SplitPair> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "assertions")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
 mod tests {
     use super::*;
 

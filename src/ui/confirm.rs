@@ -14,6 +14,7 @@ use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     let Some(cur) = app.current() else { return };
+    let pr = cur.as_pr();
     scrim(buf, area);
 
     let is_merge = matches!(prompt, Prompt::Merge(_));
@@ -84,7 +85,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 x,
                 y,
                 max,
-                &format!("reopen against main from {}", cur.branch),
+                &format!("reopen against main from {}", cur.branch()),
                 base.fg(theme::BODY),
             );
         }
@@ -96,7 +97,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 max,
                 &format!(
                     "{} → main · {} {} across {} files",
-                    cur.branch, cur.add, cur.del, cur.files
+                    cur.branch(),
+                    pr.map_or("", |p| p.add.as_str()),
+                    pr.map_or("", |p| p.del.as_str()),
+                    pr.map_or(0, |p| p.files)
                 ),
                 base.fg(theme::BODY),
             );
@@ -106,13 +110,12 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
 
     // check and review state, shown as a warning before you commit
     if is_merge {
-        let approvals = cur
-            .reviews
+        let reviews = pr.map_or(&[][..], |p| p.reviews.as_slice());
+        let approvals = reviews
             .iter()
             .filter(|r| r.state == ReviewState::Approved)
             .count();
-        let blocking = cur
-            .reviews
+        let blocking = reviews
             .iter()
             .filter(|r| r.state == ReviewState::ChangesRequested)
             .count();
@@ -121,8 +124,12 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             x,
             y,
             max,
-            &format!("{} {} checks", theme::state_icon(cur.checks), cur.checks),
-            base.fg(theme::state_color(cur.checks)),
+            &format!(
+                "{} {} checks",
+                theme::state_icon(cur.checks()),
+                cur.checks()
+            ),
+            base.fg(theme::state_color(cur.checks())),
         );
         let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::DIMMER));
         let cx = put(

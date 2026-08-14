@@ -5,7 +5,12 @@
 //! it *fetches* in `load`, and how it *reacts* in `input`.
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "assertions")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
 mod tests;
 
 mod input;

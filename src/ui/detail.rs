@@ -11,7 +11,7 @@ use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let Some(cur) = app.current() else { return };
-    if cur.kind == Kind::Issue {
+    if cur.kind() == Kind::Issue {
         issue(buf, area, app);
     } else {
         pull(buf, area, app);
@@ -123,7 +123,7 @@ fn issue_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
     out.push(vec![("COMMENTS".into(), base.fg(theme::DIM))]);
     out.push(Vec::new());
 
-    for c in &cur.comment_list {
+    for c in cur.as_issue().into_iter().flat_map(|i| &i.comment_list) {
         out.push(vec![
             ("▌ ".into(), base.fg(theme::BORDER)),
             (c.author.clone(), base.fg(theme::YELLOW)),
@@ -188,10 +188,14 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         base.fg(theme::DIMMER),
     );
     cx = put(buf, cx, y, max, "  ", base);
-    let (checks_label, checks_color) = if cur.kind == Kind::Pr {
+    let (checks_label, checks_color) = if cur.kind() == Kind::Pr {
         (
-            format!("{} {} checks", theme::state_icon(cur.checks), cur.checks),
-            theme::state_color(cur.checks),
+            format!(
+                "{} {} checks",
+                theme::state_icon(cur.checks()),
+                cur.checks()
+            ),
+            theme::state_color(cur.checks()),
         )
     } else {
         (
@@ -207,7 +211,8 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         y += 1;
     }
 
-    let branch_line = if !cur.branch.is_empty() {
+    let pr = cur.as_pr();
+    let branch_line = if !cur.branch().is_empty() {
         let verb = match cur.state {
             Status::Merged => "merged",
             Status::Closed => "closed",
@@ -215,19 +220,27 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         };
         format!(
             "{verb} {} → main · {} {} across {} files",
-            cur.branch, cur.add, cur.del, cur.files
+            cur.branch(),
+            pr.map_or("", |p| p.add.as_str()),
+            pr.map_or("", |p| p.del.as_str()),
+            pr.map_or(0, |p| p.files)
         )
     } else {
-        format!("{} · {}", cur.event, cur.dur)
+        let run = cur.as_run();
+        format!(
+            "{} · {}",
+            run.map_or("", |r| r.event.as_str()),
+            run.map_or("", |r| r.dur.as_str())
+        )
     };
     let bx = put_trunc(buf, x, y, max, &branch_line, base.fg(theme::DIMMER));
 
     // outcome of the actions: merge method and branch state
-    if let Some(method) = &cur.merged_with {
+    if let Some(method) = pr.and_then(|p| p.merged_with.as_ref()) {
         let cx = put(buf, bx, y, max, "  ·  ", base.fg(theme::DIMMER));
         put(buf, cx, y, max, method, base.fg(theme::PURPLE));
     }
-    if cur.branch_deleted {
+    if pr.is_some_and(|p| p.branch_deleted) {
         let cx = put(
             buf,
             max.saturating_sub(16),
@@ -281,7 +294,7 @@ fn description_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
         ("FILES CHANGED".into(), base.fg(theme::DIM)),
         ("   d → diff".into(), base.fg(theme::DIMMER)),
     ]);
-    for f in &cur.file_list {
+    for f in cur.files() {
         // the counts hug the right edge of the available width
         let stats = format!("{} {}", f.add, f.del);
         let room = width.saturating_sub(stats.chars().count() + 1);
@@ -297,7 +310,7 @@ fn description_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
 
     out.push(Vec::new());
     out.push(vec![("REVIEWS".into(), base.fg(theme::DIM))]);
-    for r in &cur.reviews {
+    for r in cur.as_pr().into_iter().flat_map(|p| &p.reviews) {
         let (color, icon) = theme::review(r.state);
         out.push(vec![
             (format!("{icon} "), base.fg(color)),
@@ -342,17 +355,17 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     fill(buf, head, theme::PANEL);
     let hs = Style::default().bg(theme::PANEL).fg(theme::DIM);
     let workflow = if app.live() {
-        let name = if cur.workflow.is_empty() {
+        let name = if cur.workflow().is_empty() {
             "checks"
         } else {
-            &cur.workflow
+            cur.workflow()
         };
         if cur.id > 0 {
             format!("{name} · run {}", cur.id)
         } else {
             name.to_string()
         }
-    } else if cur.kind == Kind::Pr {
+    } else if cur.kind() == Kind::Pr {
         format!("CI #{}", 1841 - app.repo_idx())
     } else {
         format!(
@@ -467,10 +480,10 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     );
     y += 1;
     let trigger = if app.live() {
-        let event = if cur.event.is_empty() {
+        let event = if cur.as_run().map_or("", |r| r.event.as_str()).is_empty() {
             "pull_request"
         } else {
-            &cur.event
+            cur.as_run().map_or("", |r| r.event.as_str())
         };
         format!("{event} · {} · {}", cur.author, cur.when)
     } else {

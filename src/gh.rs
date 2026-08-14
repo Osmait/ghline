@@ -8,8 +8,8 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::data::{
-    Account, Comment, FileChange, Hunk, Item, Job, Kind, Label, RawLog, Repo, Review, ReviewState,
-    Status, Step,
+    Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
+    Repo, Review, ReviewState, RunDetail, Status, Step,
 };
 
 pub use crate::error::{Error, Result as Res};
@@ -284,7 +284,7 @@ pub fn issues(repo: &str) -> Res<Vec<Item>> {
         .unwrap_or_default()
         .iter()
         .map(|i| {
-            let mut it = Item::blank(Kind::Issue);
+            let mut it = Item::issue();
             it.num = n(i, "number");
             it.title = s(i, "title");
             it.state = Status::parse(&s(i, "state"));
@@ -294,8 +294,11 @@ pub fn issues(repo: &str) -> Res<Vec<Item>> {
                 .unwrap_or("ghost")
                 .to_string();
             it.when = ago(&s(i, "createdAt"));
-            it.comments = arr(i, "comments").len() as u32;
             it.labels = labels_of(i);
+            it.detail = Detail::Issue(IssueDetail {
+                comments: arr(i, "comments").len() as u32,
+                comment_list: Vec::new(),
+            });
             it
         })
         .collect())
@@ -365,7 +368,7 @@ pub fn prs(repo: &str) -> Res<Vec<Item>> {
         .unwrap_or_default()
         .iter()
         .map(|p| {
-            let mut it = Item::blank(Kind::Pr);
+            let mut it = Item::pr();
             it.num = n(p, "number");
             it.title = s(p, "title");
             let draft = p
@@ -384,18 +387,21 @@ pub fn prs(repo: &str) -> Res<Vec<Item>> {
                 .unwrap_or("ghost")
                 .to_string();
             it.when = ago(&s(p, "createdAt"));
-            it.branch = s(p, "headRefName");
-            it.add = format!("+{}", n(p, "additions"));
-            it.del = format!("-{}", n(p, "deletions"));
-            it.files = n(p, "changedFiles") as u32;
-            it.checks = rollup(p);
             it.id = rollup_run_id(p);
-            it.workflow = arr(p, "statusCheckRollup")
-                .iter()
-                .map(|c| s(c, "workflowName"))
-                .find(|w| !w.is_empty())
-                .unwrap_or_default();
             it.labels = labels_of(p);
+            it.detail = Detail::Pr(Box::new(PrDetail {
+                checks: rollup(p),
+                add: format!("+{}", n(p, "additions")),
+                del: format!("-{}", n(p, "deletions")),
+                files: n(p, "changedFiles") as u32,
+                branch: s(p, "headRefName"),
+                workflow: arr(p, "statusCheckRollup")
+                    .iter()
+                    .map(|c| s(c, "workflowName"))
+                    .find(|w| !w.is_empty())
+                    .unwrap_or_default(),
+                ..PrDetail::default()
+            }));
             it
         })
         .collect())
@@ -418,7 +424,7 @@ pub fn runs(repo: &str) -> Res<Vec<Item>> {
         .unwrap_or_default()
         .iter()
         .map(|r| {
-            let mut it = Item::blank(Kind::Run);
+            let mut it = Item::run();
             // databaseId is for the API; the number is what GitHub displays
             it.id = n(r, "databaseId");
             it.num = n(r, "number");
@@ -426,9 +432,11 @@ pub fn runs(repo: &str) -> Res<Vec<Item>> {
             it.state = conclusion(&s(r, "status"), &s(r, "conclusion"));
             it.author = s(r, "displayTitle");
             it.when = ago(&s(r, "createdAt"));
-            it.event = s(r, "event");
-            it.workflow = s(r, "workflowName");
-            it.dur = duration(&s(r, "createdAt"), &s(r, "updatedAt"));
+            it.detail = Detail::Run(RunDetail {
+                event: s(r, "event"),
+                workflow: s(r, "workflowName"),
+                dur: duration(&s(r, "createdAt"), &s(r, "updatedAt")),
+            });
             it
         })
         .collect())
@@ -722,7 +730,12 @@ pub fn delete_branch(repo: &str, branch: &str) -> Res<()> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::panic, reason = "assertions")]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
 mod tests {
     use super::*;
 

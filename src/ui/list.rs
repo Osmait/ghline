@@ -7,7 +7,7 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{fill, hline, put, put_right, put_trunc, scroll_into_view};
 use crate::app::{App, Pane};
-use crate::data::{Item, Kind, Status, TABS};
+use crate::data::{Detail, Item, Kind, Status, TABS};
 use crate::theme;
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
@@ -113,7 +113,7 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &App) {
 }
 
 fn icon_for(it: &Item) -> &'static str {
-    match it.kind {
+    match it.kind() {
         Kind::Issue => {
             if it.state == Status::Open {
                 "◉"
@@ -131,19 +131,23 @@ fn icon_for(it: &Item) -> &'static str {
 }
 
 fn sub_for(it: &Item) -> String {
-    match it.kind {
-        Kind::Run => format!("{} · {} · {} · {}", it.event, it.author, it.dur, it.when),
-        Kind::Pr => format!(
+    match &it.detail {
+        Detail::Run(run) => {
+            format!("{} · {} · {} · {}", run.event, it.author, run.dur, it.when)
+        }
+        Detail::Pr(pr) => format!(
             "{}{} · {} · {}/{} · {} files · {}",
-            &it.branch,
-            if it.branch_deleted { " ⊘" } else { "" },
-            &it.author,
-            &it.add,
-            &it.del,
-            it.files,
+            pr.branch,
+            if pr.branch_deleted { " ⊘" } else { "" },
+            it.author,
+            pr.add,
+            pr.del,
+            pr.files,
             it.when
         ),
-        Kind::Issue => format!("{} · {} comments · {}", it.author, it.comments, it.when),
+        Detail::Issue(issue) => {
+            format!("{} · {} comments · {}", it.author, issue.comments, it.when)
+        }
     }
 }
 
@@ -223,13 +227,13 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         put_trunc(buf, area.x + 4, y, text_x - 1, &num, base.fg(theme::DIMMER));
 
         // estado (derecha)
-        let state_text = if it.kind == Kind::Pr {
-            format!("{}  {} checks", it.state, theme::state_icon(it.checks))
+        let state_text = if it.kind() == Kind::Pr {
+            format!("{}  {} checks", it.state, theme::state_icon(it.checks()))
         } else {
             it.state.to_string()
         };
-        let state_color = theme::state_color(if it.kind == Kind::Pr {
-            it.checks
+        let state_color = theme::state_color(if it.kind() == Kind::Pr {
+            it.checks()
         } else {
             status
         });
