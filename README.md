@@ -155,7 +155,7 @@ back. In real mode the changes are real changes on GitHub.
 | `src/theme.rs` | the design's palette and glyphs (`sc()` / `si()`) |
 | `src/data.rs` | the model: items, statuses, diffs — no dependencies of its own |
 | `src/demo.rs` | the design's fixture, apart from the model it fills in |
-| `src/app.rs` | state and reducer, equivalent to the design's `Component` class |
+| `src/app/` | the state: `mod` what it is, `select` what it answers, `load` what it fetches, `input` how it reacts |
 | `src/gh.rs` | invoking `gh` and translating its JSON into the model |
 | `src/service.rs` | worker thread: requests and responses over channels |
 | `src/actions.rs` | merge / close / reopen / branch deletion, isolated from the UI |
@@ -185,6 +185,17 @@ network.
 States — open, draft, merged, success, failure and the rest — are a `Status`
 enum rather than strings. `theme::state_color` and `state_icon` match on it
 exhaustively, so a new state makes the compiler ask what it should look like.
+
+An item's kind-specific fields live in the variant they belong to rather than
+side by side in one struct, so an issue cannot be given check results and a run
+cannot be asked for a branch to delete:
+
+```
+Item { num, title, state, author, when, body, labels, detail }
+  detail: Issue { comments, comment_list }
+        | Pr    { checks, add, del, files, branch, reviews, file_list, … }
+        | Run   { event, workflow, dur }
+```
 
 ## Error handling
 
