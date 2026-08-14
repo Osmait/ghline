@@ -169,6 +169,31 @@ file that turns out to be binary says so instead of painting the pane with
 replacement characters, and a tree GitHub truncated says that too, because a
 partial listing that stays quiet reads as a smaller repository.
 
+### Editing one
+
+`E` opens the file under the cursor in your editor, at the line under the
+cursor — `$VISUAL`, then `$EDITOR`, then nvim, then vim. The TUI hands over the
+whole terminal and takes it back afterwards, unconditionally, so an editor that
+dies badly still leaves this program with a terminal it can use.
+
+Two things stand between the key and the editor, and both are worth knowing
+about rather than being surprised by.
+
+**The repository may not be here.** If it is not on disk, `E` offers to clone
+it — `gh repo clone` into the first of your `clone-roots` that exists — and
+opens the file once it lands. Fetching a whole repository takes a while, so it
+asks first, and the interface stays usable while it runs.
+
+**The checkout may be on another branch.** The explorer reads GitHub's `HEAD`;
+an editor reads the disk. Those are two different files whenever the local
+clone is somewhere else, which is the usual case rather than the exception —
+two of the three checkouts on the machine this was built on are on feature
+branches. So `E` says which branch it is about to edit, and if the file is not
+in the checkout at all it says that instead of opening an empty buffer.
+
+It does **not** switch branches for you. Moving someone off their branch to
+satisfy a keypress is a far worse surprise than a warning.
+
 `/` finds a file without walking to it: the filter flattens the tree, matches on
 the whole path rather than the name, and leaves the directories out, since a
 directory is not something you can read or send.

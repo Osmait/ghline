@@ -1961,3 +1961,139 @@ mod explorer {
         assert!(app.flash.is_some(), "and says why");
     }
 }
+
+// ---------------------------------------------------------- editing a file
+//
+// The explorer reads GitHub and an editor reads the disk. Those are the same
+// file only when the local checkout is on the same branch, which on a real
+// machine is often not the case — so most of what follows is about saying so.
+
+mod editing {
+    use super::*;
+    use crate::actions::Prompt;
+    use crate::data::TreeEntry;
+    use std::path::PathBuf;
+
+    /// A repository whose checkout really exists, so the path checks are real.
+    fn at_file(rel: &str) -> App {
+        let mut app = demo();
+        app.source = Source::Live;
+        app.tab = crate::data::FILES_TAB;
+        app.view = View::List;
+        app.pane = Pane::FileTree;
+
+        let key = app.repo_key();
+        app.trees.insert(
+            key.clone(),
+            vec![TreeEntry {
+                path: rel.into(),
+                is_dir: false,
+                size: 100,
+            }],
+        );
+        app.trees_state.insert(key.clone(), Load::Ready);
+        app.clones_state = Load::Ready;
+        app.clones
+            .insert(key, PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        app
+    }
+
+    #[test]
+    fn editing_asks_for_the_file_under_the_cursor_at_the_line_under_it() {
+        let mut app = at_file("Cargo.toml");
+        app.file_sel = 11; // zero-based
+
+        app.open_in_editor();
+        let (path, line) = app.edit_request.expect("the main loop should be asked");
+        assert!(path.ends_with("Cargo.toml"), "{path:?}");
+        assert_eq!(line, 12, "editors count from one");
+    }
+
+    #[test]
+    fn a_file_the_checkout_does_not_have_is_not_opened() {
+        // the usual reason: the local clone is on another branch
+        let mut app = at_file("src/does-not-exist.rs");
+        app.open_in_editor();
+
+        assert!(app.edit_request.is_none());
+        assert!(
+            app.flash.is_some(),
+            "and the reader is told, rather than nvim opening an empty buffer"
+        );
+    }
+
+    #[test]
+    fn a_directory_is_not_something_to_edit() {
+        let mut app = at_file("src");
+        if let Some(t) = app.trees.get_mut(&app.repo_key()) {
+            t[0].is_dir = true;
+        }
+        app.open_in_editor();
+        assert!(app.edit_request.is_none());
+    }
+
+    #[test]
+    fn a_repository_that_is_not_here_is_offered_for_cloning() {
+        let mut app = at_file("Cargo.toml");
+        app.clones.clear();
+
+        app.open_in_editor();
+        assert!(app.edit_request.is_none(), "nothing to open yet");
+        match app.prompt {
+            Some(Prompt::Clone { ref repo, ref dest }) => {
+                assert_eq!(*repo, app.repo_key());
+                assert!(!dest.is_empty(), "somewhere to put it");
+            }
+            _ => panic!("it should ask before fetching a whole repository"),
+        }
+    }
+
+    #[test]
+    fn nothing_is_offered_while_the_disk_is_still_being_walked() {
+        // an empty index and an unfinished scan look alike; offering to clone
+        // something that is already here would be the wrong answer
+        let mut app = at_file("Cargo.toml");
+        app.clones.clear();
+        app.clones_state = Load::Loading;
+
+        app.open_in_editor();
+        assert!(app.prompt.is_none());
+        assert!(app.edit_request.is_none());
+    }
+
+    #[test]
+    fn editing_does_nothing_outside_the_file_tab() {
+        let mut app = at_file("Cargo.toml");
+        app.tab = 0;
+        app.open_in_editor();
+        assert!(app.edit_request.is_none());
+    }
+
+    #[test]
+    fn the_cursor_moves_by_line_and_stops_at_the_ends() {
+        let mut app = at_file("Cargo.toml");
+        app.pane = Pane::FileView;
+        let key = (app.repo_key(), "Cargo.toml".to_string());
+        app.file_text.insert(key.clone(), "a\nb\nc\n".into());
+        app.file_state.insert(key, Load::Ready);
+
+        press(&mut app, KeyCode::Char('j'));
+        assert_eq!(app.file_sel, 1);
+        for _ in 0..10 {
+            press(&mut app, KeyCode::Char('j'));
+        }
+        assert_eq!(app.file_sel, 2, "three lines, so index two is the last");
+        for _ in 0..10 {
+            press(&mut app, KeyCode::Char('k'));
+        }
+        assert_eq!(app.file_sel, 0);
+    }
+
+    #[test]
+    fn moving_to_another_file_starts_at_its_top() {
+        let mut app = at_file("Cargo.toml");
+        app.file_sel = 40;
+        app.select_in(Pane::FileTree, 0);
+        assert_eq!(app.file_sel, 0);
+    }
+}

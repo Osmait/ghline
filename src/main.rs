@@ -86,7 +86,7 @@ fn main() -> io::Result<()> {
     let mouse = !args.iter().any(|a| a == "--no-mouse");
 
     let mut term = TerminalGuard::enter(mouse)?;
-    let res = run(term.inner(), source);
+    let res = run(&mut term, source);
     // the guard restores the terminal even if `run` returns an error
     drop(term);
 
@@ -101,6 +101,9 @@ fn main() -> io::Result<()> {
 /// in raw mode with no echo.
 struct TerminalGuard {
     term: Terminal<CrosstermBackend<io::Stdout>>,
+    /// Whether mouse capture was on, so suspending and resuming puts back what
+    /// was there rather than what the default happens to be.
+    mouse: bool,
 }
 
 impl TerminalGuard {
@@ -126,11 +129,31 @@ impl TerminalGuard {
 
         let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
         term.hide_cursor()?;
-        Ok(Self { term })
+        Ok(Self { term, mouse })
     }
 
     fn inner(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
         &mut self.term
+    }
+
+    /// Hands the terminal to another program and takes it back afterwards.
+    ///
+    /// An editor wants the real terminal: its own screen, its own raw mode,
+    /// its own mouse handling. Anything less and it draws into ours. The
+    /// restore on the way back is unconditional, so an editor that dies badly
+    /// still leaves this program with a terminal it can use.
+    fn suspend<T>(&mut self, run: impl FnOnce() -> T) -> io::Result<T> {
+        restore();
+        let out = run();
+        enable_raw_mode()?;
+        execute!(io::stdout(), EnterAlternateScreen)?;
+        if self.mouse {
+            execute!(io::stdout(), EnableMouseCapture)?;
+        }
+        self.term.hide_cursor()?;
+        // the editor scribbled over every cell we thought we had drawn
+        self.term.clear()?;
+        Ok(out)
     }
 }
 
@@ -150,7 +173,42 @@ fn restore() {
     let _ = execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
 }
 
-fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io::Result<()> {
+/// Runs the reader's editor on a file, at a line.
+///
+/// `$VISUAL` then `$EDITOR` then nvim then vim: the first two are what the
+/// reader has said they want, and the last two are what is most likely to be
+/// there when they have said nothing.
+fn edit(path: &std::path::Path, line: usize) -> io::Result<()> {
+    let editor = std::env::var("VISUAL")
+        .or_else(|_| std::env::var("EDITOR"))
+        .unwrap_or_else(|_| {
+            if which("nvim") {
+                "nvim".into()
+            } else {
+                "vim".into()
+            }
+        });
+
+    // `+N` is understood by vi, vim, nvim, emacs, nano and kak alike. An
+    // editor that does not know it is handed a file it can still open.
+    let mut parts = editor.split_whitespace();
+    let Some(bin) = parts.next() else {
+        return Ok(());
+    };
+    std::process::Command::new(bin)
+        .args(parts)
+        .arg(format!("+{line}"))
+        .arg(path)
+        .status()
+        .map(|_| ())
+}
+
+fn which(bin: &str) -> bool {
+    std::env::var_os("PATH")
+        .is_some_and(|paths| std::env::split_paths(&paths).any(|d| d.join(bin).is_file()))
+}
+
+fn run(term: &mut TerminalGuard, source: Source) -> io::Result<()> {
     let mut app = App::new(source);
     let mut last_tick = Instant::now();
     let mut last_blink = Instant::now();
@@ -160,7 +218,7 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
     loop {
         // request whatever the current view needs (non-blocking: it goes to the gh thread)
         app.ensure();
-        term.draw(|f| ui::draw(f, &mut app))?;
+        term.inner().draw(|f| ui::draw(f, &mut app))?;
 
         // a short wait while requests are in flight, so the response is drawn
         // as soon as it arrives
@@ -193,6 +251,12 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
 
         while let Some(res) = app.poll_service() {
             app.apply(res);
+        }
+
+        // The editor takes the whole terminal, so this happens between frames
+        // rather than inside one.
+        if let Some((path, line)) = app.edit_request.take() {
+            term.suspend(|| edit(&path, line))??;
         }
 
         if last_tick.elapsed() >= TICK {

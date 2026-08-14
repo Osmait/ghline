@@ -98,6 +98,11 @@ impl App {
         (!e.is_dir && e.size <= crate::gh::FILE_LIMIT).then(|| e.path.clone())
     }
 
+    /// How many lines the open file has.
+    pub fn file_lines(&self) -> usize {
+        self.file_body().map(|t| t.lines().count()).unwrap_or(0)
+    }
+
     /// The selected file's contents, or why they are not here.
     pub fn file_body(&self) -> Result<&str, Load> {
         let Some(e) = self.fs_current() else {

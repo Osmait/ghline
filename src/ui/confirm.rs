@@ -19,6 +19,18 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         dispatch(buf, area, who, text);
         return;
     }
+    if let Prompt::Clone { repo, dest } = prompt {
+        dispatch(
+            buf,
+            area,
+            &format!("clone {repo}"),
+            &format!(
+                "It is not on this machine yet.\n\n                 gh repo clone {repo} {dest}/{}\n\n                 A large repository takes a while, and the interface stays\n                 usable while it does.",
+                repo.rsplit('/').next().unwrap_or(repo)
+            ),
+        );
+        return;
+    }
     let Some(cur) = app.current() else { return };
     let pr = cur.as_pr();
     scrim(buf, area);
@@ -30,7 +42,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         Prompt::Reopen => ("REOPEN PULL REQUEST", theme::green()),
         Prompt::DeleteBranch { .. } => ("DELETE BRANCH", theme::red()),
         // drawn above, before the selection is needed
-        Prompt::Dispatch { .. } => return,
+        Prompt::Dispatch { .. } | Prompt::Clone { .. } => return,
     };
 
     let height = if is_merge { 12 } else { 7 };
@@ -233,6 +245,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
 /// this program, and the cheapest way to catch a template that renders badly
 /// is to show what is about to be sent.
 fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
+    let title = if who.starts_with("clone ") {
+        "CLONE REPOSITORY"
+    } else {
+        "SEND TO AGENT"
+    };
     scrim(buf, area);
 
     let accent = theme::cyan();
@@ -250,7 +267,7 @@ fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
     let x = modal.x + 2;
     let max = modal.right() - 2;
 
-    put(buf, x, modal.y + 1, max, "SEND TO AGENT", base.fg(accent));
+    put(buf, x, modal.y + 1, max, title, base.fg(accent));
     put_right(
         buf,
         max,

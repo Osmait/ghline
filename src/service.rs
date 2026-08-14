@@ -21,6 +21,11 @@ pub enum Request {
         repo: String,
         tab: usize,
     },
+    /// Fetch a repository that is not on this disk yet.
+    Clone {
+        repo: String,
+        dest: String,
+    },
     /// A repository's whole file tree.
     Tree {
         repo: String,
@@ -119,6 +124,10 @@ pub enum Response {
     },
     Scanned {
         index: crate::clones::Index,
+    },
+    Cloned {
+        repo: String,
+        result: Result<String, Error>,
     },
     Tree {
         repo: String,
@@ -250,6 +259,11 @@ fn handle(req: Request) -> Response {
             text,
         } => Response::Dispatched {
             result: fresh(&repo_root, branch.as_deref(), &label, &kind, &text),
+        },
+
+        Request::Clone { repo, dest } => Response::Cloned {
+            result: crate::gh::clone(&repo, &dest),
+            repo,
         },
 
         Request::Tree { repo } => Response::Tree {

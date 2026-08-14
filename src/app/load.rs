@@ -334,6 +334,19 @@ impl App {
                 }
             }
 
+            Response::Cloned { repo, result } => {
+                self.busy = false;
+                match result {
+                    Ok(path) => {
+                        self.flash_ok(format!("cloned into {path}"));
+                        self.clones.insert(repo, std::path::PathBuf::from(path));
+                        // the reader asked to edit; now they can
+                        self.open_in_editor();
+                    }
+                    Err(e) => self.flash_warn(self.advice(&e)),
+                }
+            }
+
             Response::Tree { repo, result } => match result {
                 Ok(entries) => {
                     self.trees.insert(repo.clone(), entries);

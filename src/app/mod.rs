@@ -320,7 +320,15 @@ pub struct App {
     pub fs_open: HashSet<String>,
     pub fs_sel: usize,
     pub fs_scroll: usize,
+    /// The source line the cursor is on, zero-based. A line rather than a
+    /// scroll offset because it is what `E` hands to the editor, and a reader
+    /// should be able to see which line that will be.
+    pub file_sel: usize,
     pub file_scroll: usize,
+    /// Set when `E` has been pressed: the file to open and the line to open it
+    /// at. The main loop picks this up, because leaving the alternate screen
+    /// and coming back is the terminal's business, not the reducer's.
+    pub edit_request: Option<(std::path::PathBuf, usize)>,
     /// `owner/repo` → checkout, built by walking the disk once.
     pub clones: crate::clones::Index,
     pub clones_state: Load,
@@ -440,7 +448,9 @@ impl App {
             fs_open: HashSet::new(),
             fs_sel: 0,
             fs_scroll: 0,
+            file_sel: 0,
             file_scroll: 0,
+            edit_request: None,
             clones: crate::clones::Index::new(),
             clones_state: Load::Idle,
             pending_fresh: None,

@@ -22,6 +22,11 @@ pub enum Prompt {
         num: i64,
         branch: String,
     },
+    /// Fetch a repository so a file in it can be opened.
+    Clone {
+        repo: String,
+        dest: String,
+    },
     /// Hand an issue to a coding agent. Unlike the others this is not about a
     /// pull request at all, and it carries everything it needs: by the time it
     /// is confirmed the selection may have been asked to move.
@@ -122,6 +127,13 @@ impl App {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
+        if let Prompt::Clone { repo, dest } = prompt {
+            self.busy = true;
+            self.flash_ok(format!("cloning {repo} into {dest}…"));
+            self.send(Request::Clone { repo, dest });
+            return;
+        }
+
         // dispatching carries everything it needs and has no pull request
         // behind it, so it never reaches the extraction below
         if let Prompt::Dispatch { who, pane, text } = prompt {
@@ -189,8 +201,8 @@ impl App {
                 self.flash_ok(format!("deleting {branch}…"));
                 self.send(Request::DeleteBranch { repo, branch });
             }
-            // handled before the pull request data is gathered
-            Prompt::Dispatch { .. } => {}
+            // both handled before the pull request data is gathered
+            Prompt::Dispatch { .. } | Prompt::Clone { .. } => {}
         }
     }
 
@@ -233,9 +245,9 @@ impl App {
                 }
                 self.flash_ok(format!("deleted branch {branch}"));
             }
-            // never confirmed through the demo path: it acts on this
+            // never confirmed through the demo path: they act on this
             // machine, which is just as real in demo mode
-            Prompt::Dispatch { .. } => {}
+            Prompt::Dispatch { .. } | Prompt::Clone { .. } => {}
         }
     }
 

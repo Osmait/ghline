@@ -159,6 +159,14 @@ fn branch_of_head(head: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
+/// Where a repository that is not here yet should be cloned to.
+///
+/// The first configured root that exists, so a clone lands beside the others
+/// rather than wherever the program happened to be started from.
+pub fn clone_dir() -> Option<PathBuf> {
+    roots().into_iter().find(|r| r.is_dir())
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

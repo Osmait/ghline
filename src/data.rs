@@ -771,6 +771,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("wheel", "scroll under pointer"),
     ("4", "the repo's files"),
     ("5", "agents running here"),
+    ("E", "edit the file in $EDITOR"),
     ("x", "send this to an agent"),
 ];
 

@@ -287,10 +287,16 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
     }
 
+    // The cursor is on a source line; the scroll is in rendered rows, which a
+    // wrapped line spans several of. Finding the first row of the selected
+    // line is what keeps the two in step.
     let height = body.height as usize;
-    app.file_scroll = app
-        .file_scroll
-        .min(rendered.len().saturating_sub(height.max(1)));
+    let sel_line = app.file_sel.min(text.lines().count().saturating_sub(1));
+    let sel_row = rendered
+        .iter()
+        .position(|(n, _)| *n == sel_line + 1)
+        .unwrap_or(0);
+    scroll_into_view(&mut app.file_scroll, sel_row, height, rendered.len());
     let focused = app.pane == Pane::FileView;
 
     for (row, i) in (app.file_scroll..rendered.len()).enumerate() {
@@ -299,15 +305,46 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
         let y = body.y + row as u16;
         let (n, ref line) = rendered[i];
-        let base = Style::default().bg(theme::bg());
-        if n > 0 {
-            put_right(
-                buf,
-                body.x + gutter,
+
+        // Every rendered row of the selected line is marked, not just the
+        // first: a wrapped line is one line, and highlighting a third of it
+        // would read as a different one.
+        let on_cursor = match n {
+            0 => rendered[..i]
+                .iter()
+                .rev()
+                .find(|(m, _)| *m > 0)
+                .is_some_and(|(m, _)| *m == sel_line + 1),
+            m => m == sel_line + 1,
+        };
+        let bg = if on_cursor { theme::sel() } else { theme::bg() };
+        fill(
+            buf,
+            Rect {
+                x: body.x,
                 y,
-                &n.to_string(),
-                base.fg(theme::dimmer()),
-            );
+                width: body.width,
+                height: 1,
+            },
+            bg,
+        );
+        let base = Style::default().bg(bg);
+
+        if on_cursor {
+            let mark = if focused {
+                theme::cyan()
+            } else {
+                theme::sel_mark_idle()
+            };
+            put(buf, body.x, y, body.x + 1, "▌", base.fg(mark));
+        }
+        if n > 0 {
+            let num = if on_cursor {
+                base.fg(theme::cyan())
+            } else {
+                base.fg(theme::dimmer())
+            };
+            put_right(buf, body.x + gutter, y, &n.to_string(), num);
         }
         put(
             buf,
@@ -315,26 +352,16 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
             y,
             area.right(),
             line,
-            base.fg(theme::fg()),
+            base.fg(if on_cursor {
+                theme::bright()
+            } else {
+                theme::fg()
+            }),
         );
     }
 
-    // the focus bar, in the same place the other scrolling panes put it
-    if focused {
-        for y in body.y..body.bottom() {
-            put(
-                buf,
-                body.x,
-                y,
-                body.x + 1,
-                "▌",
-                Style::default().bg(theme::bg()).fg(theme::cyan()),
-            );
-        }
-    }
-
     if rendered.len() > height {
-        let label = format!("{}/{}", app.file_scroll + 1, rendered.len());
+        let label = format!("{}/{}", sel_line + 1, text.lines().count());
         put_right(
             buf,
             area.right() - 1,

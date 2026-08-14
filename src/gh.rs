@@ -1076,6 +1076,17 @@ pub fn all_runs(repos: &[String]) -> Res<Vec<Item>> {
     Ok(out)
 }
 
+/// Clones `repo` into `dest/<name>` and returns where it landed.
+///
+/// Blocking and slow — minutes for a large repository — which is exactly why
+/// it goes through the service thread like everything else.
+pub fn clone(repo: &str, dest: &str) -> Res<String> {
+    let name = repo.rsplit('/').next().unwrap_or(repo);
+    let into = format!("{dest}/{name}");
+    run(&["repo", "clone", repo, &into])?;
+    Ok(into)
+}
+
 // -------------------------------------------------------------------- files
 
 /// A repository's whole file tree, in one call.

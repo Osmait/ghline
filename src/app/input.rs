@@ -320,6 +320,58 @@ impl App {
         }
     }
 
+    /// `E`: opens the selected file in an editor, cloning the repository first
+    /// if it is not here.
+    ///
+    /// The explorer reads GitHub; an editor reads the disk. Those are two
+    /// different files whenever the local checkout is on another branch, which
+    /// on this machine is the usual case rather than the exception — so the
+    /// mismatch is reported rather than papered over. It is not switched
+    /// either: moving someone off their branch to satisfy a keypress would be
+    /// a far worse surprise than a warning.
+    pub fn open_in_editor(&mut self) {
+        if self.tab != crate::data::FILES_TAB {
+            return;
+        }
+        let Some(path) = self.fs_selected_file() else {
+            self.flash_warn("select a file first");
+            return;
+        };
+        let repo = self.repo_key();
+
+        let Some(root) = self.clone_path(&repo) else {
+            if self.clones_state != Load::Ready {
+                self.flash_warn("still looking for a local checkout…");
+                return;
+            }
+            match crate::clones::clone_dir() {
+                Some(dest) => {
+                    self.prompt = Some(Prompt::Clone {
+                        repo,
+                        dest: dest.to_string_lossy().into_owned(),
+                    });
+                }
+                None => self.flash_warn("nowhere to clone into — set clone-roots in the config"),
+            }
+            return;
+        };
+
+        let full = std::path::Path::new(&root).join(&path);
+        if !full.exists() {
+            self.flash_warn(format!(
+                "{path} is not in the checkout — it is probably on another branch"
+            ));
+            return;
+        }
+
+        // Said before the editor takes the screen, so it is on the status bar
+        // when they come back rather than lost behind it.
+        if let Some(branch) = crate::clones::head_branch(&root) {
+            self.flash_warn(format!("editing the copy on {branch}"));
+        }
+        self.edit_request = Some((full, self.file_sel + 1));
+    }
+
     /// Opens the theme picker, remembering what to go back to.
     pub fn open_themes(&mut self) {
         let current = crate::theme::current();
@@ -424,7 +476,8 @@ impl App {
                 self.select_in(pane, i);
             }
             Pane::FileView => {
-                self.file_scroll = (self.file_scroll as i64 + d).max(0) as usize;
+                let lines = self.file_lines();
+                self.file_sel = step(self.file_sel, d, lines);
             }
             // the panes below hold flowing text rather than entries: there is
             // nothing to select, only somewhere to be
@@ -472,6 +525,7 @@ impl App {
                 self.fs_sel = i;
                 // a different file starts at its own top, not where the last
                 // one happened to be scrolled to
+                self.file_sel = 0;
                 self.file_scroll = 0;
             }
             Pane::Body | Pane::Log | Pane::DiffBody | Pane::FileView => {}
@@ -858,6 +912,7 @@ impl App {
                 self.pane = pane_for_tab(self.tab);
             }
             KeyCode::Char('x') => self.open_dispatch(),
+            KeyCode::Char('E') => self.open_in_editor(),
             KeyCode::Char('o') if self.pane == Pane::FileTree => {
                 if let Some((true, path)) = self.fs_current().map(|e| (e.is_dir, e.path.clone()))
                     && !self.fs_open.remove(&path)
