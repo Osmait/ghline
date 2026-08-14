@@ -64,6 +64,26 @@ impl App {
             return;
         }
 
+        // Agents are about this machine, not about a repository, so they are
+        // answered before anything keyed by `owner/repo` gets a look. The
+        // picker needs them just as much as the tab does — it is a decision
+        // about which agent is free right now.
+        // The disk is walked once, the first time somewhere to send an issue
+        // is asked for. Doing it at startup would be work nobody asked for.
+        if self.dispatch_open && self.clones_state == Load::Idle {
+            self.clones_state = Load::Loading;
+            self.ask(Request::Scan);
+        }
+
+        let wants_agents = self.tab == crate::data::AGENTS_TAB || self.dispatch_open;
+        if wants_agents && self.agents_state == Load::Idle {
+            self.agents_state = Load::Loading;
+            self.ask(Request::Agents);
+        }
+        if self.tab == crate::data::AGENTS_TAB {
+            return;
+        }
+
         let key = self.repo_key();
         let tab = self.tab;
         if self
@@ -220,6 +240,15 @@ impl App {
         }
     }
 
+    /// Agents change state while you watch them, so the tab re-asks on the
+    /// heartbeat — but only while it is the tab being looked at, and never
+    /// while an answer is still on its way.
+    pub fn poll_agents(&mut self) {
+        if self.live() && self.tab == crate::data::AGENTS_TAB && self.agents_state == Load::Ready {
+            self.agents_state = Load::Idle;
+        }
+    }
+
     /// `r`: drops the active repo's caches so `ensure` asks for them again.
     pub fn refresh(&mut self) {
         if !self.live() {
@@ -238,6 +267,7 @@ impl App {
         }
         self.repos_state
             .insert(self.login().to_string(), Load::Idle);
+        self.agents_state = Load::Idle;
         if let Some(cur) = self.current() {
             let num = cur.num;
             self.diff_state.insert((key.clone(), num), Load::Idle);
@@ -267,6 +297,34 @@ impl App {
                 self.flash_warn(self.advice(&e));
                 self.accounts_state = Load::Failed(e.brief());
             }
+
+            Response::Dispatched { result } => {
+                self.busy = false;
+                match result {
+                    // The agent will take a while; the tab is where you watch
+                    // it, so its next poll should see the new state.
+                    Ok(()) => {
+                        self.flash_ok("sent");
+                        self.agents_state = Load::Idle;
+                    }
+                    Err(e) => self.flash_warn(self.advice(&e)),
+                }
+            }
+
+            Response::Scanned { index } => {
+                self.clones = index;
+                self.clones_state = Load::Ready;
+            }
+
+            Response::Agents { result } => match result {
+                Ok(agents) => {
+                    self.agents = agents;
+                    self.agents_state = Load::Ready;
+                }
+                Err(e) => {
+                    self.agents_state = Load::Failed(e.brief());
+                }
+            },
 
             Response::Repos { login, result } => match result {
                 Ok(mut repos) => {

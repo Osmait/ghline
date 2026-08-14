@@ -19,6 +19,9 @@ impl App {
         let mut panes = match self.view {
             View::Logs => vec![Pane::Tree, Pane::Log],
             View::Diff => vec![Pane::Files, Pane::DiffBody],
+            View::List if self.tab == crate::data::AGENTS_TAB => {
+                vec![Pane::Repos, Pane::Agents]
+            }
             View::List => vec![Pane::Repos, Pane::List],
             View::Detail => {
                 let issue = self
@@ -201,6 +204,99 @@ impl App {
         self.pane = panes[j as usize];
     }
 
+    /// `x`: opens the dispatch picker over the selected issue or PR.
+    pub fn open_dispatch(&mut self) {
+        if !self.live() {
+            self.flash_warn("dispatching needs live mode — demo data has no issues to send");
+            return;
+        }
+        if self.current().is_none() {
+            return;
+        }
+        // The list is only as fresh as the last look at it, and this is a
+        // decision about which agent is free right now.
+        self.agents_state = Load::Idle;
+        self.dispatch_open = true;
+        self.dispatch_sel = 0;
+        self.dispatch_scroll = 0;
+    }
+
+    /// Turns the highlighted destination into a confirmation.
+    pub fn dispatch_accept(&mut self) {
+        let dests = self.dispatch_dests();
+        let Some(dest) = dests.get(self.dispatch_sel).cloned() else {
+            return;
+        };
+        if let Some(why) = dest.refusal() {
+            self.flash_warn(why);
+            return;
+        }
+        let Some(cur) = self.current() else { return };
+        let repo = self.item_repo_key();
+        let (num, title, body) = (cur.num, cur.title.clone(), cur.body_text().to_string());
+        let kind = if cur.kind() == crate::data::Kind::Pr {
+            "pull"
+        } else {
+            "issues"
+        };
+        let url = format!("https://github.com/{repo}/{kind}/{num}");
+        let text = crate::config::render_prompt(
+            &crate::config::prompt_template(),
+            &repo,
+            num,
+            &title,
+            &url,
+            &body,
+        );
+
+        self.dispatch_open = false;
+        match dest {
+            crate::app::Dest::Running(a) => {
+                self.pending_fresh = None;
+                self.prompt = Some(Prompt::Dispatch {
+                    who: format!("{} in {}", a.kind, a.cwd),
+                    pane: a.pane,
+                    text,
+                });
+            }
+            crate::app::Dest::Fresh { kind, repo_root } => {
+                // The branch name is the issue, so a second dispatch of the
+                // same one collides loudly instead of quietly making a second
+                // worktree nobody asked for.
+                let branch = format!("issue-{num}");
+                self.prompt = Some(Prompt::Dispatch {
+                    who: format!("a new {kind} in a worktree of {repo_root}"),
+                    pane: String::new(),
+                    text,
+                });
+                self.pending_fresh = Some(crate::app::Fresh {
+                    repo_root,
+                    branch,
+                    label: format!("#{num} {title}"),
+                    kind,
+                });
+            }
+            crate::app::Dest::NotCloned(repo) => {
+                self.flash_warn(format!("{repo} is not cloned here — gh repo clone {repo}"));
+            }
+        }
+    }
+
+    fn dispatch_key(&mut self, ev: KeyEvent) {
+        let len = self.dispatch_dests().len();
+        match ev.code {
+            KeyCode::Esc | KeyCode::Char('q' | 'x') => self.dispatch_open = false,
+            KeyCode::Enter => self.dispatch_accept(),
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.dispatch_sel = (self.dispatch_sel + 1).min(len.saturating_sub(1));
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.dispatch_sel = self.dispatch_sel.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+
     /// Opens the theme picker, remembering what to go back to.
     pub fn open_themes(&mut self) {
         let current = crate::theme::current();
@@ -296,6 +392,10 @@ impl App {
                 let i = step(self.file_idx, d, self.diff_files().len());
                 self.select_in(pane, i);
             }
+            Pane::Agents => {
+                let i = step(self.agent_sel, d, self.agents_visible().len());
+                self.select_in(pane, i);
+            }
             // the panes below hold flowing text rather than entries: there is
             // nothing to select, only somewhere to be
             Pane::Body => self.scroll_detail(d),
@@ -337,6 +437,7 @@ impl App {
                 self.file_idx = i;
                 self.diff_scroll = 0;
             }
+            Pane::Agents => self.agent_sel = i,
             Pane::Body | Pane::Log | Pane::DiffBody => {}
         }
     }
@@ -346,7 +447,11 @@ impl App {
         self.tab = i.min(TABS.len() - 1);
         self.view = View::List;
         self.item = 0;
-        self.pane = Pane::List;
+        self.pane = if self.tab == crate::data::AGENTS_TAB {
+            Pane::Agents
+        } else {
+            Pane::List
+        };
     }
 
     /// Half a page or a whole one, on the panes that scroll.
@@ -398,7 +503,8 @@ impl App {
             Pane::Tree => self.pane = Pane::Log,
             Pane::Files => self.pane = Pane::DiffBody,
             Pane::Body => self.open_diff(0),
-            Pane::Log | Pane::DiffBody => {}
+            // an agent is a leaf: there is no deeper view of one here
+            Pane::Agents | Pane::Log | Pane::DiffBody => {}
         }
     }
 
@@ -416,6 +522,10 @@ impl App {
         }
         if self.finder_open {
             self.finder_open = false;
+            return;
+        }
+        if self.dispatch_open {
+            self.dispatch_open = false;
             return;
         }
 
@@ -587,6 +697,11 @@ impl App {
             return;
         }
 
+        if self.dispatch_open {
+            self.dispatch_key(ev);
+            return;
+        }
+
         if self.themes_open {
             let last = crate::theme::Theme::ALL.len() - 1;
             match ev.code {
@@ -689,14 +804,21 @@ impl App {
                 self.extra_lines = 0;
                 self.refresh();
             }
-            KeyCode::Char(c @ '1'..='3') => {
+            KeyCode::Char(c @ '1'..='4') => {
                 self.tab = c as usize - '1' as usize;
                 self.view = View::List;
                 self.item = 0;
                 self.item_scroll = 0;
-                self.pane = Pane::List;
                 self.check = 0;
+                // the Agents tab has its own pane, so landing on `List` would
+                // leave the focus on something that is not drawn
+                self.pane = if self.tab == TABS.len() - 1 {
+                    Pane::Agents
+                } else {
+                    Pane::List
+                };
             }
+            KeyCode::Char('x') => self.open_dispatch(),
             KeyCode::Char('o') if self.view == View::Logs => {
                 let tree = self.flat_tree();
                 if let Some(node) = tree.get(self.tree_sel_idx(tree.len())) {
@@ -757,6 +879,7 @@ impl App {
                 self.flash = None;
             }
         }
+        self.poll_agents();
         self.tick = self.tick.wrapping_add(1);
     }
 }

@@ -154,6 +154,72 @@ to it, because a pane that is not on screen is not a pane.
 checks to the logs, the tree to the output — and `esc` walks that same path
 back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 
+## Agents
+
+`4` is a fourth tab listing every coding agent [herdr](https://herdr.dev) is
+running: what it is, whether it is working, where, and what its title says it
+is doing. It re-asks on the heartbeat while you are looking at it, so a state
+change shows up without a keypress. This program appears in its own list when
+run inside herdr, and says `(this window)` so.
+
+`x` on an issue or pull request asks where to send it. Two kinds of
+destination in one list, because it is one question:
+
+- **an agent already running** — one call, `herdr agent prompt <pane>`;
+- **a new worktree** with claude, codex, opencode or pi — three chained calls,
+  branching `issue-<n>` off the checkout and starting the agent in it.
+
+Both go through the confirmation dialog, which shows the first lines of what
+would be sent. Merging works this way for the same reason: it makes something
+happen outside this program, so it should take a deliberate `y`.
+
+A destination that cannot take the issue is **listed with the reason** rather
+than hidden — knowing every agent is busy beats an empty box. An agent that is
+working is refused because typing into it mid-task loses its context; one
+stopped on a permission prompt is refused because it would read the task as the
+answer; and the window you are reading is refused because sending an issue to
+the program showing you the list is legal, useless and confusing.
+
+### Where the repository lives
+
+An agent needs a checkout, and this browses far more repositories than the
+machine holds — 143 on GitHub against 20 here, which makes "not cloned" the
+normal case rather than an edge one. So the picker has three outcomes, and says
+which one it is in: an agent is already there, the repository is cloned and can
+be branched from, or it is not on this disk and the answer is a `gh repo clone`
+you can copy.
+
+The index is built by walking a few roots and reading each git remote, not by
+matching directory names: a clone of `Osmait/sbql` in a folder called
+`sbql-experiment` is still that repository, and a folder called `sbql` that is
+a fork of someone else's is not. It walks two levels below each root, skips
+hidden directories, does not descend into a checkout it has already found, and
+stops at a budget rather than hanging on a root pointed somewhere enormous. It
+runs once, on the service thread, the first time you ask where something could
+go.
+
+### Settings
+
+Three keys in `~/.config/github-tui/config`, all optional:
+
+```
+prompt = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{body}
+agents = claude, codex, opencode, pi
+clone-roots = ~/orca, ~/Projects
+```
+
+`prompt` is what an agent is told; the placeholders are `{repo} {num} {title}
+{url} {body}`, and an unknown one is left as itself rather than blanked so a
+typo looks like a typo. The URL is in the default because an agent that can
+read the issue asks fewer questions. `agents` is what to offer for a new
+worktree — herdr decides what it can actually start, so an unsupported name
+comes back as herdr's own refusal rather than a guess at one.
+
+If a worktree is created and the agent then fails to start, the worktree is
+removed again. A half-built workspace would be worse than the failure: the next
+dispatch would collide with a branch that already exists, and you would have a
+workspace you never saw appear.
+
 ## The mouse
 
 It is there if you want it, and it adds nothing the keyboard cannot already do.

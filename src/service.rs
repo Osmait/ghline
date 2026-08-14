@@ -21,6 +21,28 @@ pub enum Request {
         repo: String,
         tab: usize,
     },
+    /// Walk the disk for local checkouts.
+    Scan,
+    /// Hand a rendered prompt to the agent in `pane`.
+    Dispatch {
+        pane: String,
+        text: String,
+    },
+    /// Branch a worktree, start an agent in it, and hand it the task.
+    ///
+    /// One request rather than three because the middle of the chain is not a
+    /// state worth surfacing: a worktree with no agent in it is litter, and
+    /// the handler cleans it up rather than leaving it.
+    DispatchFresh {
+        repo_root: String,
+        branch: String,
+        label: String,
+        kind: String,
+        text: String,
+    },
+    /// Every coding agent herdr is running. Not about a repository, so it
+    /// carries nothing.
+    Agents,
     /// Workflow runs gathered from several repositories at once.
     ///
     /// Separate from `List` because there is no cross-repository Actions API:
@@ -79,6 +101,15 @@ pub enum Request {
 
 pub enum Response {
     Accounts(Result<Vec<Account>, Error>),
+    Agents {
+        result: Result<Vec<crate::data::Agent>, Error>,
+    },
+    Dispatched {
+        result: Result<(), Error>,
+    },
+    Scanned {
+        index: crate::clones::Index,
+    },
     Repos {
         login: String,
         result: Result<Vec<Repo>, Error>,
@@ -188,6 +219,28 @@ fn handle(req: Request) -> Response {
             Response::List { repo, tab, result }
         }
 
+        Request::Dispatch { pane, text } => Response::Dispatched {
+            result: crate::herdr::prompt(&pane, &text),
+        },
+
+        Request::DispatchFresh {
+            repo_root,
+            branch,
+            label,
+            kind,
+            text,
+        } => Response::Dispatched {
+            result: fresh(&repo_root, &branch, &label, &kind, &text),
+        },
+
+        Request::Scan => Response::Scanned {
+            index: crate::clones::scan(),
+        },
+
+        Request::Agents => Response::Agents {
+            result: crate::herdr::agents(),
+        },
+
         Request::AllRuns { key, repos } => Response::List {
             repo: key,
             tab: 2,
@@ -296,4 +349,24 @@ fn handle(req: Request) -> Response {
             }
         }
     }
+}
+
+/// worktree → agent → prompt, undoing the worktree if either of the last two
+/// fails.
+///
+/// Leaving a half-built workspace behind would be worse than the failure: the
+/// next dispatch would offer a branch that already exists, and the reader
+/// would have a workspace they did not ask for and did not see appear.
+fn fresh(repo_root: &str, branch: &str, label: &str, kind: &str, text: &str) -> Result<(), Error> {
+    let pane = crate::herdr::create_worktree(repo_root, branch, label)?;
+
+    if let Err(e) = crate::herdr::start_agent(&pane, kind) {
+        let _ = crate::herdr::remove_worktree(&pane);
+        return Err(e);
+    }
+    if let Err(e) = crate::herdr::prompt(&pane, text) {
+        let _ = crate::herdr::remove_worktree(&pane);
+        return Err(e);
+    }
+    Ok(())
 }

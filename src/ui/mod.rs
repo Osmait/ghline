@@ -1,8 +1,10 @@
 //! Render. Each module reproduces one region of the design.
 
+mod agents;
 mod confirm;
 mod detail;
 mod diff;
+mod dispatch;
 mod finder;
 mod header;
 mod list;
@@ -333,6 +335,9 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     if app.finder_open {
         finder::draw(buf, area, app);
     }
+    if app.dispatch_open {
+        dispatch::draw(buf, area, app);
+    }
     if app.themes_open {
         overlay::themes(buf, area, app);
     }
@@ -371,6 +376,7 @@ fn draw_content(buf: &mut Buffer, area: Rect, app: &mut App) {
     };
 
     match app.view {
+        View::List if app.tab == crate::data::AGENTS_TAB => agents::draw(buf, inner, app),
         View::List => list::draw(buf, inner, app),
         View::Detail => detail::draw(buf, inner, app),
         View::Diff | View::Logs => {}

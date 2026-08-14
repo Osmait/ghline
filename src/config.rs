@@ -109,6 +109,64 @@ pub fn save_theme(theme: Theme) -> io::Result<()> {
     set(THEME, theme.key())
 }
 
+// ------------------------------------------------------------------ agents
+
+const PROMPT: &str = "prompt";
+
+/// What an agent is told when an issue is handed to it.
+///
+/// A setting rather than a constant because what a coding agent needs in its
+/// first message is a matter of taste and will change. The URL is in the
+/// default on purpose: an agent that can read the issue itself asks fewer
+/// questions than one working from a paraphrase.
+const DEFAULT_PROMPT: &str = "Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{body}";
+
+pub fn prompt_template() -> String {
+    load()
+        .get(PROMPT)
+        .map(|t| t.replace("\\n", "\n"))
+        .unwrap_or_else(|| DEFAULT_PROMPT.replace("\\n", "\n"))
+}
+
+/// Fills the template in. An unknown placeholder is left alone rather than
+/// blanked, so a typo shows up as itself instead of vanishing.
+pub fn render_prompt(
+    template: &str,
+    repo: &str,
+    num: i64,
+    title: &str,
+    url: &str,
+    body: &str,
+) -> String {
+    template
+        .replace("{repo}", repo)
+        .replace("{num}", &num.to_string())
+        .replace("{title}", title)
+        .replace("{url}", url)
+        .replace("{body}", body)
+}
+
+const AGENTS: &str = "agents";
+
+/// The agents offered for a fresh worktree.
+///
+/// A setting because herdr decides what it can start, not this program, and
+/// the list grows. An unsupported name is not rejected here — herdr's own
+/// refusal is a better message than a guess at one.
+const DEFAULT_AGENTS: &str = "claude, codex, opencode, pi";
+
+pub fn agent_kinds() -> Vec<String> {
+    load()
+        .get(AGENTS)
+        .cloned()
+        .unwrap_or_else(|| DEFAULT_AGENTS.to_string())
+        .split(',')
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -172,6 +230,50 @@ mod tests {
     fn every_theme_survives_a_round_trip_through_its_key() {
         for t in Theme::ALL {
             assert_eq!(Theme::from_key(t.key()), Some(t), "{}", t.name());
+        }
+    }
+
+    #[test]
+    fn the_default_prompt_carries_what_an_agent_needs() {
+        let out = render_prompt(
+            &DEFAULT_PROMPT.replace("\\n", "\n"),
+            "Osmait/sbql",
+            14,
+            "Fix the parser",
+            "https://github.com/Osmait/sbql/issues/14",
+            "It breaks on empty input.",
+        );
+        for expected in [
+            "Osmait/sbql#14",
+            "Fix the parser",
+            "https://github.com/Osmait/sbql/issues/14",
+            "It breaks on empty input.",
+        ] {
+            assert!(out.contains(expected), "{expected} missing from:\n{out}");
+        }
+        assert!(out.contains('\n'), "the escaped newlines became real ones");
+    }
+
+    #[test]
+    fn a_placeholder_that_is_not_a_placeholder_survives() {
+        // a typo should look like a typo, not like an empty string
+        let out = render_prompt("{repo} {nope}", "a/b", 1, "t", "u", "body");
+        assert_eq!(out, "a/b {nope}");
+    }
+
+    #[test]
+    fn a_body_containing_braces_is_not_re_expanded() {
+        // substitution runs once per placeholder, left to right, so a body
+        // that happens to contain `{repo}` stays as it was written
+        let out = render_prompt("{body}", "a/b", 1, "t", "u", "see {repo}");
+        assert_eq!(out, "see {repo}");
+    }
+
+    #[test]
+    fn the_default_agent_list_is_the_ones_on_this_machine() {
+        let kinds = agent_kinds();
+        for k in ["claude", "codex", "opencode", "pi"] {
+            assert!(kinds.iter().any(|x| x == k), "{k} missing from {kinds:?}");
         }
     }
 

@@ -47,6 +47,66 @@ impl App {
         self.repo().is_some_and(crate::data::Repo::is_all)
     }
 
+    /// Everywhere the selected issue could go, running agents first.
+    ///
+    /// Ordered by what you are most likely to want: an agent that is free, an
+    /// agent that is busy, then the fresh worktrees. The refused ones stay in
+    /// the list because knowing *why* nothing is available beats an empty box.
+    pub fn dispatch_dests(&self) -> Vec<crate::app::Dest> {
+        use crate::app::Dest;
+
+        let mut out: Vec<Dest> = self.agents.iter().cloned().map(Dest::Running).collect();
+        out.sort_by_key(|d| u8::from(d.refusal().is_some()));
+
+        // Then the fresh worktrees, which need somewhere to branch from. The
+        // three outcomes of the plan are exactly these two arms plus the
+        // agents above: open in herdr, cloned here, or nowhere at all.
+        let repo = self.item_repo_key();
+        if let Some(root) = self.clone_path(&repo) {
+            for kind in crate::config::agent_kinds() {
+                out.push(Dest::Fresh {
+                    kind,
+                    repo_root: root.clone(),
+                });
+            }
+        } else if self.clones_state == Load::Ready {
+            out.push(Dest::NotCloned(repo));
+        }
+        // otherwise the disk is still being walked: offering nothing beats
+        // offering a lie about what is here
+
+        out
+    }
+
+    /// Where a repository is checked out, if it is.
+    pub fn clone_path(&self, repo: &str) -> Option<String> {
+        self.clones
+            .get(repo)
+            .map(|p| p.to_string_lossy().into_owned())
+    }
+
+    /// The agents worth showing under the current selection.
+    ///
+    /// On a single repository, only the agents working inside it — an agent in
+    /// some other project is not what you came to this repository to see. Under
+    /// the gathering row, all of them. Matched on the path ending in the
+    /// repository's name, which is what a checkout looks like and also what a
+    /// worktree of it looks like.
+    pub fn agents_visible(&self) -> Vec<&crate::data::Agent> {
+        let all = self.is_all();
+        let name = self.repo_name().to_string();
+        self.agents
+            .iter()
+            .filter(|a| all || a.cwd.split('/').any(|seg| seg == name))
+            .filter(|a| self.matches(&a.title) || self.matches(&a.cwd) || self.matches(&a.kind))
+            .collect()
+    }
+
+    pub fn agent_idx(&self) -> usize {
+        self.agent_sel
+            .min(self.agents_visible().len().saturating_sub(1))
+    }
+
     /// The `owner/repo` of every repository that has any workflows, which is
     /// the only set worth asking for runs.
     pub fn workflow_repos(&self) -> Vec<String> {

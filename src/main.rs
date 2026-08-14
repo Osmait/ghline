@@ -2,6 +2,7 @@
 
 mod actions;
 mod app;
+mod clones;
 mod config;
 mod data;
 mod demo;
@@ -10,6 +11,7 @@ mod error;
 mod finder;
 mod fuzzy;
 mod gh;
+mod herdr;
 mod service;
 mod snapshot;
 mod theme;

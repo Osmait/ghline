@@ -27,6 +27,7 @@ pub enum Target {
     Finder,
     Themes,
     Accounts,
+    Dispatch,
 }
 
 /// A rectangle the last frame drew, and enough about its contents to map a

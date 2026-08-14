@@ -1355,3 +1355,249 @@ mod all_repos {
         assert_eq!(app.lists[&key][0].body, "straight in");
     }
 }
+
+// -------------------------------------------------------------- dispatching
+//
+// Sending an issue makes a machine start working. The rules about where it
+// may not go are the part worth pinning down.
+
+mod dispatch {
+    use super::*;
+    use crate::app::Dest;
+    use crate::data::{Agent, AgentStatus};
+
+    fn agent(kind: &str, status: AgentStatus, focused: bool) -> Agent {
+        Agent {
+            kind: kind.into(),
+            status,
+            cwd: format!("/home/x/orca/{kind}-work"),
+            pane: "wA:p1".into(),
+            title: "doing something".into(),
+            focused,
+        }
+    }
+
+    fn with(agents: Vec<Agent>) -> App {
+        let mut app = demo();
+        app.agents = agents;
+        app
+    }
+
+    #[test]
+    fn an_idle_agent_will_take_it() {
+        let d = Dest::Running(agent("claude", AgentStatus::Idle, false));
+        assert_eq!(d.refusal(), None);
+    }
+
+    #[test]
+    fn a_working_agent_will_not() {
+        let d = Dest::Running(agent("claude", AgentStatus::Working, false));
+        assert!(
+            d.refusal().is_some_and(|w| w.contains("context")),
+            "and it should say why"
+        );
+    }
+
+    #[test]
+    fn an_agent_stopped_on_a_question_will_not() {
+        // the task would be read as the answer to the permission prompt
+        let d = Dest::Running(agent("claude", AgentStatus::Blocked, false));
+        assert!(d.refusal().is_some());
+    }
+
+    #[test]
+    fn an_agent_in_an_unknown_state_will_not() {
+        assert!(
+            Dest::Running(agent("pi", AgentStatus::Unknown, false))
+                .refusal()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn the_window_showing_the_list_will_not_take_it() {
+        // this program appears in its own agent list; sending to it is legal,
+        // useless, and confusing
+        let d = Dest::Running(agent("claude", AgentStatus::Idle, true));
+        assert!(
+            d.refusal().is_some_and(|w| w.contains("this window")),
+            "being focused beats being idle"
+        );
+    }
+
+    #[test]
+    fn the_ones_that_can_take_it_are_offered_first() {
+        let app = with(vec![
+            agent("a", AgentStatus::Working, false),
+            agent("b", AgentStatus::Idle, false),
+            agent("c", AgentStatus::Working, false),
+            agent("d", AgentStatus::Done, false),
+        ]);
+        let dests = app.dispatch_dests();
+        let free: Vec<bool> = dests.iter().map(|d| d.refusal().is_none()).collect();
+        assert_eq!(free, vec![true, true, false, false]);
+    }
+
+    #[test]
+    fn a_refused_destination_is_listed_rather_than_hidden() {
+        let app = with(vec![agent("a", AgentStatus::Working, false)]);
+        assert_eq!(
+            app.dispatch_dests().len(),
+            1,
+            "\"everything is busy\" beats an empty box"
+        );
+    }
+
+    #[test]
+    fn accepting_a_refused_destination_does_not_send_it() {
+        let mut app = with(vec![agent("a", AgentStatus::Working, false)]);
+        app.dispatch_open = true;
+        app.dispatch_sel = 0;
+        app.dispatch_accept();
+
+        assert!(app.prompt.is_none(), "nothing was queued");
+        assert!(app.dispatch_open, "and the picker stayed open to say so");
+    }
+
+    #[test]
+    fn accepting_a_free_destination_asks_first() {
+        let mut app = with(vec![agent("claude", AgentStatus::Idle, false)]);
+        app.dispatch_open = true;
+        app.dispatch_accept();
+
+        assert!(!app.dispatch_open, "the picker closed");
+        match app.prompt {
+            Some(Prompt::Dispatch {
+                ref pane, ref text, ..
+            }) => {
+                assert_eq!(
+                    pane, "wA:p1",
+                    "addressed by pane, which is what herdr takes"
+                );
+                assert!(text.contains('#'), "the rendered prompt names the issue");
+            }
+            _ => panic!("a confirmation should be pending, not a send"),
+        }
+    }
+
+    // --- the three outcomes of "where would it even go" ---
+
+    fn scanned(app: &mut App, slug: Option<&str>) {
+        app.clones_state = Load::Ready;
+        if let Some(slug) = slug {
+            app.clones
+                .insert(slug.into(), std::path::PathBuf::from("/home/x/orca/thing"));
+        }
+    }
+
+    #[test]
+    fn a_cloned_repository_offers_a_worktree_per_agent() {
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        scanned(&mut app, Some(&repo));
+
+        let fresh: Vec<String> = app
+            .dispatch_dests()
+            .iter()
+            .filter_map(|d| match d {
+                Dest::Fresh { kind, .. } => Some(kind.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(fresh, crate::config::agent_kinds());
+    }
+
+    #[test]
+    fn a_repository_that_is_not_here_says_so_instead_of_offering_nothing() {
+        let mut app = with(vec![]);
+        scanned(&mut app, None);
+
+        match app.dispatch_dests().as_slice() {
+            [Dest::NotCloned(repo)] => {
+                assert_eq!(*repo, app.item_repo_key());
+            }
+            other => panic!("expected one NotCloned, got {} rows", other.len()),
+        }
+    }
+
+    #[test]
+    fn nothing_is_offered_while_the_disk_is_still_being_walked() {
+        // an empty index and an unfinished scan look the same; claiming the
+        // repository is missing before looking would be a lie
+        let mut app = with(vec![]);
+        app.clones_state = Load::Loading;
+        assert!(app.dispatch_dests().is_empty());
+    }
+
+    #[test]
+    fn a_repository_that_is_not_here_cannot_be_dispatched_to() {
+        let mut app = with(vec![]);
+        scanned(&mut app, None);
+        app.dispatch_open = true;
+        app.dispatch_sel = 0;
+        app.dispatch_accept();
+
+        assert!(app.prompt.is_none());
+        assert!(app.pending_fresh.is_none());
+    }
+
+    #[test]
+    fn choosing_a_worktree_carries_the_plan_the_service_will_need() {
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        scanned(&mut app, Some(&repo));
+        app.dispatch_open = true;
+        // past the agents (there are none here) onto the first worktree
+        app.dispatch_sel = 0;
+        app.dispatch_accept();
+
+        let plan = app.pending_fresh.expect("a worktree needs a plan");
+        assert_eq!(plan.repo_root, "/home/x/orca/thing");
+        assert!(
+            plan.branch.starts_with("issue-"),
+            "the branch names the issue, so a second dispatch collides loudly"
+        );
+        assert!(app.prompt.is_some(), "and it still asks first");
+    }
+
+    #[test]
+    fn choosing_a_running_agent_clears_any_earlier_worktree_plan() {
+        // open the picker twice, pick a worktree then an agent: the stale plan
+        // would otherwise turn the second send into a worktree
+        let mut app = with(vec![agent("claude", AgentStatus::Idle, false)]);
+        let repo = app.item_repo_key();
+        scanned(&mut app, Some(&repo));
+
+        app.dispatch_open = true;
+        app.dispatch_sel = 1; // the first worktree, after the idle agent
+        app.dispatch_accept();
+        assert!(app.pending_fresh.is_some());
+
+        app.cancel_prompt();
+        app.dispatch_open = true;
+        app.dispatch_sel = 0; // the agent
+        app.dispatch_accept();
+        assert!(app.pending_fresh.is_none(), "the plan did not survive");
+    }
+
+    #[test]
+    fn cancelling_forgets_the_worktree_plan() {
+        let mut app = with(vec![]);
+        let repo = app.item_repo_key();
+        scanned(&mut app, Some(&repo));
+        app.dispatch_open = true;
+        app.dispatch_accept();
+        app.cancel_prompt();
+
+        assert!(app.pending_fresh.is_none());
+        assert!(app.prompt.is_none());
+    }
+
+    #[test]
+    fn the_picker_does_not_open_on_demo_data() {
+        let mut app = demo();
+        app.open_dispatch();
+        assert!(!app.dispatch_open);
+        assert!(app.flash.is_some(), "and it says why");
+    }
+}

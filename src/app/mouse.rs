@@ -55,7 +55,11 @@ impl App {
 
     /// Is something up that owns the input while it is there?
     fn modal_open(&self) -> bool {
-        self.finder_open || self.themes_open || self.accounts_open || self.help_open
+        self.finder_open
+            || self.themes_open
+            || self.accounts_open
+            || self.help_open
+            || self.dispatch_open
     }
 
     fn click(&mut self, col: u16, row: u16, now: Instant) {
@@ -72,7 +76,7 @@ impl App {
         if self.modal_open()
             && !matches!(
                 region.map(|r| r.target),
-                Some(Target::Finder | Target::Themes | Target::Accounts)
+                Some(Target::Finder | Target::Themes | Target::Accounts | Target::Dispatch)
             )
         {
             self.back();
@@ -109,6 +113,14 @@ impl App {
                     self.acc_sel = i;
                     if repeat {
                         self.pick_account(i);
+                    }
+                }
+            }
+            Target::Dispatch => {
+                if let Some(i) = index {
+                    self.dispatch_sel = i;
+                    if repeat {
+                        self.dispatch_accept();
                     }
                 }
             }
@@ -160,6 +172,9 @@ impl App {
             }
             Target::Accounts => {
                 self.acc_sel = step_sel(self.acc_sel, d, self.accounts.len());
+            }
+            Target::Dispatch => {
+                self.dispatch_sel = step_sel(self.dispatch_sel, d, self.dispatch_dests().len());
             }
             // a tab bar is one row tall; there is nothing to scroll through
             Target::Tab(_) => {}

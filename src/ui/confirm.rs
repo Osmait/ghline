@@ -13,6 +13,12 @@ use crate::data::ReviewState;
 use crate::theme;
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
+    // Dispatching is not about a pull request, so it does not fit the layout
+    // below and does not need a selection to still be there.
+    if let Prompt::Dispatch { who, text, .. } = prompt {
+        dispatch(buf, area, who, text);
+        return;
+    }
     let Some(cur) = app.current() else { return };
     let pr = cur.as_pr();
     scrim(buf, area);
@@ -23,6 +29,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         Prompt::Close => ("CLOSE PULL REQUEST", theme::yellow()),
         Prompt::Reopen => ("REOPEN PULL REQUEST", theme::green()),
         Prompt::DeleteBranch { .. } => ("DELETE BRANCH", theme::red()),
+        // drawn above, before the selection is needed
+        Prompt::Dispatch { .. } => return,
     };
 
     let height = if is_merge { 12 } else { 7 };
@@ -217,4 +225,53 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             }
         }
     }
+}
+
+/// "Send this to that agent?", with the first lines of what it would receive.
+///
+/// The preview is the point. This starts a machine working somewhere outside
+/// this program, and the cheapest way to catch a template that renders badly
+/// is to show what is about to be sent.
+fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
+    scrim(buf, area);
+
+    let accent = theme::cyan();
+    let width = area.width.saturating_sub(8).min(76);
+    let preview: Vec<String> = super::wrap(text, width.saturating_sub(6) as usize)
+        .into_iter()
+        .take(6)
+        .collect();
+    let modal = centered(area, width, preview.len() as u16 + 8);
+    frame(buf, modal, accent);
+
+    let base = Style::default().bg(theme::panel());
+    let x = modal.x + 2;
+    let max = modal.right() - 2;
+
+    put(buf, x, modal.y + 1, max, "SEND TO AGENT", base.fg(accent));
+    put_right(
+        buf,
+        max,
+        modal.y + 1,
+        "y confirm · esc cancel",
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, modal, modal.y + 2, accent);
+
+    let mut y = modal.y + 3;
+    put_trunc(buf, x, y, max, who, base.fg(theme::bright()));
+    y += 2;
+    for line in &preview {
+        put_trunc(buf, x + 2, y, max, line, base.fg(theme::dimmer()));
+        y += 1;
+    }
+    rule(buf, modal, modal.bottom() - 2, accent);
+    put(
+        buf,
+        x,
+        modal.bottom() - 1,
+        max,
+        "it starts working immediately",
+        base.fg(theme::dimmer()),
+    );
 }

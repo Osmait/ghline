@@ -22,6 +22,17 @@ pub enum Prompt {
         num: i64,
         branch: String,
     },
+    /// Hand an issue to a coding agent. Unlike the others this is not about a
+    /// pull request at all, and it carries everything it needs: by the time it
+    /// is confirmed the selection may have been asked to move.
+    Dispatch {
+        /// Shown in the dialog: `claude in orca/sbql/error-check`.
+        who: String,
+        /// The herdr pane to address.
+        pane: String,
+        /// The rendered prompt, already filled in.
+        text: String,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -111,6 +122,26 @@ impl App {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
+        // dispatching carries everything it needs and has no pull request
+        // behind it, so it never reaches the extraction below
+        if let Prompt::Dispatch { who, pane, text } = prompt {
+            self.busy = true;
+            self.flash_ok(format!("sending to {who}…"));
+            // A fresh worktree needs three calls chained; an agent that is
+            // already there needs one. Which it is was decided in the picker.
+            match self.pending_fresh.take() {
+                Some(f) => self.send(Request::DispatchFresh {
+                    repo_root: f.repo_root,
+                    branch: f.branch,
+                    label: f.label,
+                    kind: f.kind,
+                    text,
+                }),
+                None => self.send(Request::Dispatch { pane, text }),
+            }
+            return;
+        }
+
         // deleting a branch carries its own data; everything else acts on the
         // PR selected right now
         let (num, branch) = match &prompt {
@@ -158,6 +189,8 @@ impl App {
                 self.flash_ok(format!("deleting {branch}…"));
                 self.send(Request::DeleteBranch { repo, branch });
             }
+            // handled before the pull request data is gathered
+            Prompt::Dispatch { .. } => {}
         }
     }
 
@@ -200,10 +233,15 @@ impl App {
                 }
                 self.flash_ok(format!("deleted branch {branch}"));
             }
+            // never confirmed through the demo path: it acts on this
+            // machine, which is just as real in demo mode
+            Prompt::Dispatch { .. } => {}
         }
     }
 
     pub fn cancel_prompt(&mut self) {
+        // a plan for a worktree only outlives the question it was asked with
+        self.pending_fresh = None;
         if self.prompt.take().is_some() {
             self.flash_warn("cancelled");
         }

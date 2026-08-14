@@ -92,6 +92,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             format!("j/k scroll · ^d/^u page · h repos{right} · esc back{pr_keys}")
         }
         Pane::Checks => format!("j/k check · enter logs · h body · esc back{pr_keys}"),
+        Pane::Agents => "j/k agent · 1/2/3/4 tabs · / filter · r refresh".to_string(),
         Pane::Tree => "j/k node · o fold · enter/l log · esc back".to_string(),
         Pane::Log => "j/k scroll · f follow · / filter · e first error · h jobs · esc".to_string(),
         Pane::Files => "j/k file · enter/l diff · s split · w ignore ws · esc back".to_string(),
@@ -112,6 +113,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Pane::Log => format!("+{}", app.log_scroll),
         Pane::Files => format!("{}/{}", app.file_idx() + 1, app.diff_files().len()),
         Pane::DiffBody => format!("+{}", app.diff_scroll),
+        Pane::Agents => {
+            let n = app.agents_visible().len();
+            format!("{}/{}", app.agent_idx() + usize::from(n > 0), n)
+        }
         Pane::List => {
             let items = app.visible();
             format!("{}/{}", app.item_idx(items.len()) + 1, items.len())

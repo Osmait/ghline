@@ -89,12 +89,16 @@ pub fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {
         x += cell.width;
     }
 
-    // filter label on the right
-    let items = app.visible();
-    let filter_label = if app.filter.is_empty() {
-        format!("{} items · / to filter", items.len())
+    // filter label on the right, counting whatever the active tab is showing
+    let count = if app.tab == crate::data::AGENTS_TAB {
+        app.agents_visible().len()
     } else {
-        format!("/{}  {} match", app.filter, items.len())
+        app.visible().len()
+    };
+    let filter_label = if app.filter.is_empty() {
+        format!("{count} items · / to filter")
+    } else {
+        format!("/{}  {count} match", app.filter)
     };
     // omitted if it would collide with the last tab
     if filter_label.width() as u16 + 2 <= area.right().saturating_sub(x + 2) {

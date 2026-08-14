@@ -78,6 +78,87 @@ impl std::fmt::Display for Status {
     }
 }
 
+/// What a coding agent is doing, as herdr reports it.
+///
+/// Kept apart from `Status` even though `working` and `running` rhyme: an
+/// agent waiting for you to answer a permission prompt has no equivalent in
+/// the issue/PR/CI vocabulary, and conflating the two would lose exactly the
+/// state you most want to see.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum AgentStatus {
+    /// Busy on a task.
+    Working,
+    /// Waiting for something to do.
+    Idle,
+    /// Stopped on a question — a permission prompt, a choice.
+    Blocked,
+    /// Finished what it was asked.
+    Done,
+    #[default]
+    Unknown,
+}
+
+impl AgentStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Working => "working",
+            Self::Idle => "idle",
+            Self::Blocked => "blocked",
+            Self::Done => "done",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Self {
+        match raw {
+            "working" => Self::Working,
+            "idle" => Self::Idle,
+            "blocked" => Self::Blocked,
+            "done" => Self::Done,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Can it be given something new to do?
+    ///
+    /// Typing into an agent mid-task is how you lose its context, and one
+    /// stopped on a permission prompt would read the prompt as the answer.
+    pub fn is_free(self) -> bool {
+        matches!(self, Self::Idle | Self::Done)
+    }
+}
+
+impl std::fmt::Display for AgentStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// A coding agent herdr is running.
+#[derive(Clone)]
+pub struct Agent {
+    /// `claude`, `codex`, `pi` — what is running, not what it is called.
+    pub kind: String,
+    pub status: AgentStatus,
+    /// Where it is working. The only clue to which repository it is in.
+    pub cwd: String,
+    /// `wK:p1`. This is the dispatch target; herdr does not accept names.
+    pub pane: String,
+    /// The terminal title, which for most agents is a summary of the task.
+    pub title: String,
+    /// True for the pane the reader is looking at — which, when this program
+    /// is run from inside herdr, is this program.
+    pub focused: bool,
+}
+
+impl Agent {
+    /// The last segment of `cwd`, which is the repository often enough to be
+    /// worth showing and never worth trusting.
+    pub fn where_short(&self) -> &str {
+        self.cwd.rsplit('/').next().unwrap_or(&self.cwd)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Issue,
@@ -550,7 +631,12 @@ pub struct Tab {
     pub key: &'static str,
 }
 
-pub const TABS: [Tab; 3] = [
+/// Index of the Agents tab, which is unlike the other three: it is about this
+/// machine rather than about a repository, so nothing keyed by `owner/repo`
+/// applies to it.
+pub const AGENTS_TAB: usize = 3;
+
+pub const TABS: [Tab; 4] = [
     Tab {
         id: "issues",
         label: "Issues",
@@ -565,6 +651,11 @@ pub const TABS: [Tab; 3] = [
         id: "actions",
         label: "Actions",
         key: "3",
+    },
+    Tab {
+        id: "agents",
+        label: "Agents",
+        key: "4",
     },
 ];
 
@@ -607,6 +698,8 @@ pub const HELP: &[(&str, &str)] = &[
     ("click", "focus pane, select row"),
     ("2x click", "open it"),
     ("wheel", "scroll under pointer"),
+    ("4", "agents running here"),
+    ("x", "send this to an agent"),
 ];
 
 /// A log line already split by job and step.

@@ -85,8 +85,77 @@ pub enum Pane {
     Log,
     /// The changed-files list.
     Files,
+    /// The list of running agents.
+    Agents,
     /// The diff contents.
     DiffBody,
+}
+
+/// Somewhere an issue can be sent.
+#[derive(Clone)]
+pub enum Dest {
+    /// An agent already running, addressed by the pane it lives in.
+    Running(crate::data::Agent),
+    /// A fresh worktree of a local clone, with a new agent started in it.
+    Fresh {
+        /// `claude`, `codex`, … — what to start.
+        kind: String,
+        /// The checkout to branch from.
+        repo_root: String,
+    },
+    /// The repository is not on this disk, so nothing can be started in it.
+    /// Listed rather than omitted, because "clone it first" is an answer and
+    /// a shorter list is not.
+    NotCloned(String),
+}
+
+impl Dest {
+    pub fn title(&self) -> String {
+        match self {
+            Self::Running(a) => format!("{}  ·  {}", a.kind, a.where_short()),
+            Self::Fresh { kind, .. } => format!("new worktree with {kind}"),
+            Self::NotCloned(repo) => format!("{repo} is not on this machine"),
+        }
+    }
+
+    pub fn detail(&self) -> String {
+        match self {
+            Self::Running(a) => format!("{}   {}", a.cwd, a.pane),
+            Self::Fresh { repo_root, .. } => repo_root.clone(),
+            Self::NotCloned(repo) => format!("gh repo clone {repo}"),
+        }
+    }
+
+    /// Why this destination cannot take the issue, if it cannot.
+    ///
+    /// Returned rather than filtered so the row is still listed: "claude is
+    /// busy" is a more useful answer than a list that quietly leaves it out.
+    pub fn refusal(&self) -> Option<String> {
+        match self {
+            Self::Running(a) if a.focused => {
+                Some("this window — it is the one showing you this list".into())
+            }
+            Self::Running(a) if !a.status.is_free() => Some(format!(
+                "{} — interrupting would lose its context",
+                a.status
+            )),
+            Self::NotCloned(_) => Some("an agent needs a checkout — clone it and try again".into()),
+            _ => None,
+        }
+    }
+}
+
+/// The half of a fresh dispatch that the confirmation dialog has no use for.
+///
+/// `Prompt::Dispatch` carries what the reader is being asked about; this
+/// carries what the service needs if they say yes. Kept apart so the dialog
+/// stays about the question.
+#[derive(Clone)]
+pub struct Fresh {
+    pub repo_root: String,
+    pub branch: String,
+    pub label: String,
+    pub kind: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -205,6 +274,23 @@ pub struct App {
     pub detail_scroll: usize,
     /// True height of the scrollable pane, which only the render knows.
     pub detail_height: u16,
+    /// Every agent herdr is running, and whether we have asked yet. Not keyed
+    /// by repository: agents belong to the machine, not to a repo.
+    pub agents: Vec<crate::data::Agent>,
+    pub agents_state: Load,
+    /// `owner/repo` → checkout, built by walking the disk once.
+    pub clones: crate::clones::Index,
+    pub clones_state: Load,
+    /// Set when the pending confirmation is for a worktree rather than an
+    /// agent that already exists.
+    pub pending_fresh: Option<Fresh>,
+    /// The dispatch picker, open over an issue or pull request.
+    pub dispatch_open: bool,
+    pub dispatch_sel: usize,
+    pub dispatch_scroll: usize,
+    /// Selected row of the Agents tab.
+    pub agent_sel: usize,
+    pub agent_scroll: usize,
     /// What the last frame drew and where, for the mouse to aim at. Rebuilt
     /// every frame; empty before the first one, which is why a click that
     /// arrives before a render simply does nothing.
@@ -304,6 +390,16 @@ impl App {
             diff_scroll: 0,
             detail_scroll: 0,
             detail_height: 10,
+            clones: crate::clones::Index::new(),
+            clones_state: Load::Idle,
+            pending_fresh: None,
+            dispatch_open: false,
+            dispatch_sel: 0,
+            dispatch_scroll: 0,
+            agents: Vec::new(),
+            agents_state: Load::Idle,
+            agent_sel: 0,
+            agent_scroll: 0,
             hits: Vec::new(),
             last_click: None,
         }
@@ -330,6 +426,8 @@ impl App {
             || self.diff_state.values().any(Load::is_loading)
             || self.detail_state.values().any(Load::is_loading)
             || self.finder_state.is_loading()
+            || self.agents_state.is_loading()
+            || self.clones_state.is_loading()
     }
 
     // --- selectores ---
