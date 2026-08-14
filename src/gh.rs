@@ -204,6 +204,7 @@ const REPO_QUERY: &str = r#"query($login:String!){
         primaryLanguage{ name }
         issues(states:OPEN){ totalCount }
         pullRequests(states:OPEN){ totalCount }
+        object(expression:"HEAD:.github/workflows"){ ... on Tree { entries { name } } }
       }
     }
   }
@@ -252,6 +253,8 @@ pub fn repos(login: &str) -> Res<Vec<Repo>> {
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0)
                 .to_string(),
+            // a tree is only there when the directory is
+            has_workflows: r.pointer("/object/entries").is_some(),
         })
         .collect())
 }
@@ -836,6 +839,241 @@ pub fn delete_branch(repo: &str, branch: &str) -> Res<()> {
         &format!("repos/{repo}/git/refs/heads/{branch}"),
     ])
     .map(|_| ())
+}
+
+// ------------------------------------------------------- todos los repos
+//
+// The "all repositories" pseudo-repo. Issues and pull requests come from one
+// GraphQL search each — the REST search would not carry the diff counts a row
+// needs, and one query beats one per repository by a wide margin.
+
+/// Issues and pull requests share a search; only the fragment differs.
+const ALL_QUERY: &str = r#"query($q:String!){
+  search(query:$q, type:ISSUE, first:60){
+    nodes{
+      ... on Issue {
+        number title state createdAt
+        author{ login }
+        repository{ nameWithOwner }
+        comments{ totalCount }
+        labels(first:10){ nodes{ name color } }
+      }
+      ... on PullRequest {
+        number title state isDraft createdAt
+        additions deletions changedFiles headRefName
+        author{ login }
+        repository{ nameWithOwner }
+        labels(first:10){ nodes{ name color } }
+        commits(last:1){ nodes{ commit{ statusCheckRollup{
+          state
+          contexts(first:10){ nodes{ __typename
+            ... on CheckRun{ detailsUrl checkSuite{ workflowRun{ workflow{ name } } } }
+          } }
+        } } } }
+      }
+    }
+  }
+}"#;
+
+fn search_all(owner: &str, kind: &str) -> Res<Vec<Value>> {
+    // `sort:updated-desc` so the newest work is at the top, which is the only
+    // ordering that makes a list spanning sixty repositories worth reading.
+    let q = format!("owner:{owner} is:{kind} sort:updated-desc");
+    let v = json(&[
+        "api",
+        "graphql",
+        "-f",
+        &format!("q={q}"),
+        "-f",
+        &format!("query={ALL_QUERY}"),
+    ])?;
+    Ok(v.pointer("/data/search/nodes")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default())
+}
+
+/// GraphQL nests labels one level deeper than the CLI does.
+fn gql_labels(v: &Value) -> Vec<Label> {
+    v.pointer("/labels/nodes")
+        .and_then(|x| x.as_array())
+        .map(|ls| {
+            ls.iter()
+                .map(|l| Label::new(&s(l, "name"), label_rgb(&s(l, "color"))))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn gql_author(v: &Value) -> String {
+    v.pointer("/author/login")
+        .and_then(|x| x.as_str())
+        .unwrap_or("ghost")
+        .to_string()
+}
+
+fn gql_repo(v: &Value) -> String {
+    v.pointer("/repository/nameWithOwner")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Open issues across every repository the owner has.
+pub fn all_issues(owner: &str) -> Res<Vec<Item>> {
+    Ok(search_all(owner, "issue")?
+        .iter()
+        .map(|i| {
+            let mut it = Item::issue();
+            it.num = n(i, "number");
+            it.repo = gql_repo(i);
+            it.title = s(i, "title");
+            it.state = Status::parse(&s(i, "state"));
+            it.author = gql_author(i);
+            it.when = ago(&s(i, "createdAt"));
+            it.labels = gql_labels(i);
+            it.detail = Detail::Issue(IssueDetail {
+                comments: i
+                    .pointer("/comments/totalCount")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0) as u32,
+                comment_list: Vec::new(),
+            });
+            it
+        })
+        .collect())
+}
+
+/// The single commit's check rollup, as `(state, run id, workflow name)`.
+fn gql_rollup(p: &Value) -> (Status, i64, String) {
+    let Some(rollup) = p.pointer("/commits/nodes/0/commit/statusCheckRollup") else {
+        return (Status::Pending, 0, String::new());
+    };
+    let state = conclusion("completed", &s(rollup, "state"));
+    let contexts = rollup
+        .pointer("/contexts/nodes")
+        .and_then(|x| x.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    // the run id rides in the check's URL, exactly as in the REST rollup
+    let id = contexts
+        .iter()
+        .find_map(|c| run_id_in(&s(c, "detailsUrl")))
+        .unwrap_or(0);
+    let workflow = contexts
+        .iter()
+        .find_map(|c| {
+            let w = c
+                .pointer("/checkSuite/workflowRun/workflow/name")
+                .and_then(|x| x.as_str())
+                .unwrap_or_default();
+            (!w.is_empty()).then(|| w.to_string())
+        })
+        .unwrap_or_default();
+    (state, id, workflow)
+}
+
+/// Digs the workflow run's id out of a check URL
+/// (`…/actions/runs/<id>/job/<id>`).
+fn run_id_in(url: &str) -> Option<i64> {
+    let rest = url.split("/actions/runs/").nth(1)?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// Pull requests across every repository the owner has.
+pub fn all_prs(owner: &str) -> Res<Vec<Item>> {
+    Ok(search_all(owner, "pr")?
+        .iter()
+        .map(|p| {
+            let mut it = Item::pr();
+            it.num = n(p, "number");
+            it.repo = gql_repo(p);
+            it.title = s(p, "title");
+            let draft = p
+                .get("isDraft")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let state = Status::parse(&s(p, "state"));
+            it.state = if draft && state == Status::Open {
+                Status::Draft
+            } else {
+                state
+            };
+            it.author = gql_author(p);
+            it.when = ago(&s(p, "createdAt"));
+            it.labels = gql_labels(p);
+
+            let (checks, id, workflow) = gql_rollup(p);
+            it.id = id;
+            it.detail = Detail::Pr(Box::new(PrDetail {
+                checks,
+                add: format!("+{}", n(p, "additions")),
+                del: format!("-{}", n(p, "deletions")),
+                files: n(p, "changedFiles") as u32,
+                branch: s(p, "headRefName"),
+                workflow,
+                ..PrDetail::default()
+            }));
+            it
+        })
+        .collect())
+}
+
+/// How many `gh run list` calls are in flight at once.
+///
+/// There is no cross-repository Actions API, so this is genuinely one call per
+/// repository, and most of each call is `gh` starting up rather than the
+/// network. Measured over twenty repositories, sixteen at a time takes about a
+/// second and a half where eight took four and a half.
+const RUN_FANOUT: usize = 16;
+
+/// Recent workflow runs across `repos`, newest first.
+///
+/// Failures are dropped rather than fatal: one repository with Actions
+/// disabled must not blank out the runs of every other. If every single one
+/// fails, the first error is reported instead of a silent empty list.
+pub fn all_runs(repos: &[String]) -> Res<Vec<Item>> {
+    if repos.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut results: Vec<Res<Vec<Item>>> = Vec::new();
+    for chunk in repos.chunks(RUN_FANOUT) {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|repo| scope.spawn(move || (repo.clone(), runs(repo))))
+                .collect();
+            for h in handles {
+                // a panicked worker is treated as a repository that failed
+                match h.join() {
+                    Ok((repo, Ok(items))) => results.push(Ok(items
+                        .into_iter()
+                        .map(|mut it| {
+                            it.repo = repo.clone();
+                            it
+                        })
+                        .collect())),
+                    Ok((_, Err(e))) => results.push(Err(e)),
+                    Err(_) => {}
+                }
+            }
+        });
+    }
+
+    if results.iter().all(Result::is_err)
+        && let Some(Err(e)) = results.pop()
+    {
+        return Err(e);
+    }
+
+    let mut out: Vec<Item> = results.into_iter().flatten().flatten().collect();
+    // `when` is a phrase like "3h ago", so the sort needs the ordering the
+    // list was built with rather than the text.
+    out.sort_by_key(|i| std::cmp::Reverse(i.id));
+    Ok(out)
 }
 
 #[cfg(test)]

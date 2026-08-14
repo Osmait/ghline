@@ -21,6 +21,16 @@ pub enum Request {
         repo: String,
         tab: usize,
     },
+    /// Workflow runs gathered from several repositories at once.
+    ///
+    /// Separate from `List` because there is no cross-repository Actions API:
+    /// this really is one call per repository, so the caller passes only the
+    /// ones with any workflows and the answer is filed under `key` as if it
+    /// had been one list all along.
+    AllRuns {
+        key: String,
+        repos: Vec<String>,
+    },
     IssueDetail {
         repo: String,
         num: i64,
@@ -160,13 +170,29 @@ fn handle(req: Request) -> Response {
         }
 
         Request::List { repo, tab } => {
-            let result = match tab {
-                0 => gh::issues(&repo),
-                1 => gh::prs(&repo),
-                _ => gh::runs(&repo),
+            // `owner/*` is the pseudo-repository that gathers all of them. It
+            // is answered here rather than by the caller so the whole thing
+            // stays one request on one thread, skeleton and all.
+            let all = repo.strip_suffix('*').and_then(|o| o.strip_suffix('/'));
+            let result = match (all, tab) {
+                (Some(owner), 0) => gh::all_issues(owner),
+                (Some(owner), 1) => gh::all_prs(owner),
+                // Runs never reach here: there is no cross-repository
+                // Actions API, so they travel as their own request carrying
+                // the repositories worth asking.
+                (Some(_), _) => Ok(Vec::new()),
+                (None, 0) => gh::issues(&repo),
+                (None, 1) => gh::prs(&repo),
+                (None, _) => gh::runs(&repo),
             };
             Response::List { repo, tab, result }
         }
+
+        Request::AllRuns { key, repos } => Response::List {
+            repo: key,
+            tab: 2,
+            result: gh::all_runs(&repos),
+        },
 
         Request::IssueDetail { repo, num } => {
             let result = gh::issue_detail(&repo, num);

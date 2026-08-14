@@ -41,7 +41,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             cx,
             modal.y + 1,
             max - 22,
-            &app.repo_key(),
+            &app.item_repo_key(),
             base.fg(theme::dimmer()),
         );
     }

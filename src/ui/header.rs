@@ -23,7 +23,7 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
             sep: "/",
         },
         Crumb {
-            label: app.repo_name().to_string(),
+            label: app.repo_label().to_string(),
             color: theme::bright(),
             sep: "›",
         },

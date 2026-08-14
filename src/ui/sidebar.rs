@@ -168,7 +168,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             area.x + 4,
             y,
             dot_x.saturating_sub(1),
-            &r.name,
+            r.label(),
             base.fg(fg),
         );
     }

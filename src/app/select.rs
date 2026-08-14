@@ -31,9 +31,46 @@ impl App {
         self.repo().map(|r| r.name.as_str()).unwrap_or("—")
     }
 
+    /// What to print for the selected repository, which for the pseudo-repo is
+    /// not its name.
+    pub fn repo_label(&self) -> &str {
+        self.repo().map(crate::data::Repo::label).unwrap_or("—")
+    }
+
     /// The `owner/repo` key that indexes lists, jobs and logs.
     pub fn repo_key(&self) -> String {
         format!("{}/{}", self.login(), self.repo_name())
+    }
+
+    /// Is the pseudo-repository that gathers every repository selected?
+    pub fn is_all(&self) -> bool {
+        self.repo().is_some_and(crate::data::Repo::is_all)
+    }
+
+    /// The `owner/repo` of every repository that has any workflows, which is
+    /// the only set worth asking for runs.
+    pub fn workflow_repos(&self) -> Vec<String> {
+        let login = self.login();
+        self.repos()
+            .iter()
+            .filter(|r| !r.is_all() && r.has_workflows)
+            .map(|r| format!("{login}/{}", r.name))
+            .collect()
+    }
+
+    /// The `owner/repo` of the *selected item*, which in a list that spans
+    /// repositories is not the one the list is filed under.
+    ///
+    /// Everything downstream of the selection — the body, the diff, the
+    /// checks, the logs, and merging or closing it — has to follow the item
+    /// rather than the pane it happened to be listed in. An item with no
+    /// repository of its own came from a single-repository list, where the two
+    /// are the same thing.
+    pub fn item_repo_key(&self) -> String {
+        match self.current() {
+            Some(c) if !c.repo.is_empty() => c.repo.clone(),
+            _ => self.repo_key(),
+        }
     }
 
     fn matches(&self, t: &str) -> bool {
@@ -61,7 +98,10 @@ impl App {
         self.list()
             .iter()
             .enumerate()
-            .filter(|(_, i)| self.matches(&i.title))
+            // a row's repository is part of what is on screen, so `/` has to
+            // filter on it too — otherwise "show me only sbql" would not work
+            // in the one list where it is worth asking
+            .filter(|(_, i)| self.matches(&i.title) || self.matches(&i.repo))
             .map(|(n, _)| n)
             .collect()
     }
@@ -96,12 +136,12 @@ impl App {
             return self.finder_hits.clone();
         }
         let repos = self.repos();
-        crate::fuzzy::rank(&self.finder_query, repos, |r| r.name.as_str())
+        crate::fuzzy::rank(&self.finder_query, repos, |r| r.label())
             .into_iter()
             .map(|(i, _)| {
                 let r = &repos[i];
                 crate::finder::Hit {
-                    label: r.name.clone(),
+                    label: r.label().to_string(),
                     detail: format!(
                         "{} · {} open issues · {} open PRs",
                         if r.lang.is_empty() { "—" } else { &r.lang },
@@ -131,7 +171,7 @@ impl App {
             return Load::Ready;
         };
         self.detail_state
-            .get(&(self.repo_key(), num))
+            .get(&(self.item_repo_key(), num))
             .cloned()
             .unwrap_or(Load::Ready)
     }
@@ -142,7 +182,7 @@ impl App {
             return Load::Ready;
         };
         self.diff_state
-            .get(&(self.repo_key(), num))
+            .get(&(self.item_repo_key(), num))
             .cloned()
             .unwrap_or(Load::Ready)
     }
@@ -186,7 +226,7 @@ impl App {
             let id = self.run_id();
             return self
                 .jobs_by_run
-                .get(&(self.repo_key(), id))
+                .get(&(self.item_repo_key(), id))
                 .cloned()
                 .unwrap_or_default();
         }
@@ -207,14 +247,14 @@ impl App {
 
     pub fn jobs_status(&self) -> Load {
         self.jobs_state
-            .get(&(self.repo_key(), self.run_id()))
+            .get(&(self.item_repo_key(), self.run_id()))
             .cloned()
             .unwrap_or(Load::Ready)
     }
 
     pub fn logs_status(&self) -> Load {
         self.logs_state
-            .get(&(self.repo_key(), self.run_id()))
+            .get(&(self.item_repo_key(), self.run_id()))
             .cloned()
             .unwrap_or(Load::Ready)
     }
@@ -311,7 +351,7 @@ impl App {
         let Some(job) = jobs.get(node.ji) else {
             return Vec::new();
         };
-        let Some(raw) = self.raw_logs.get(&(self.repo_key(), self.run_id())) else {
+        let Some(raw) = self.raw_logs.get(&(self.item_repo_key(), self.run_id())) else {
             return Vec::new();
         };
 

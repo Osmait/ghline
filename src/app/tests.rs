@@ -1154,3 +1154,204 @@ mod mouse {
         }
     }
 }
+
+// ----------------------------------------------------- all repositories
+//
+// The pseudo-repository puts items from many repositories into one list, so
+// the selection and the pane it lives in no longer agree about where a thing
+// is. Getting that wrong would merge a pull request in the wrong repository,
+// which is why it is worth pinning down.
+
+mod all_repos {
+    use super::*;
+    use crate::data::Repo;
+
+    /// The demo with a gathering row in front, as live mode builds it.
+    fn gathered() -> App {
+        let mut app = demo();
+        if let Some(a) = app.accounts.get_mut(app.acc) {
+            a.repos.insert(0, Repo::all(&a.repos));
+        }
+        app.repo = 0;
+        app
+    }
+
+    /// Files a list under the gathering row with every row stamped with the
+    /// repository it came from, which is what the live search returns.
+    fn stamp(app: &mut App, repo: &str) {
+        let key = (app.repo_key(), app.tab);
+        let mut items = if app.tab == 1 {
+            demo::prs(0)
+        } else {
+            demo::issues(0)
+        };
+        for it in &mut items {
+            it.repo = repo.to_string();
+        }
+        app.lists.insert(key, items);
+    }
+
+    #[test]
+    fn the_gathering_row_is_named_not_keyed() {
+        let all = Repo::all(&[]);
+        assert_eq!(all.name, "*", "the key can never collide with a real name");
+        assert_eq!(
+            all.label(),
+            "all repositories",
+            "but it is not what is shown"
+        );
+        assert!(all.is_all());
+    }
+
+    #[test]
+    fn it_adds_up_what_it_gathers() {
+        let repos = vec![
+            Repo {
+                issues: 3,
+                prs: 1,
+                has_workflows: false,
+                ..Repo::empty()
+            },
+            Repo {
+                issues: 4,
+                prs: 2,
+                has_workflows: true,
+                ..Repo::empty()
+            },
+        ];
+        let all = Repo::all(&repos);
+        assert_eq!(all.issues, 7);
+        assert_eq!(all.prs, 3);
+        assert!(all.has_workflows, "one repository with CI is enough");
+    }
+
+    #[test]
+    fn an_item_with_no_repository_of_its_own_belongs_to_the_pane() {
+        // every single-repository list, which is to say almost all of them
+        let app = demo();
+        assert_eq!(app.item_repo_key(), app.repo_key());
+    }
+
+    #[test]
+    fn an_item_from_a_gathered_list_keeps_its_own_repository() {
+        let mut app = gathered();
+        assert!(app.is_all(), "the gathering row is selected");
+        stamp(&mut app, "someone/elsewhere");
+
+        assert_eq!(app.repo_key(), "marasanz/*", "the list is filed under all");
+        assert_eq!(
+            app.item_repo_key(),
+            "someone/elsewhere",
+            "but the item is not"
+        );
+    }
+
+    #[test]
+    fn merging_from_a_gathered_list_would_act_on_the_items_repository() {
+        // the same question the merge, close and branch-delete requests ask
+        let mut app = gathered();
+        app.tab = 1;
+        stamp(&mut app, "someone/elsewhere");
+        assert_eq!(app.item_repo_key(), "someone/elsewhere");
+
+        // and back on a real repository it is the pane's again
+        app.repo = 1;
+        assert!(!app.is_all());
+        assert_eq!(app.item_repo_key(), app.repo_key());
+    }
+
+    #[test]
+    fn the_filter_reaches_the_repository_a_row_came_from() {
+        let mut app = gathered();
+        let key = (app.repo_key(), app.tab);
+        stamp(&mut app, "marasanz/haystack");
+        let total = app.visible().len();
+        assert!(total > 1, "the fixture needs rows");
+
+        // a word that is in no title, only in a repository name
+        if let Some(items) = app.lists.get_mut(&key) {
+            items[0].repo = "marasanz/needle".into();
+            for it in items.iter_mut().skip(1) {
+                it.repo = "marasanz/haystack".into();
+            }
+        }
+        app.filter = "needle".into();
+        assert_eq!(app.visible().len(), 1, "matched on the repository alone");
+    }
+
+    #[test]
+    fn only_repositories_with_workflows_are_asked_for_runs() {
+        let mut app = gathered();
+        if let Some(a) = app.accounts.get_mut(0) {
+            a.repos[1].has_workflows = false;
+        }
+        let asked = app.workflow_repos();
+
+        assert!(
+            !asked.iter().any(|r| r.ends_with("/*")),
+            "the gathering row is not a repository to call"
+        );
+        let skipped = app.repos()[1].name.clone();
+        assert!(
+            !asked.iter().any(|r| r.ends_with(&format!("/{skipped}"))),
+            "a repository with no workflows is not worth a call"
+        );
+        assert!(!asked.is_empty(), "the rest still are");
+    }
+
+    #[test]
+    fn a_session_starts_on_the_gathering_row() {
+        // it is inserted first, and the selection starts at zero
+        let app = gathered();
+        assert_eq!(app.repo_idx(), 0);
+        assert!(app.is_all());
+        assert_eq!(app.repo_label(), "all repositories");
+    }
+
+    #[test]
+    fn an_answer_lands_on_the_row_it_is_about_not_the_first_with_that_number() {
+        // A gathered list genuinely holds two different #14s. Matching on the
+        // number alone would write one pull request's body onto the other, and
+        // nothing would say so.
+        use crate::service::Response;
+
+        let mut app = gathered();
+        app.tab = 1;
+        let key = (app.repo_key(), 1);
+
+        let mut a = demo::prs(0).remove(0);
+        a.num = 14;
+        a.repo = format!("{}/sbql", app.login());
+        a.body = String::new();
+        let mut b = a.clone();
+        b.repo = format!("{}/accounting", app.login());
+        app.lists.insert(key.clone(), vec![a, b]);
+
+        app.apply(Response::PrDetail {
+            repo: format!("{}/accounting", app.login()),
+            num: 14,
+            result: Ok(("the accounting one".into(), Vec::new(), Vec::new())),
+        });
+
+        let items = &app.lists[&key];
+        assert_eq!(items[0].body, "", "sbql#14 was not the one asked about");
+        assert_eq!(items[1].body, "the accounting one");
+    }
+
+    #[test]
+    fn an_answer_still_reaches_a_plain_single_repository_list() {
+        use crate::service::Response;
+
+        let mut app = demo();
+        app.tab = 1;
+        let key = (app.repo_key(), 1);
+        let num = app.lists[&key][0].num;
+
+        app.apply(Response::PrDetail {
+            repo: app.repo_key(),
+            num,
+            result: Ok(("straight in".into(), Vec::new(), Vec::new())),
+        });
+        assert_eq!(app.lists[&key][0].body, "straight in");
+    }
+}

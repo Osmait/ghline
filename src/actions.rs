@@ -131,7 +131,7 @@ impl App {
     /// Live mode: the action goes to the service thread and the list is
     /// refreshed from what GitHub reports, not from a local guess.
     fn dispatch(&mut self, prompt: &Prompt, num: i64, branch: String) {
-        let repo = self.repo_key();
+        let repo = self.item_repo_key();
         self.busy = true;
         match prompt {
             Prompt::Merge(m) => {

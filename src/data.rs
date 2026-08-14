@@ -94,9 +94,48 @@ pub struct Repo {
     pub prs: u32,
     #[allow(dead_code)]
     pub star: String,
+    /// Whether the default branch has a `.github/workflows` directory.
+    ///
+    /// Carried on the repository because there is no cross-repository Actions
+    /// API: the all-repositories runs list is one call per repository, and
+    /// this is what keeps it to the handful that could answer.
+    pub has_workflows: bool,
 }
 
 impl Repo {
+    /// The name of the pseudo-repository that stands for all of them.
+    ///
+    /// A star because GitHub does not allow one in a repository name, so this
+    /// can never collide with a real repo and the `owner/name` key that indexes
+    /// every cache keeps working untouched.
+    pub const ALL: &'static str = "*";
+
+    /// The row that gathers every repository into one list.
+    pub fn all(repos: &[Self]) -> Self {
+        Self {
+            name: Self::ALL.into(),
+            private: false,
+            lang: String::new(),
+            issues: repos.iter().map(|r| r.issues).sum(),
+            prs: repos.iter().map(|r| r.prs).sum(),
+            star: "0".into(),
+            has_workflows: repos.iter().any(|r| r.has_workflows),
+        }
+    }
+
+    pub fn is_all(&self) -> bool {
+        self.name == Self::ALL
+    }
+
+    /// What to show for it, since `*` is a key rather than a name.
+    pub fn label(&self) -> &str {
+        if self.is_all() {
+            "all repositories"
+        } else {
+            &self.name
+        }
+    }
+
     /// An empty repo to draw while there is no data yet.
     pub fn empty() -> Self {
         Self {
@@ -106,6 +145,7 @@ impl Repo {
             issues: 0,
             prs: 0,
             star: "0".into(),
+            has_workflows: false,
         }
     }
 }
@@ -336,6 +376,10 @@ pub struct Item {
     pub num: i64,
     /// Internal identifier (the run's databaseId); 0 for issues.
     pub id: i64,
+    /// The `owner/repo` this came from, set only when the list mixes several.
+    /// Empty means "the repository the list belongs to", which is the usual
+    /// case and keeps every existing fixture unchanged.
+    pub repo: String,
     pub title: String,
     pub state: Status,
     pub author: String,
@@ -352,6 +396,7 @@ impl Item {
         Self {
             num: 0,
             id: 0,
+            repo: String::new(),
             title: String::new(),
             state: Status::Open,
             author: String::new(),

@@ -25,6 +25,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 7,
                     prs: 2,
                     star: "1.2k".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "dotfiles".into(),
@@ -33,6 +34,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 1,
                     prs: 0,
                     star: "41".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "tuikit".into(),
@@ -41,6 +43,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 12,
                     prs: 4,
                     star: "832".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "notes.md".into(),
@@ -49,6 +52,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 0,
                     prs: 1,
                     star: "3".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "aoc-2025".into(),
@@ -57,6 +61,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 2,
                     prs: 0,
                     star: "18".into(),
+                    has_workflows: true,
                 },
             ],
         },
@@ -72,6 +77,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 34,
                     prs: 11,
                     star: "—".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "billing-core".into(),
@@ -80,6 +86,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 21,
                     prs: 6,
                     star: "—".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "web-console".into(),
@@ -88,6 +95,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 58,
                     prs: 19,
                     star: "—".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "infra-terraform".into(),
@@ -96,6 +104,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 9,
                     prs: 3,
                     star: "—".into(),
+                    has_workflows: true,
                 },
             ],
         },
@@ -111,6 +120,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 15,
                     prs: 5,
                     star: "19k".into(),
+                    has_workflows: true,
                 },
                 Repo {
                     name: "ansi-parser".into(),
@@ -119,6 +129,7 @@ pub fn accounts() -> Vec<Account> {
                     issues: 4,
                     prs: 1,
                     star: "2.4k".into(),
+                    has_workflows: true,
                 },
             ],
         },

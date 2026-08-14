@@ -115,6 +115,33 @@ the log) put it against the left edge.
 | Diff | Changed files · Diff |
 | Logs | Jobs and steps · Output |
 
+## All repositories
+
+A session opens on **all repositories** rather than on one of them: with a
+hundred repos, "what is going on" is a better first question than "in which
+one". It is the first row of the repository pane, and `[` steps off it onto a
+single repository whenever you want the narrower view.
+
+Issues and pull requests are one GraphQL search each, so gathering them costs
+no more than opening a single repository would — and the rows lose nothing:
+the diff counts, the file count and the branch are all in the same answer.
+Every row says which repository it came from, and `/` filters on that as well
+as on the title, so `/sbql` narrows a mixed list back down to one project.
+
+Actions cannot be gathered the same way, because GitHub has no cross-repository
+Actions API — it really is one call per repository. Two things keep that
+honest: the repository query already asks which repos have a
+`.github/workflows` directory at all, so only those are called (twenty of a
+hundred and forty-three, here), and the calls go out sixteen at a time. It
+lands in about a second and a half.
+
+What a row belongs to and what pane it is listed in are no longer the same
+thing, so everything downstream of the selection — the body, the diff, the
+checks, the logs, and merging or closing it — follows the item's own
+repository. That matters more than it sounds: a gathered list really does hold
+two different `#14`s, and both the request and the answer have to name the
+repository or one pull request's body ends up on the other.
+
 The repository pane starts hidden: with sixty repositories it is a wall, and
 `[`/`]` step through them without it while the finder reaches any of them by
 name. `b` brings it back and gives its width to the content. It stays

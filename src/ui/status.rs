@@ -117,7 +117,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             format!("{}/{}", app.item_idx(items.len()) + 1, items.len())
         }
     };
-    let position = format!("{counter}  {}/{}", app.login(), app.repo_name());
+    let position = format!("{counter}  {}/{}", app.login(), app.repo_label());
     let pos_x = put_right(buf, area.right() - 1, y, &position, base.fg(theme::dim()));
 
     // the last action's notice replaces the help text while it lasts

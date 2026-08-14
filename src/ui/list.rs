@@ -141,7 +141,13 @@ fn icon_for(it: &Item) -> &'static str {
 }
 
 fn sub_for(it: &Item) -> String {
-    match &it.detail {
+    // In a list that spans repositories, which one a row came from is the
+    // first thing you need; elsewhere it is the one thing you already know.
+    let where_from = match it.repo.rsplit('/').next() {
+        Some(r) if !it.repo.is_empty() => format!("{r} · "),
+        _ => String::new(),
+    };
+    let rest = match &it.detail {
         Detail::Run(run) => {
             format!("{} · {} · {} · {}", run.event, it.author, run.dur, it.when)
         }
@@ -158,7 +164,8 @@ fn sub_for(it: &Item) -> String {
         Detail::Issue(issue) => {
             format!("{} · {} comments · {}", it.author, issue.comments, it.when)
         }
-    }
+    };
+    format!("{where_from}{rest}")
 }
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {

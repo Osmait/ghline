@@ -3,10 +3,36 @@
 //! into state.
 
 use super::{App, Load, Prompt, View};
-use crate::data::Kind;
+use crate::data::{Item, Kind};
 use crate::service::{Request, Response};
 
 impl App {
+    /// The row an answer about `repo` / `num` belongs to.
+    ///
+    /// A detail is asked for under the item's own repository, but the list
+    /// holding that item may be the gathered one, filed under `owner/*`. Both
+    /// are checked, or a body arriving in an all-repositories list would land
+    /// nowhere and the pane would keep saying there is nothing to read.
+    ///
+    /// The repository is matched as well as the number because a gathered list
+    /// really does hold two different `#14`s, and writing one's body onto the
+    /// other would be quiet and wrong.
+    fn item_mut(&mut self, repo: &str, tab: usize, num: i64) -> Option<&mut Item> {
+        let gathered = repo.split_once('/').map(|(owner, _)| format!("{owner}/*"));
+        let key = [Some(repo.to_string()), gathered]
+            .into_iter()
+            .flatten()
+            .find(|k| {
+                self.lists
+                    .get(&(k.clone(), tab))
+                    .is_some_and(|items| items.iter().any(|i| is_it(i, repo, num)))
+            })?;
+        self.lists
+            .get_mut(&(key, tab))?
+            .iter_mut()
+            .find(|i| is_it(i, repo, num))
+    }
+
     fn ask(&mut self, req: Request) {
         if let Some(svc) = &self.service {
             svc.send(req);
@@ -47,13 +73,26 @@ impl App {
             == &Load::Idle
         {
             self.lists_state.insert((key.clone(), tab), Load::Loading);
-            self.ask(Request::List { repo: key, tab });
+            // Runs are the one thing that cannot be gathered in a single call,
+            // so the repositories worth asking travel with the request — the
+            // ones that have any workflows, which the repository query already
+            // told us.
+            if self.is_all() && tab == 2 {
+                let repos = self.workflow_repos();
+                self.ask(Request::AllRuns { key, repos });
+            } else {
+                self.ask(Request::List { repo: key, tab });
+            }
             return;
         }
 
         if self.view == View::List {
             return;
         }
+
+        // From here on it is the selection that is being fetched, and in an
+        // all-repositories list that lives somewhere other than `key`.
+        let key = self.item_repo_key();
 
         // the diff is fetched whole: `gh pr diff` returns it in one go
         if self.view == View::Diff {
@@ -170,6 +209,8 @@ impl App {
                 self.lists.remove(&(key.clone(), t));
             }
         }
+        // the selection's caches hang off its own repository
+        let key = self.item_repo_key();
         let id = self.run_id();
         self.jobs_state.insert((key.clone(), id), Load::Loading);
         self.logs_state.insert((key.clone(), id), Load::Loading);
@@ -188,6 +229,8 @@ impl App {
         for t in 0..3 {
             self.lists_state.insert((key.clone(), t), Load::Idle);
         }
+        // the selection's caches hang off its own repository
+        let key = self.item_repo_key();
         let id = self.run_id();
         if id > 0 {
             self.jobs_state.insert((key.clone(), id), Load::Idle);
@@ -226,7 +269,15 @@ impl App {
             }
 
             Response::Repos { login, result } => match result {
-                Ok(repos) => {
+                Ok(mut repos) => {
+                    // The row that gathers them all goes first, and is where a
+                    // session starts: with a hundred repositories, "what is
+                    // going on" is a better opening question than "in which
+                    // one". Live only — the demo is the design's fixture and
+                    // has no cross-repository data to gather.
+                    if !repos.is_empty() {
+                        repos.insert(0, crate::data::Repo::all(&repos));
+                    }
                     if let Some(a) = self.accounts.iter_mut().find(|a| a.login == login) {
                         a.repos = repos;
                     }
@@ -259,8 +310,7 @@ impl App {
                     },
                 );
                 if let Ok((body, comments)) = result
-                    && let Some(items) = self.lists.get_mut(&(repo, 0))
-                    && let Some(it) = items.iter_mut().find(|i| i.num == num)
+                    && let Some(it) = self.item_mut(&repo, 0, num)
                 {
                     it.body = body;
                     if let Some(d) = it.as_issue_mut() {
@@ -279,8 +329,7 @@ impl App {
                     },
                 );
                 if let Ok((body, files, reviews)) = result
-                    && let Some(items) = self.lists.get_mut(&(repo, 1))
-                    && let Some(it) = items.iter_mut().find(|i| i.num == num)
+                    && let Some(it) = self.item_mut(&repo, 1, num)
                 {
                     it.body = body;
                     if let Some(pr) = it.as_pr_mut() {
@@ -337,9 +386,7 @@ impl App {
                 Ok(files) => {
                     self.diff_state.insert((repo.clone(), num), Load::Ready);
                     // match the hunks against the already-loaded file list
-                    if let Some(items) = self.lists.get_mut(&(repo, 1))
-                        && let Some(it) = items.iter_mut().find(|i| i.num == num)
-                    {
+                    if let Some(it) = self.item_mut(&repo, 1, num) {
                         for f in it.as_pr_mut().into_iter().flat_map(|p| &mut p.file_list) {
                             if let Some((_, hunks)) = files.iter().find(|(p, _)| *p == f.path) {
                                 f.hunks = hunks.clone();
@@ -415,4 +462,11 @@ impl App {
             }
         }
     }
+}
+
+/// Is this the row an answer about `repo` / `num` is about? An item with no
+/// repository of its own came from a single-repository list, where the number
+/// alone is unambiguous.
+fn is_it(item: &Item, repo: &str, num: i64) -> bool {
+    item.num == num && (item.repo.is_empty() || item.repo == repo)
 }
