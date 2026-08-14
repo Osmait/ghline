@@ -85,22 +85,30 @@ const DESIGN: Palette = Palette {
     orange: rgb(0x00ff8f40),
 };
 
-/// Catppuccin Mocha, mapped by the role each colour plays here rather than by
-/// name: the design keeps its panels a shade *lighter* than the background, so
-/// mantle is the ground and base is the panel, not the other way round.
+/// Catppuccin Mocha.
+///
+/// `base` is the ground, because that is what a Catppuccin terminal paints
+/// behind everything — anything else leaves a visible seam where the interface
+/// meets the rest of the screen.
+///
+/// That inverts the design's own relationship, where panels sit a shade
+/// *lighter* than the background. Catppuccin goes the other way: its editors
+/// put the sidebar and the status bar on `mantle`, darker than the content. The
+/// flavour's convention wins here, since the reason to pick it is that
+/// everything else on screen already follows it.
 const MOCHA: Palette = Palette {
-    bg: rgb(0x00181825),    // mantle
-    panel: rgb(0x001e1e2e), // base
-    panel_alt: rgb(0x001b1b29),
-    tab_active_bg: rgb(0x00272739),
-    border: rgb(0x00313244), // surface0
-    border_soft: rgb(0x00242436),
-    sel: rgb(0x002a2b3c),
-    sel_mark_idle: rgb(0x0045475a), // surface1
-    err_bg: rgb(0x002d1f28),
-    diff_add_bg: rgb(0x001e2b26),
-    diff_del_bg: rgb(0x002f1f2b),
-    diff_void_bg: rgb(0x001c1c2a),
+    bg: rgb(0x001e1e2e),            // base, the terminal's own background
+    panel: rgb(0x00181825),         // mantle, for headers and status bars
+    panel_alt: rgb(0x0011111b),     // crust, for the sidebar and the trees
+    tab_active_bg: rgb(0x001e1e2e), // the active tab rises back to base
+    border: rgb(0x00313244),        // surface0
+    border_soft: rgb(0x0026273a),
+    sel: rgb(0x00313244),           // surface0
+    sel_mark_idle: rgb(0x00585b70), // surface2
+    err_bg: rgb(0x00302031),
+    diff_add_bg: rgb(0x00203230),
+    diff_del_bg: rgb(0x00352334),
+    diff_void_bg: rgb(0x00191926),
     fg: rgb(0x00cdd6f4),      // text
     bright: rgb(0x00f5e0dc),  // rosewater
     body: rgb(0x00bac2de),    // subtext1
