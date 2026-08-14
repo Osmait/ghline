@@ -160,6 +160,18 @@ pub struct App {
     /// Whether the last frame actually drew it. The pane list reads this, so
     /// `h` can never land on a sidebar that is not on screen.
     pub sidebar_shown: bool,
+    /// The finder, open over everything else while it is up.
+    pub finder_open: bool,
+    pub finder_source: crate::finder::Source,
+    pub finder_query: String,
+    pub finder_sel: usize,
+    pub finder_scroll: usize,
+    /// Results of the last remote search, and its state.
+    pub finder_hits: Vec<crate::finder::Hit>,
+    pub finder_state: Load,
+    /// The query the last request carried, so a stale answer is not shown and
+    /// an unchanged query is not asked for twice.
+    pub finder_sent: String,
     /// Theme picker. It previews as you move, so the theme active when it
     /// opened is kept in order to put it back on `esc`.
     pub themes_open: bool,
@@ -249,8 +261,18 @@ impl App {
             extra_lines: 0,
             accounts_open: false,
             acc_sel: 0,
-            sidebar: true,
-            sidebar_shown: true,
+            finder_open: false,
+            finder_source: crate::finder::Source::Repos,
+            finder_query: String::new(),
+            finder_sel: 0,
+            finder_scroll: 0,
+            finder_hits: Vec::new(),
+            finder_state: Load::Ready,
+            finder_sent: String::new(),
+            // hidden by default: with sixty repositories it is a wall, and
+            // `[`/`]` plus the finder reach any of them without it
+            sidebar: false,
+            sidebar_shown: false,
             themes_open: false,
             theme_sel: 0,
             theme_before: crate::theme::current(),
@@ -294,6 +316,8 @@ impl App {
             || self.jobs_state.values().any(Load::is_loading)
             || self.logs_state.values().any(Load::is_loading)
             || self.diff_state.values().any(Load::is_loading)
+            || self.detail_state.values().any(Load::is_loading)
+            || self.finder_state.is_loading()
     }
 
     // --- selectores ---

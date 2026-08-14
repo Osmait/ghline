@@ -124,6 +124,34 @@ impl App {
         }
     }
 
+    /// Sends the finder's query, if it is a remote source and the query has
+    /// changed since the last one. Called on a short beat from the main loop
+    /// so that typing does not fire a request per keystroke.
+    pub fn finder_tick(&mut self) {
+        if !self.finder_open || self.finder_source.is_local() || !self.live() {
+            return;
+        }
+        if self.finder_query == self.finder_sent {
+            return;
+        }
+        if self.finder_source.needs_query() && self.finder_query.trim().is_empty() {
+            self.finder_hits.clear();
+            self.finder_state = Load::Ready;
+            self.finder_sent.clone_from(&self.finder_query);
+            return;
+        }
+        self.finder_sent.clone_from(&self.finder_query);
+        self.finder_state = Load::Loading;
+        let owner = self.login().to_string();
+        let query = self.finder_query.clone();
+        let source = self.finder_source;
+        self.ask(Request::Search {
+            owner,
+            query,
+            source,
+        });
+    }
+
     /// Puts every pane of the current view into its loading state, so the
     /// skeletons can be inspected without a network round trip.
     pub fn hold_loading(&mut self, frame: u64) {
@@ -258,6 +286,49 @@ impl App {
                     if let Some(pr) = it.as_pr_mut() {
                         pr.file_list = files;
                         pr.reviews = reviews;
+                    }
+                }
+            }
+
+            Response::Search {
+                query,
+                source,
+                result,
+            } => {
+                // an answer to a query that is no longer typed is not an answer
+                if query != self.finder_query || source != self.finder_source {
+                    return;
+                }
+                match result {
+                    Ok(hits) => {
+                        self.finder_hits = hits
+                            .into_iter()
+                            .map(|h| crate::finder::Hit {
+                                label: h.title,
+                                detail: if h.sha.is_empty() {
+                                    format!("{} #{} · {}", h.repo, h.num, h.when)
+                                } else {
+                                    format!("{} · {} · {}", h.repo, h.sha, h.when)
+                                },
+                                repo: h.repo,
+                                num: h.num,
+                                state: h.state,
+                                kind: match source {
+                                    crate::finder::Source::Commits => {
+                                        crate::finder::HitKind::Commit
+                                    }
+                                    crate::finder::Source::Prs => crate::finder::HitKind::Pr,
+                                    _ => crate::finder::HitKind::Issue,
+                                },
+                            })
+                            .collect();
+                        self.finder_sel = 0;
+                        self.finder_scroll = 0;
+                        self.finder_state = Load::Ready;
+                    }
+                    Err(e) => {
+                        self.finder_state = Load::Failed(e.brief());
+                        self.finder_hits.clear();
                     }
                 }
             }

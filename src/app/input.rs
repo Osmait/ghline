@@ -3,7 +3,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::{App, Cmd, NodeKind, Pane, Prompt, View};
+use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::data::{Kind, TABS};
 use crate::demo;
 
@@ -37,6 +37,140 @@ impl App {
             panes.retain(|p| *p != Pane::Repos);
         }
         panes
+    }
+
+    /// Opens the finder. It starts on repositories, which need no network.
+    pub fn open_finder(&mut self) {
+        self.finder_open = true;
+        self.finder_query.clear();
+        self.finder_sent = "\u{0}".into(); // forces the first fetch
+        self.finder_sel = 0;
+        self.finder_scroll = 0;
+        self.finder_hits.clear();
+        self.finder_state = Load::Ready;
+    }
+
+    /// The finder owns every key while it is up: the letters are the query.
+    fn finder_key(&mut self, ev: KeyEvent) {
+        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
+        let len = self.finder_len();
+        match ev.code {
+            KeyCode::Esc => self.finder_open = false,
+            KeyCode::Enter => self.finder_accept(),
+            KeyCode::Tab => self.finder_source_by(1),
+            KeyCode::BackTab => self.finder_source_by(-1),
+            KeyCode::Down => self.finder_move(1, len),
+            KeyCode::Up => self.finder_move(-1, len),
+            KeyCode::Char('n') if ctrl => self.finder_move(1, len),
+            KeyCode::Char('p') if ctrl => self.finder_move(-1, len),
+            KeyCode::Backspace => {
+                self.finder_query.pop();
+                self.finder_sel = 0;
+                self.finder_scroll = 0;
+            }
+            KeyCode::Char(c) if !ctrl => {
+                self.finder_query.push(c);
+                self.finder_sel = 0;
+                self.finder_scroll = 0;
+            }
+            _ => {}
+        }
+    }
+
+    fn finder_move(&mut self, d: i64, len: usize) {
+        if len == 0 {
+            return;
+        }
+        self.finder_sel = (self.finder_sel as i64 + d).rem_euclid(len as i64) as usize;
+    }
+
+    fn finder_source_by(&mut self, d: i64) {
+        let all = crate::finder::Source::ALL;
+        let i = all
+            .iter()
+            .position(|s| *s == self.finder_source)
+            .unwrap_or(0) as i64;
+        self.finder_source = all[(i + d).rem_euclid(all.len() as i64) as usize];
+        self.finder_sel = 0;
+        self.finder_scroll = 0;
+        self.finder_hits.clear();
+        // the query stays: switching source usually means "the same words,
+        // somewhere else"
+        self.finder_sent = "\u{0}".into();
+        self.finder_state = Load::Ready;
+    }
+
+    /// Goes wherever the highlighted row lives.
+    fn finder_accept(&mut self) {
+        let Some(hit) = self.finder_results().get(self.finder_sel).cloned() else {
+            return;
+        };
+        self.finder_open = false;
+
+        // move to the repository the hit belongs to, if it is one we know
+        if let Some(i) = self
+            .repos()
+            .iter()
+            .position(|r| format!("{}/{}", self.login(), r.name) == hit.repo)
+        {
+            self.repo = i;
+            self.item = 0;
+            self.item_scroll = 0;
+        }
+
+        match hit.kind {
+            crate::finder::HitKind::Repo => {
+                self.view = View::List;
+                self.pane = Pane::List;
+            }
+            crate::finder::HitKind::Commit => {
+                // there is no commit view; the repository plus the sha is the
+                // most useful place to land
+                self.view = View::List;
+                self.pane = Pane::List;
+                self.flash_ok(format!("{} · {}", hit.repo, hit.detail));
+            }
+            crate::finder::HitKind::Issue | crate::finder::HitKind::Pr => {
+                self.tab = usize::from(hit.kind == crate::finder::HitKind::Pr);
+                self.view = View::List;
+                self.pane = Pane::List;
+                // the list may still be on its way; remember what to select
+                if let Some(i) = self
+                    .visible()
+                    .iter()
+                    .position(|&i| self.list()[i].num == hit.num)
+                {
+                    self.item = i;
+                    self.view = View::Detail;
+                    self.pane = Pane::Body;
+                } else {
+                    self.flash_ok(format!("{} #{}", hit.repo, hit.num));
+                }
+            }
+        }
+        self.settle_pane();
+    }
+
+    /// `[` / `]`: the previous or next repository, without needing the pane
+    /// open. Everything the view is about follows the change.
+    pub fn step_repo(&mut self, d: i64) {
+        let n = self.repos().len() as i64;
+        if n == 0 {
+            return;
+        }
+        let next = (self.repo_idx() as i64 + d).rem_euclid(n) as usize;
+        self.repo = next;
+        self.item = 0;
+        self.item_scroll = 0;
+        self.detail_scroll = 0;
+        self.view = View::List;
+        self.settle_pane();
+        self.flash_ok(format!(
+            "{}  ({}/{})",
+            self.repo_name(),
+            next + 1,
+            self.repos().len()
+        ));
     }
 
     /// `b`: hides or shows the repository pane. The extra width goes to the
@@ -227,6 +361,11 @@ impl App {
             self.help_open = false;
             return;
         }
+        if self.finder_open {
+            self.finder_open = false;
+            return;
+        }
+
         if self.themes_open {
             crate::theme::set(self.theme_before);
             self.themes_open = false;
@@ -282,6 +421,7 @@ impl App {
             "diff" | "files" => self.open_diff(0),
             "theme" | "themes" => self.open_themes(),
             "sidebar" | "repos" => self.toggle_sidebar(),
+            "find" | "search" => self.open_finder(),
             "help" | "h" => self.help_open = true,
             "q" | "quit" => {
                 self.view = View::List;
@@ -310,6 +450,13 @@ impl App {
     pub fn on_key(&mut self, ev: KeyEvent) {
         if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('b') {
             self.toggle_sidebar();
+            return;
+        }
+        if ev.modifiers.contains(KeyModifiers::CONTROL)
+            && ev.code == KeyCode::Char('p')
+            && !self.finder_open
+        {
+            self.open_finder();
             return;
         }
 
@@ -385,6 +532,11 @@ impl App {
             return;
         }
 
+        if self.finder_open {
+            self.finder_key(ev);
+            return;
+        }
+
         if self.themes_open {
             let last = crate::theme::Theme::ALL.len() - 1;
             match ev.code {
@@ -451,6 +603,9 @@ impl App {
                 self.acc_sel = self.acc;
             }
             KeyCode::Char('b') => self.toggle_sidebar(),
+            KeyCode::Char('p') => self.open_finder(),
+            KeyCode::Char('[') => self.step_repo(-1),
+            KeyCode::Char(']') => self.step_repo(1),
             KeyCode::Char('t') => self.open_themes(),
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char(':') => {

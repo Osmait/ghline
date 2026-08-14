@@ -62,7 +62,9 @@ the log) put it against the left edge.
 | Diff | Changed files · Diff |
 | Logs | Jobs and steps · Output |
 
-`b` hides the repository pane and gives its width to the content. It stays
+The repository pane starts hidden: with sixty repositories it is a wall, and
+`[`/`]` step through them without it while the finder reaches any of them by
+name. `b` brings it back and gives its width to the content. It stays
 hidden until you ask for it back, and the logs and diff views never show it —
 the design gives them the full width. Below 90 columns there is not enough room
 for it whatever you asked for, and in every one of those cases `h` will not walk
@@ -91,6 +93,8 @@ back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
 | `a` | switch account |
 | `t` | switch theme |
 | `b` `^b` | hide / show the repository pane |
+| `[` `]` | previous / next repository |
+| `p` `^p` | the finder |
 | `o` | fold / unfold a job (in the logs) |
 | `/` | filter (list or log) |
 | `e` | jump to the first error in the log |
@@ -111,10 +115,36 @@ On a pull request:
 | `n` / `esc` | cancel |
 
 Commands: `:account`, `:issues`, `:prs`, `:actions`, `:logs`, `:diff`, `:files`,
-`:theme`, `:sidebar`, `:help`, `:q`.
+`:theme`, `:sidebar`, `:find`, `:help`, `:q`.
 
 As in the design, `q` and `:q` go back or close the overlay; to quit the program
 use `ctrl-c`.
+
+## The finder
+
+`p` — or `^p` — opens it over everything else. `tab` walks the four sources and
+keeps what you typed, since switching usually means "the same words, somewhere
+else". `↑`/`↓` or `^n`/`^p` move, `enter` goes there, `esc` closes.
+
+| Source | Where it looks |
+|---|---|
+| repos | the repositories already loaded, filtered as you type |
+| issues | `gh search issues` across your repositories |
+| pull requests | `gh search prs` across your repositories |
+| commits | `gh search commits` across your repositories |
+
+Repositories are already in memory, so they filter with no latency and the
+matched letters are highlighted. The other three go to GitHub once typing
+pauses, and are shown in the order the server ranked them.
+
+Commits are the exception worth knowing about: GitHub rejects a commit search
+made of qualifiers alone, so that source has nothing to show until you type
+something. The other three list without a query.
+
+Matching is a small scorer in `src/fuzzy.rs` rather than a dependency — letters
+that run together beat letters scattered about, the start of a word beats the
+middle, and a shorter name beats a longer one. It matches greedily, which is
+documented where it could otherwise look like a bug.
 
 ## Themes
 

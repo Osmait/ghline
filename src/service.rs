@@ -9,6 +9,7 @@ use std::thread;
 use crate::data::MergeMethod;
 use crate::data::{Account, Comment, FileChange, Hunk, Item, Job, RawLog, Repo, Review};
 use crate::error::Error;
+use crate::finder::Source as FinderSource;
 use crate::gh;
 
 pub enum Request {
@@ -31,6 +32,11 @@ pub enum Request {
     PrDiff {
         repo: String,
         num: i64,
+    },
+    Search {
+        owner: String,
+        query: String,
+        source: FinderSource,
     },
     RunJobs {
         repo: String,
@@ -86,6 +92,11 @@ pub enum Response {
         repo: String,
         num: i64,
         result: Result<Vec<(String, Vec<Hunk>)>, Error>,
+    },
+    Search {
+        query: String,
+        source: FinderSource,
+        result: Result<Vec<gh::SearchHit>, Error>,
     },
     RunJobs {
         repo: String,
@@ -170,6 +181,23 @@ fn handle(req: Request) -> Response {
         Request::PrDiff { repo, num } => {
             let result = gh::pr_diff(&repo, num);
             Response::PrDiff { repo, num, result }
+        }
+
+        Request::Search {
+            owner,
+            query,
+            source,
+        } => {
+            let result = match source {
+                FinderSource::Commits => gh::search_commits(&owner, &query),
+                FinderSource::Prs => gh::search_issues(&owner, &query, true),
+                _ => gh::search_issues(&owner, &query, false),
+            };
+            Response::Search {
+                query,
+                source,
+                result,
+            }
         }
 
         Request::RunJobs { repo, run_id } => {

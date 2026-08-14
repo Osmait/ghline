@@ -6,6 +6,8 @@ mod data;
 mod demo;
 mod demo_diffs;
 mod error;
+mod finder;
+mod fuzzy;
 mod gh;
 mod service;
 mod snapshot;
@@ -31,6 +33,9 @@ const TICK: Duration = Duration::from_millis(1400);
 const BLINK: Duration = Duration::from_millis(500);
 /// Frame rate of the loading skeletons, fast enough to read as motion.
 const ANIM: Duration = Duration::from_millis(110);
+/// How long typing has to pause before the finder asks GitHub. Long enough
+/// that a word is one request, short enough not to feel deliberate.
+const FIND: Duration = Duration::from_millis(260);
 
 fn main() -> io::Result<()> {
     // `--snapshot [keys] [width] [height] [ticks]` prints one render and exits.
@@ -127,6 +132,7 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
     let mut last_tick = Instant::now();
     let mut last_blink = Instant::now();
     let mut last_anim = Instant::now();
+    let mut last_find = Instant::now();
 
     loop {
         // request whatever the current view needs (non-blocking: it goes to the gh thread)
@@ -141,6 +147,11 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
             .min(BLINK.saturating_sub(last_blink.elapsed()))
             .min(if waiting {
                 ANIM.saturating_sub(last_anim.elapsed())
+            } else {
+                Duration::MAX
+            })
+            .min(if app.finder_open {
+                FIND.saturating_sub(last_find.elapsed())
             } else {
                 Duration::MAX
             })
@@ -161,6 +172,10 @@ fn run(term: &mut Terminal<CrosstermBackend<io::Stdout>>, source: Source) -> io:
         if last_tick.elapsed() >= TICK {
             app.tick();
             last_tick = Instant::now();
+        }
+        if last_find.elapsed() >= FIND {
+            app.finder_tick();
+            last_find = Instant::now();
         }
         if waiting && last_anim.elapsed() >= ANIM {
             app.anim = app.anim.wrapping_add(1);

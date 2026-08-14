@@ -143,6 +143,9 @@ fn settle(app: &mut App) {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
     loop {
         app.ensure();
+        // the finder is driven by a beat in the main loop, which is not
+        // running here
+        app.finder_tick();
         while let Some(res) = app.poll_service() {
             app.apply(res);
         }

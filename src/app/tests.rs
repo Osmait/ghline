@@ -11,6 +11,15 @@ fn demo() -> App {
     App::new(Source::Demo)
 }
 
+/// The repository pane is hidden by default, so the tests that are about
+/// walking to it have to ask for it — as a reader would with `b`.
+fn demo_with_sidebar() -> App {
+    let mut app = demo();
+    app.sidebar = true;
+    app.sidebar_shown = true;
+    app
+}
+
 fn press(app: &mut App, code: KeyCode) {
     app.on_key(KeyEvent {
         code,
@@ -28,14 +37,14 @@ fn ch(app: &mut App, c: char) {
 
 #[test]
 fn each_view_exposes_its_own_panes() {
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::List]);
 
     // a PR has a checks pane; an issue does not
     press(&mut app, KeyCode::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body, Pane::Checks]);
 
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     ch(&mut app, '1'); // issues tab
     press(&mut app, KeyCode::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body]);
@@ -43,7 +52,7 @@ fn each_view_exposes_its_own_panes() {
 
 #[test]
 fn h_and_l_stop_at_the_edges() {
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     app.pane = Pane::Repos;
     ch(&mut app, 'h');
     assert_eq!(app.pane, Pane::Repos, "h at the leftmost pane stays put");
@@ -55,7 +64,7 @@ fn h_and_l_stop_at_the_edges() {
 
 #[test]
 fn tab_cycles_all_the_way_around() {
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     press(&mut app, KeyCode::Enter); // PR detail: three panes
     app.pane = Pane::Repos;
     press(&mut app, KeyCode::Tab);
@@ -70,7 +79,7 @@ fn tab_cycles_all_the_way_around() {
 
 #[test]
 fn enter_and_esc_walk_the_same_path_in_reverse() {
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     app.pane = Pane::Repos;
 
     press(&mut app, KeyCode::Enter); // repos -> list
@@ -558,6 +567,13 @@ fn the_picker_does_not_run_off_either_end() {
 }
 
 #[test]
+fn the_repository_pane_starts_hidden() {
+    let app = demo();
+    assert!(!app.sidebar, "sixty repositories are a wall, not a default");
+    assert!(!app.panes().contains(&Pane::Repos));
+}
+
+#[test]
 fn the_picker_swallows_the_keys_beneath_it() {
     let _g = crate::theme::tests::LOCK.lock();
     use crate::theme::{Theme, set};
@@ -576,8 +592,7 @@ fn the_picker_swallows_the_keys_beneath_it() {
 
 #[test]
 fn b_hides_the_repository_pane_and_the_panes_follow() {
-    let mut app = demo();
-    app.sidebar_shown = true;
+    let mut app = demo_with_sidebar();
     assert!(app.panes().contains(&Pane::Repos));
 
     ch(&mut app, 'b');
@@ -595,8 +610,7 @@ fn b_hides_the_repository_pane_and_the_panes_follow() {
 
 #[test]
 fn hiding_the_sidebar_takes_the_focus_with_it() {
-    let mut app = demo();
-    app.sidebar_shown = true;
+    let mut app = demo_with_sidebar();
     app.pane = Pane::Repos;
     ch(&mut app, 'b');
     assert_ne!(app.pane, Pane::Repos, "focus cannot stay on a hidden pane");
@@ -616,7 +630,7 @@ fn a_narrow_terminal_hides_it_whatever_was_asked_for() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    let mut app = demo();
+    let mut app = demo_with_sidebar();
     assert!(app.sidebar, "asked for");
 
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -641,4 +655,140 @@ fn the_logs_and_diff_views_never_show_it() {
     let mut term = Terminal::new(TestBackend::new(150, 40)).unwrap();
     term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
     assert!(!app.sidebar_shown);
+}
+
+// --- the finder ---
+
+#[test]
+fn p_opens_the_finder_on_repositories() {
+    let mut app = demo();
+    ch(&mut app, 'p');
+    assert!(app.finder_open);
+    assert_eq!(app.finder_source, crate::finder::Source::Repos);
+    assert_eq!(
+        app.finder_len(),
+        app.repos().len(),
+        "everything, unfiltered"
+    );
+}
+
+#[test]
+fn typing_filters_the_repositories_as_you_go() {
+    let mut app = demo();
+    ch(&mut app, 'p');
+    for c in "tui".chars() {
+        ch(&mut app, c);
+    }
+    let hits = app.finder_results();
+    assert!(!hits.is_empty());
+    assert_eq!(hits[0].label, "tuikit", "the best match leads");
+    assert!(
+        hits.len() < app.repos().len(),
+        "and the rest were filtered out"
+    );
+}
+
+#[test]
+fn a_query_that_matches_nothing_leaves_an_empty_list() {
+    let mut app = demo();
+    ch(&mut app, 'p');
+    for c in "zzzzz".chars() {
+        ch(&mut app, c);
+    }
+    assert_eq!(app.finder_len(), 0);
+}
+
+#[test]
+fn enter_on_a_repository_goes_there() {
+    let mut app = demo();
+    let target = app.repos()[4].name.clone();
+    ch(&mut app, 'p');
+    for c in target.chars().take(4) {
+        ch(&mut app, c);
+    }
+    press(&mut app, KeyCode::Enter);
+    assert!(!app.finder_open);
+    assert_eq!(app.repo_name(), target);
+    assert_eq!(app.view, View::List);
+}
+
+#[test]
+fn tab_walks_the_sources_and_keeps_the_query() {
+    let mut app = demo();
+    ch(&mut app, 'p');
+    ch(&mut app, 'x');
+    press(&mut app, KeyCode::Tab);
+    assert_eq!(app.finder_source, crate::finder::Source::Issues);
+    assert_eq!(app.finder_query, "x", "the same words, somewhere else");
+    for _ in 0..3 {
+        press(&mut app, KeyCode::Tab);
+    }
+    assert_eq!(app.finder_source, crate::finder::Source::Repos, "it wraps");
+}
+
+#[test]
+fn the_selection_wraps_and_never_leaves_the_list() {
+    let mut app = demo();
+    ch(&mut app, 'p');
+    let len = app.finder_len();
+    press(&mut app, KeyCode::Up);
+    assert_eq!(app.finder_sel, len - 1, "up from the top lands at the end");
+    press(&mut app, KeyCode::Down);
+    assert_eq!(app.finder_sel, 0);
+}
+
+#[test]
+fn the_finder_swallows_the_keys_beneath_it() {
+    let mut app = demo();
+    let before = app.item;
+    ch(&mut app, 'p');
+    ch(&mut app, 'j'); // a letter of the query, not a movement
+    assert_eq!(app.item, before);
+    assert_eq!(app.finder_query, "j");
+    press(&mut app, KeyCode::Esc);
+    assert!(!app.finder_open);
+}
+
+#[test]
+fn a_commit_search_waits_for_something_to_search_for() {
+    // GitHub rejects a commit search made of qualifiers alone, so an empty
+    // query must not be sent at all
+    let mut app = App::new(Source::Live);
+    app.open_finder();
+    app.finder_source = crate::finder::Source::Commits;
+    app.finder_sent = "\u{0}".into();
+    app.finder_tick();
+    assert!(
+        !app.finder_state.is_loading(),
+        "nothing should have been asked for"
+    );
+}
+
+// --- moving between repositories ---
+
+#[test]
+fn brackets_step_through_the_repositories_and_wrap() {
+    let mut app = demo();
+    let n = app.repos().len();
+    let start = app.repo_idx();
+
+    ch(&mut app, ']');
+    assert_eq!(app.repo_idx(), (start + 1) % n);
+    ch(&mut app, '[');
+    assert_eq!(app.repo_idx(), start);
+
+    for _ in 0..n {
+        ch(&mut app, ']');
+    }
+    assert_eq!(app.repo_idx(), start, "a full turn comes back");
+}
+
+#[test]
+fn stepping_to_another_repository_resets_the_view() {
+    let mut app = demo();
+    press(&mut app, KeyCode::Enter); // into a detail
+    app.item = 2;
+    ch(&mut app, ']');
+    assert_eq!(app.view, View::List);
+    assert_eq!(app.item, 0, "the selection cannot follow to another repo");
 }

@@ -699,6 +699,115 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
     files
 }
 
+// --------------------------------------------------------------------- search
+
+/// Issues or pull requests across the owner's repositories.
+///
+/// An empty query is fine here — GitHub allows qualifier-only searches for
+/// issues — and returns the most recently updated.
+pub fn search_issues(owner: &str, query: &str, prs: bool) -> Res<Vec<SearchHit>> {
+    let kind = if prs { "prs" } else { "issues" };
+    let mut args = vec![
+        "search",
+        kind,
+        "--owner",
+        owner,
+        "--limit",
+        "40",
+        "--json",
+        "number,title,repository,state,updatedAt",
+    ];
+    let trimmed = query.trim();
+    if !trimmed.is_empty() {
+        args.push(trimmed);
+    }
+    let v = json(&args)?;
+
+    Ok(v.as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|h| SearchHit {
+            title: s(h, "title"),
+            repo: h
+                .pointer("/repository/nameWithOwner")
+                .and_then(|x| x.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            num: n(h, "number"),
+            state: Status::parse(&s(h, "state")),
+            when: ago(&s(h, "updatedAt")),
+            sha: String::new(),
+        })
+        .collect())
+}
+
+/// Commits across the owner's repositories.
+///
+/// GitHub rejects a commit search made of qualifiers alone, so this is only
+/// called once there is something to search for.
+pub fn search_commits(owner: &str, query: &str) -> Res<Vec<SearchHit>> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    let v = json(&[
+        "search",
+        "commits",
+        "--owner",
+        owner,
+        "--limit",
+        "40",
+        "--json",
+        "sha,commit,repository",
+        trimmed,
+    ])?;
+
+    Ok(v.as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .map(|h| {
+            let sha = s(h, "sha");
+            let message = h
+                .pointer("/commit/message")
+                .and_then(|x| x.as_str())
+                .unwrap_or_default();
+            SearchHit {
+                // a commit message is a subject plus a body; only the subject
+                // belongs on one row
+                title: message.lines().next().unwrap_or_default().to_string(),
+                // commit search names the repository `fullName`, unlike the
+                // issue search next door
+                repo: h
+                    .pointer("/repository/fullName")
+                    .or_else(|| h.pointer("/repository/nameWithOwner"))
+                    .and_then(|x| x.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                num: 0,
+                state: Status::Unknown,
+                when: h
+                    .pointer("/commit/author/date")
+                    .and_then(|x| x.as_str())
+                    .map(ago)
+                    .unwrap_or_default(),
+                sha: sha.chars().take(7).collect(),
+            }
+        })
+        .collect())
+}
+
+/// A row as the search API returns it, before the finder shapes it.
+pub struct SearchHit {
+    pub title: String,
+    pub repo: String,
+    pub num: i64,
+    pub state: Status,
+    pub when: String,
+    pub sha: String,
+}
+
 // -------------------------------------------------------------------- acciones
 
 pub fn merge(repo: &str, num: i64, method: &str) -> Res<()> {

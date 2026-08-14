@@ -89,6 +89,42 @@ impl App {
         self.file_idx.min(self.diff_files().len().saturating_sub(1))
     }
 
+    /// The rows the finder is showing. Repositories are ranked here; the rest
+    /// arrive already ranked by GitHub.
+    pub fn finder_results(&self) -> Vec<crate::finder::Hit> {
+        if !self.finder_source.is_local() {
+            return self.finder_hits.clone();
+        }
+        let repos = self.repos();
+        crate::fuzzy::rank(&self.finder_query, repos, |r| r.name.as_str())
+            .into_iter()
+            .map(|(i, _)| {
+                let r = &repos[i];
+                crate::finder::Hit {
+                    label: r.name.clone(),
+                    detail: format!(
+                        "{} · {} open issues · {} open PRs",
+                        if r.lang.is_empty() { "—" } else { &r.lang },
+                        r.issues,
+                        r.prs
+                    ),
+                    repo: format!("{}/{}", self.login(), r.name),
+                    num: 0,
+                    state: Status::Unknown,
+                    kind: crate::finder::HitKind::Repo,
+                }
+            })
+            .collect()
+    }
+
+    pub fn finder_len(&self) -> usize {
+        if self.finder_source.is_local() {
+            self.finder_results().len()
+        } else {
+            self.finder_hits.len()
+        }
+    }
+
     /// Load state of the selected item's body, files and reviews.
     pub fn detail_status(&self) -> Load {
         let Some(num) = self.current().map(|c| c.num) else {

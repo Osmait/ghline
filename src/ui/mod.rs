@@ -3,6 +3,7 @@
 mod confirm;
 mod detail;
 mod diff;
+mod finder;
 mod header;
 mod list;
 mod logs;
@@ -323,6 +324,9 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
 
     if app.accounts_open {
         overlay::accounts(buf, area, app);
+    }
+    if app.finder_open {
+        finder::draw(buf, area, app);
     }
     if app.themes_open {
         overlay::themes(buf, area, app);
