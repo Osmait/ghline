@@ -86,12 +86,38 @@ fn window(buf: &mut Buffer, area: Rect, lines: &[Vec<Seg>], offset: usize, focus
     }
 }
 
+/// Placeholder lines for a body that has not arrived. They go through the same
+/// line model as the real content, so the pane scrolls and clips identically.
+///
+/// `first` offsets the highlight band so separate sections do not pulse in
+/// lockstep.
+fn skeleton_lines(width: usize, widths: &[u16], first: usize) -> Vec<Vec<Seg>> {
+    widths
+        .iter()
+        .enumerate()
+        .map(|(i, &p)| {
+            let w = (width * p as usize / 100).max(1);
+            vec![(
+                "█".repeat(w),
+                Style::default().bg(theme::BG).fg(band(i + first)),
+            )]
+        })
+        .collect()
+}
+
+/// The skeleton's resting colour. The travelling highlight lives in
+/// `ui::skel_bar`; these lines are static because they scroll with the pane and
+/// a moving band would fight the scrolling.
+fn band(_row: usize) -> ratatui::style::Color {
+    theme::SEL
+}
+
 /// How far a pane of `height` rows can scroll.
 fn max_offset(len: usize, height: u16) -> usize {
     len.saturating_sub(height as usize)
 }
 
-fn issue_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
+fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<Seg>> {
     let base = Style::default().bg(theme::BG);
     let mut out: Vec<Vec<Seg>> = Vec::new();
 
@@ -115,10 +141,17 @@ fn issue_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
     out.push(vec![("┄".repeat(width), base.fg(theme::BORDER))]);
     out.push(Vec::new());
 
-    out.extend(markdown::render(&cur.body_text(), width.min(76)));
+    if pending && cur.body.is_empty() {
+        out.extend(skeleton_lines(width.min(76), &[82, 70, 88, 54, 76, 40], 0));
+    } else {
+        out.extend(markdown::render(&cur.body_text(), width.min(76)));
+    }
     out.push(Vec::new());
     out.push(vec![("COMMENTS".into(), base.fg(theme::DIM))]);
     out.push(Vec::new());
+    if pending && cur.as_issue().is_none_or(|i| i.comment_list.is_empty()) {
+        out.extend(skeleton_lines(width.min(76), &[30, 68, 26, 74], 7));
+    }
 
     for c in cur.as_issue().into_iter().flat_map(|i| &i.comment_list) {
         out.push(vec![
@@ -145,7 +178,11 @@ fn issue(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width.saturating_sub(3),
         height: area.height.saturating_sub(1),
     };
-    let lines = issue_lines(cur, inner.width.saturating_sub(2) as usize);
+    let lines = issue_lines(
+        cur,
+        inner.width.saturating_sub(2) as usize,
+        app.detail_status().is_loading(),
+    );
     app.detail_height = inner.height;
     app.detail_scroll = app.detail_scroll.min(max_offset(lines.len(), inner.height));
     window(
@@ -277,18 +314,29 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
     checks_pane(buf, right, app);
 }
 
-fn description_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
+fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<Seg>> {
     let base = Style::default().bg(theme::BG);
     let mut out: Vec<Vec<Seg>> = Vec::new();
 
     out.push(vec![("DESCRIPTION".into(), base.fg(theme::DIM))]);
-    out.extend(markdown::render(&cur.body_text(), width));
+    // a skeleton only while there is nothing to show; a refresh keeps the old
+    // body on screen rather than blanking it
+    if pending && cur.body.is_empty() {
+        // saying "no description" here would be a lie, so the shape of one is
+        // drawn instead
+        out.extend(skeleton_lines(width, &[76, 88, 64, 80, 42], 0));
+    } else {
+        out.extend(markdown::render(&cur.body_text(), width));
+    }
 
     out.push(Vec::new());
     out.push(vec![
         ("FILES CHANGED".into(), base.fg(theme::DIM)),
         ("   d → diff".into(), base.fg(theme::DIMMER)),
     ]);
+    if pending && cur.files().is_empty() {
+        out.extend(skeleton_lines(width, &[58, 44, 66, 50], 5));
+    }
     for f in cur.files() {
         // the counts hug the right edge of the available width
         let stats = format!("{} {}", f.add, f.del);
@@ -305,6 +353,10 @@ fn description_lines(cur: &crate::data::Item, width: usize) -> Vec<Vec<Seg>> {
 
     out.push(Vec::new());
     out.push(vec![("REVIEWS".into(), base.fg(theme::DIM))]);
+    let reviews_empty = cur.as_pr().is_none_or(|p| p.reviews.is_empty());
+    if pending && reviews_empty {
+        out.extend(skeleton_lines(width, &[34, 28], 9));
+    }
     for r in cur.as_pr().into_iter().flat_map(|p| &p.reviews) {
         let (color, icon) = theme::review(r.state);
         out.push(vec![
@@ -324,7 +376,11 @@ fn description(buf: &mut Buffer, area: Rect, app: &mut App) {
         width: area.width.saturating_sub(3),
         height: area.height.saturating_sub(1),
     };
-    let lines = description_lines(cur, inner.width.saturating_sub(2) as usize);
+    let lines = description_lines(
+        cur,
+        inner.width.saturating_sub(2) as usize,
+        app.detail_status().is_loading(),
+    );
     app.detail_height = inner.height;
     app.detail_scroll = app.detail_scroll.min(max_offset(lines.len(), inner.height));
     window(

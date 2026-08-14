@@ -19,7 +19,8 @@ use crate::theme;
 
 /// Renders a Markdown body into styled lines of at most `width` columns.
 pub fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {
-    let parsed = tui_markdown::from_str(body);
+    let prepared = hard_breaks(body);
+    let parsed = tui_markdown::from_str(&prepared);
     let mut out = Vec::new();
     let mut fenced = false;
 
@@ -60,6 +61,41 @@ pub fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {
             continue;
         }
         out.extend(fold(spans, width));
+    }
+    out
+}
+
+/// CommonMark folds a single newline into a space; GitHub does not, and its
+/// bodies are written expecting that — an "Expected:" and an "Actual:" line
+/// are meant to stay apart. Two trailing spaces are the standard way to ask
+/// for the break, so they are added to the lines that need one.
+fn hard_breaks(body: &str) -> String {
+    let lines: Vec<&str> = body.lines().collect();
+    let mut out = String::with_capacity(body.len() + lines.len() * 2);
+    let mut fenced = false;
+
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+        }
+        out.push_str(line);
+
+        let next_continues = lines
+            .get(i + 1)
+            .is_some_and(|n| !n.trim().is_empty() && !n.trim_start().starts_with("```"));
+        // a break is only needed inside a run of prose; blocks already break,
+        // and a table row would stop being one
+        if !fenced
+            && next_continues
+            && !trimmed.is_empty()
+            && !trimmed.starts_with('|')
+            && !trimmed.starts_with('#')
+            && !line.ends_with("  ")
+        {
+            out.push_str("  ");
+        }
+        out.push('\n');
     }
     out
 }
@@ -300,6 +336,29 @@ mod tests {
         assert!(
             out[1].starts_with("  "),
             "continuation is indented: {out:?}"
+        );
+    }
+
+    #[test]
+    fn a_single_newline_still_breaks_the_line() {
+        // GitHub renders these apart; plain CommonMark would join them
+        let out = plain(&render("Expected: it collapses.\nActual: it panics.", 80));
+        assert!(out.iter().any(|l| l.starts_with("Expected:")), "{out:?}");
+        assert!(out.iter().any(|l| l.starts_with("Actual:")), "{out:?}");
+    }
+
+    #[test]
+    fn hard_breaks_leave_tables_and_fences_alone() {
+        let md = "| a | b |\n|---|---|\n| 1 | 2 |";
+        assert!(
+            !hard_breaks(md).contains("|  \n"),
+            "a table row stays a row"
+        );
+
+        let fence = "```\none\ntwo\n```";
+        assert!(
+            !hard_breaks(fence).contains("one  "),
+            "code keeps its own spacing"
         );
     }
 

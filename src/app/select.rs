@@ -89,6 +89,17 @@ impl App {
         self.file_idx.min(self.diff_files().len().saturating_sub(1))
     }
 
+    /// Load state of the selected item's body, files and reviews.
+    pub fn detail_status(&self) -> Load {
+        let Some(num) = self.current().map(|c| c.num) else {
+            return Load::Ready;
+        };
+        self.detail_state
+            .get(&(self.repo_key(), num))
+            .cloned()
+            .unwrap_or(Load::Ready)
+    }
+
     /// Load state of the selected PR's diff.
     pub fn diff_status(&self) -> Load {
         let Some(num) = self.current().map(|c| c.num) else {

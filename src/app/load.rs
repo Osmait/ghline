@@ -3,7 +3,7 @@
 //! into state.
 
 use super::{App, Load, Prompt, View};
-use crate::data::{Item, Kind};
+use crate::data::Kind;
 use crate::service::{Request, Response};
 
 impl App {
@@ -72,13 +72,16 @@ impl App {
             return;
         }
 
-        // detail: the selection's body, files and reviews
+        // detail: the selection's body, files and reviews, which the list does
+        // not carry
         let Some(cur) = self.current() else { return };
-        let (kind, num, id, loaded) = (cur.kind(), cur.num, cur.id, cur.detail_loaded);
-        if !loaded && kind != Kind::Run {
-            if let Some(item) = self.current_item_mut() {
-                item.detail_loaded = true; // avoids repeating the request
-            }
+        let (kind, num, id) = (cur.kind(), cur.num, cur.id);
+        let idle = self
+            .detail_state
+            .get(&(key.clone(), num))
+            .is_none_or(|s| *s == Load::Idle);
+        if idle && kind != Kind::Run {
+            self.detail_state.insert((key.clone(), num), Load::Loading);
             let repo = key.clone();
             match kind {
                 Kind::Issue => self.ask(Request::IssueDetail { repo, num }),
@@ -143,7 +146,8 @@ impl App {
         self.jobs_state.insert((key.clone(), id), Load::Loading);
         self.logs_state.insert((key.clone(), id), Load::Loading);
         if let Some(num) = self.current().map(|c| c.num) {
-            self.diff_state.insert((key, num), Load::Loading);
+            self.diff_state.insert((key.clone(), num), Load::Loading);
+            self.detail_state.insert((key, num), Load::Loading);
         }
     }
 
@@ -166,14 +170,9 @@ impl App {
         if let Some(cur) = self.current() {
             let num = cur.num;
             self.diff_state.insert((key.clone(), num), Load::Idle);
+            self.detail_state.insert((key.clone(), num), Load::Idle);
         }
         self.flash_ok("refreshing…");
-    }
-
-    pub fn current_item_mut(&mut self) -> Option<&mut Item> {
-        let idx = self.current_index()?;
-        let key = (self.repo_key(), self.tab);
-        self.lists.get_mut(&key)?.get_mut(idx)
     }
 
     /// A status-bar message, suggesting a retry when the failure looks
@@ -224,6 +223,13 @@ impl App {
             },
 
             Response::IssueDetail { repo, num, result } => {
+                self.detail_state.insert(
+                    (repo.clone(), num),
+                    match &result {
+                        Ok(_) => Load::Ready,
+                        Err(e) => Load::Failed(e.brief()),
+                    },
+                );
                 if let Ok((body, comments)) = result
                     && let Some(items) = self.lists.get_mut(&(repo, 0))
                     && let Some(it) = items.iter_mut().find(|i| i.num == num)
@@ -237,6 +243,13 @@ impl App {
             }
 
             Response::PrDetail { repo, num, result } => {
+                self.detail_state.insert(
+                    (repo.clone(), num),
+                    match &result {
+                        Ok(_) => Load::Ready,
+                        Err(e) => Load::Failed(e.brief()),
+                    },
+                );
                 if let Ok((body, files, reviews)) = result
                     && let Some(items) = self.lists.get_mut(&(repo, 1))
                     && let Some(it) = items.iter_mut().find(|i| i.num == num)

@@ -131,6 +131,9 @@ pub struct App {
     pub logs_state: HashMap<(String, i64), Load>,
     /// Load state of each PR's diff.
     pub diff_state: HashMap<(String, i64), Load>,
+    /// Load state of the body, files and reviews of each item, which arrive
+    /// separately from the list that names them.
+    pub detail_state: HashMap<(String, i64), Load>,
     /// A write action is in flight.
     pub busy: bool,
     /// Frame counter for the loading skeletons. It only advances while
@@ -215,6 +218,7 @@ impl App {
             raw_logs: HashMap::new(),
             logs_state: HashMap::new(),
             diff_state: HashMap::new(),
+            detail_state: HashMap::new(),
             busy: false,
             anim: 0,
             accounts,

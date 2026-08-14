@@ -342,8 +342,6 @@ pub struct Item {
     pub when: String,
     pub body: String,
     pub labels: Vec<Label>,
-    /// The detail (body, files, reviews) has already been fetched.
-    pub detail_loaded: bool,
     pub detail: Detail,
 }
 
@@ -360,7 +358,6 @@ impl Item {
             when: String::new(),
             body: String::new(),
             labels: Vec::new(),
-            detail_loaded: false,
             detail,
         }
     }

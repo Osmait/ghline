@@ -458,3 +458,44 @@ fn a_loading_list_draws_a_skeleton_rather_than_a_word() {
         "no word where the rows should be"
     );
 }
+
+#[test]
+fn a_pending_body_draws_a_skeleton_but_a_loaded_one_does_not() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    let blocks_on_screen = |app: &mut App| {
+        let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
+        term.draw(|f| crate::ui::draw(f, app)).unwrap();
+        let buf = term.backend().buffer();
+        (0..buf.area.width)
+            .flat_map(|x| (0..buf.area.height).map(move |y| (x, y)))
+            .filter(|&(x, y)| buf[(x, y)].symbol() == "\u{2588}")
+            .count()
+    };
+
+    // the demo fixture already carries a body, so a pending state must not
+    // paint over content that is already there
+    let mut loaded = demo();
+    press(&mut loaded, KeyCode::Enter);
+    loaded.hold_loading(0);
+    let with_body = blocks_on_screen(&mut loaded);
+
+    // with the body emptied, the same pending state should show its shape
+    let mut empty = demo();
+    press(&mut empty, KeyCode::Enter);
+    let key = (empty.repo_key(), empty.tab);
+    if let Some(items) = empty.lists.get_mut(&key) {
+        for it in items {
+            it.body.clear();
+        }
+    }
+    empty.hold_loading(0);
+    let without_body = blocks_on_screen(&mut empty);
+
+    assert!(
+        without_body > with_body,
+        "a body that has not arrived should be drawn as a skeleton \
+         ({without_body} blocks) and one that has should not ({with_body})"
+    );
+}
