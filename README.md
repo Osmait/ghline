@@ -1,3 +1,39 @@
+# gh-tui and diffline
+
+Two terminal interfaces over one set of parts.
+
+**`github-tui`** browses GitHub through the `gh` CLI — repositories, issues,
+pull requests, Actions, files — and can hand any of it to a coding agent.
+
+**`diffline`** reviews the diff in front of you. Three panes: what changed, the
+diff itself, and a queue of comments anchored to lines. Select a range with
+`V`, write a note with `c`, pick an agent with `a`, send the lot with `S`.
+
+```sh
+diffline            # the repository you are standing in
+[ ]                 # working tree · this branch · the last commit
+V c                 # take a range, comment on it
+a S                 # pick an agent, send the queue
+?                   # everything else
+```
+
+They are different programs — one asks a server what exists, the other asks
+the working tree what changed — sharing a library: the palette, the fuzzy
+matcher, the lexer, the agents on this machine, and the drawing primitives a
+cell grid needs.
+
+A comment is anchored to a *line of a file* rather than to a row on screen,
+because expanding the context or changing scope renumbers every row. So a note
+survives `+`, `r`, and stepping away and back. A deleted line has no new-side
+number and is anchored to the old side; a context line anchors to the new one,
+since a note on unchanged code is about the code as it will stand.
+
+The queue travels as **one message**, grouped by file and in line order — the
+order the agent will work in. Twelve separate prompts would get twelve separate
+answers and no shape.
+
+---
+
 # gh-tui
 
 A GitHub TUI in Rust (`ratatui` + `crossterm`), ported 1:1 from the

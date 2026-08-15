@@ -1,0 +1,1361 @@
+//! Drawing Diffline.
+//!
+//! Cell painting rather than widgets, and the same primitives the GitHub
+//! browser uses — the two look alike because they are drawn with the same
+//! hands. The palette is Catppuccin Mocha, which is what the design specified
+//! and what `theme.rs` already held.
+
+use ratatui::Frame;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+use ratatui::style::{Modifier, Style};
+use unicode_width::UnicodeWidthStr;
+
+use super::app::{App, FinderTab, Modal, Pane};
+use super::model::{Kind, State};
+use crate::theme;
+use crate::ui::{clear, fill, hline, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
+
+/// The file tree's width, and the queue's. Both fixed: the diff is what the
+/// screen is for, and it takes whatever is left.
+const TREE_W: u16 = 32;
+const QUEUE_W: u16 = 44;
+
+pub fn draw(f: &mut Frame<'_>, app: &mut App) {
+    let area = f.area();
+    let buf = f.buffer_mut();
+    clear(buf, area, theme::bg());
+
+    if area.height < 10 || area.width < 60 {
+        put(
+            buf,
+            0,
+            0,
+            area.width,
+            "terminal too small",
+            Style::default().fg(theme::red()).bg(theme::bg()),
+        );
+        return;
+    }
+
+    let header = Rect {
+        x: 0,
+        y: 0,
+        width: area.width,
+        height: 1,
+    };
+    let status = Rect {
+        x: 0,
+        y: area.height - 1,
+        width: area.width,
+        height: 1,
+    };
+    let body = Rect {
+        x: 0,
+        y: 1,
+        width: area.width,
+        height: area.height - 2,
+    };
+
+    header_bar(buf, header, app);
+    hline(buf, 0, 1, area.width, theme::border());
+
+    // The side panes give way on a narrow terminal rather than squeezing the
+    // diff into nothing: reading the change is the job.
+    let tree_w = if area.width >= 110 { TREE_W } else { 0 };
+    let queue_w = if area.width >= 150 { QUEUE_W } else { 0 };
+    let body = Rect {
+        y: body.y + 1,
+        height: body.height - 1,
+        ..body
+    };
+
+    if tree_w > 0 {
+        let r = Rect {
+            width: tree_w,
+            ..body
+        };
+        tree(buf, r, app);
+        vline(buf, tree_w, body.y, body.height, theme::border());
+    }
+    if queue_w > 0 {
+        let x = area.width - queue_w;
+        vline(buf, x - 1, body.y, body.height, theme::border());
+        queue(
+            buf,
+            Rect {
+                x,
+                width: queue_w,
+                ..body
+            },
+            app,
+        );
+    }
+    let mid_x = tree_w + u16::from(tree_w > 0);
+    let mid_w = area
+        .width
+        .saturating_sub(mid_x)
+        .saturating_sub(queue_w + u16::from(queue_w > 0));
+    diff(
+        buf,
+        Rect {
+            x: mid_x,
+            width: mid_w,
+            ..body
+        },
+        app,
+    );
+
+    status_bar(buf, status, app);
+
+    match app.modal {
+        Some(Modal::Finder) => finder(buf, area, app),
+        Some(Modal::Palette) => palette(buf, area, app),
+        Some(Modal::Comment) => comment(buf, area, app),
+        Some(Modal::Agents) => agents(buf, area, app),
+        Some(Modal::Deps) => deps(buf, area, app),
+        Some(Modal::Help) => help(buf, area),
+        None => {}
+    }
+}
+
+// ------------------------------------------------------------------ header
+
+fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
+    fill(buf, area, theme::panel());
+    let base = Style::default().bg(theme::panel());
+
+    let mut x = put(
+        buf,
+        0,
+        0,
+        area.right(),
+        " DIFFLINE ",
+        Style::default()
+            .bg(theme::yellow())
+            .fg(theme::panel())
+            .add_modifier(Modifier::BOLD),
+    );
+
+    x = put(buf, x + 1, 0, area.right(), "⎇ ", base.fg(theme::purple()));
+    x = put_trunc(
+        buf,
+        x,
+        0,
+        area.right() / 2,
+        &app.scope.label(),
+        base.fg(theme::bright()),
+    );
+
+    // The scopes, as tabs. The one in force is inverted.
+    x += 2;
+    for s in &app.scopes {
+        let on = *s == app.scope;
+        let style = if on {
+            base.bg(theme::fg()).fg(theme::panel())
+        } else {
+            base.fg(theme::dim())
+        };
+        x = put(buf, x, 0, area.right(), &format!(" {} ", s.label()), style);
+        x += 1;
+    }
+
+    let (add, del) = app
+        .files
+        .iter()
+        .fold((0u32, 0u32), |(a, d), f| (a + f.add, d + f.del));
+    let right = format!(
+        "+{add}  −{del}  │  {} files  │  {} queued ",
+        app.files.len(),
+        app.comments.len()
+    );
+    put_right(buf, area.right(), 0, &right, base.fg(theme::dimmer()));
+}
+
+// -------------------------------------------------------------------- tree
+
+fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
+    fill(buf, area, theme::panel_alt());
+    let head = Rect { height: 1, ..area };
+    fill(buf, head, theme::panel());
+    let hs = Style::default().bg(theme::panel()).fg(theme::dim());
+    put(buf, area.x + 1, area.y, area.right(), "CHANGES", hs);
+    put_right(
+        buf,
+        area.right() - 1,
+        area.y,
+        &app.files.len().to_string(),
+        hs.fg(theme::dimmer()),
+    );
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+
+    let list = Rect {
+        y: area.y + 2,
+        height: area.height.saturating_sub(2),
+        ..area
+    };
+    let rows = list.height as usize;
+
+    if app.files.is_empty() {
+        let state = app.files_state.clone();
+        if state.is_loading() {
+            for row in 0..rows.min(6) {
+                skel_bar(buf, list.x + 2, list.y + row as u16, 20, row, app.anim);
+            }
+            return;
+        }
+        let (msg, color) = match state.error() {
+            Some(e) => (e.to_string(), theme::red()),
+            None => ("nothing changed".into(), theme::dimmer()),
+        };
+        put_trunc(
+            buf,
+            list.x + 2,
+            list.y,
+            area.right() - 1,
+            &msg,
+            Style::default().bg(theme::panel_alt()).fg(color),
+        );
+        return;
+    }
+
+    scroll_into_view(&mut app.tree_scroll, app.file_idx, rows, app.files.len());
+    let focused = app.pane == Pane::Tree;
+    let mut last_dir = String::new();
+
+    // Directories are printed as separators rather than as a real tree: a
+    // diff touches few enough directories that indentation would cost a
+    // column and buy nothing.
+    let mut y = list.y;
+    for (i, f) in app.files.iter().enumerate().skip(app.tree_scroll) {
+        if y >= list.bottom() {
+            break;
+        }
+        if f.dir() != last_dir {
+            last_dir = f.dir().to_string();
+            if y < list.bottom() {
+                put_trunc(
+                    buf,
+                    list.x + 1,
+                    y,
+                    area.right() - 1,
+                    &format!("{last_dir}/"),
+                    Style::default().bg(theme::panel_alt()).fg(theme::dimmer()),
+                );
+                y += 1;
+            }
+            if y >= list.bottom() {
+                break;
+            }
+        }
+
+        let sel = i == app.file_idx;
+        let bg = if sel {
+            theme::sel()
+        } else {
+            theme::panel_alt()
+        };
+        fill(
+            buf,
+            Rect {
+                x: area.x,
+                y,
+                width: area.width,
+                height: 1,
+            },
+            bg,
+        );
+        let base = Style::default().bg(bg);
+        if sel {
+            let mark = if focused {
+                theme::cyan()
+            } else {
+                theme::sel_mark_idle()
+            };
+            put(buf, area.x, y, area.right(), "▌", base.fg(mark));
+        }
+
+        let status_fg = match f.status {
+            super::model::Status::Added => theme::green(),
+            super::model::Status::Deleted => theme::red(),
+            _ => theme::cyan(),
+        };
+        put(
+            buf,
+            area.x + 2,
+            y,
+            area.right(),
+            f.status.mark(),
+            base.fg(status_fg),
+        );
+
+        // A file with notes on it carries a dot, so the tree says where the
+        // work is without opening anything.
+        let noted = app.comments.iter().any(|c| c.path() == f.path);
+        let counts = format!("+{} −{}{}", f.add, f.del, if noted { " ●" } else { "" });
+        let cx = put_right(
+            buf,
+            area.right() - 1,
+            y,
+            &counts,
+            base.fg(if noted {
+                theme::yellow()
+            } else {
+                theme::dimmer()
+            }),
+        );
+        put_trunc(
+            buf,
+            area.x + 4,
+            y,
+            cx.saturating_sub(1),
+            f.name(),
+            base.fg(if sel { theme::bright() } else { theme::fg() }),
+        );
+        y += 1;
+    }
+}
+
+// -------------------------------------------------------------------- diff
+
+fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
+    let head = Rect { height: 1, ..area };
+    fill(buf, head, theme::panel());
+    let hs = Style::default().bg(theme::panel());
+    let mut x = put(
+        buf,
+        area.x + 1,
+        area.y,
+        area.right(),
+        "DIFF",
+        hs.fg(theme::yellow()),
+    );
+    x = put(
+        buf,
+        x + 2,
+        area.y,
+        area.right(),
+        app.path(),
+        hs.fg(theme::bright()),
+    );
+    let _ = x;
+
+    let right = format!(
+        "blame {} │ ctx ±{} ",
+        if app.blame_on { "on" } else { "off" },
+        app.context
+    );
+    put_right(
+        buf,
+        area.right(),
+        area.y,
+        &right,
+        hs.fg(if app.blame_on {
+            theme::yellow()
+        } else {
+            theme::dimmer()
+        }),
+    );
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+
+    let body = Rect {
+        y: area.y + 2,
+        height: area.height.saturating_sub(2),
+        ..area
+    };
+    let rows = app.diff_rows().to_vec();
+
+    if rows.is_empty() {
+        let state = app.diff_state();
+        if state.is_loading() {
+            let avail = body.width.saturating_sub(12);
+            let widths = [64, 40, 78, 30, 56, 70, 44];
+            for row in 0..(body.height as usize).min(widths.len() * 2) {
+                if row % 4 == 3 {
+                    continue;
+                }
+                skel_bar(
+                    buf,
+                    body.x + 8,
+                    body.y + row as u16,
+                    crate::ui::pct(avail, widths[row % widths.len()]),
+                    row,
+                    app.anim,
+                );
+            }
+            return;
+        }
+        let (msg, color) = match state.error() {
+            Some(e) => (e.to_string(), theme::red()),
+            None if app.files.is_empty() => ("nothing to review".into(), theme::dimmer()),
+            None => ("no textual changes in this file".into(), theme::dimmer()),
+        };
+        put_trunc(
+            buf,
+            body.x + 2,
+            body.y,
+            area.right() - 1,
+            &msg,
+            Style::default().bg(theme::bg()).fg(color),
+        );
+        return;
+    }
+
+    let height = body.height as usize;
+    scroll_into_view(&mut app.diff_scroll, app.cursor, height, rows.len());
+
+    let (lo, hi) = app.span();
+    let visual = app.visual();
+    let spans = app.spans.get(app.path()).cloned().unwrap_or_default();
+    let blame = app.blame_lines().cloned().unwrap_or_default();
+    let blame_w: u16 = if app.blame_on { 30 } else { 0 };
+    let focused = app.pane == Pane::Diff;
+
+    for (i, row) in rows.iter().enumerate().skip(app.diff_scroll) {
+        let y = body.y + (i - app.diff_scroll) as u16;
+        if y >= body.bottom() {
+            break;
+        }
+        let on_cursor = i == app.cursor;
+        let in_sel = visual && i >= lo && i <= hi;
+
+        let (mut bg, fg, sign_fg) = match row.kind {
+            Kind::Added => (theme::diff_add_bg(), theme::green(), theme::green()),
+            Kind::Deleted => (theme::diff_del_bg(), theme::red(), theme::red()),
+            Kind::Header => (theme::panel(), theme::cyan_soft(), theme::dimmer()),
+            Kind::Context => (theme::bg(), theme::fg(), theme::dimmer()),
+        };
+        if in_sel {
+            bg = theme::sel();
+        }
+        if on_cursor {
+            bg = theme::sel_mark_idle();
+        }
+
+        fill(
+            buf,
+            Rect {
+                x: body.x,
+                y,
+                width: body.width,
+                height: 1,
+            },
+            bg,
+        );
+        let base = Style::default().bg(bg);
+
+        if on_cursor || in_sel {
+            let mark = if visual {
+                theme::purple()
+            } else if focused {
+                theme::yellow()
+            } else {
+                theme::sel_mark_idle()
+            };
+            put(buf, body.x, y, body.x + 1, "▌", base.fg(mark));
+        }
+
+        // The two gutters, old side then new, as the design has them.
+        let num = |n: Option<u32>| n.map(|v| v.to_string()).unwrap_or_default();
+        put_right(buf, body.x + 6, y, &num(row.old), base.fg(theme::dimmer()));
+        put_right(buf, body.x + 12, y, &num(row.new), base.fg(theme::dimmer()));
+        let mut cx = body.x + 13;
+
+        if blame_w > 0 && row.kind.is_code() {
+            let who = row
+                .new
+                .and_then(|n| blame.get(n as usize - 1))
+                .map(String::as_str)
+                .unwrap_or("");
+            put_trunc(
+                buf,
+                cx,
+                y,
+                cx + blame_w,
+                who,
+                base.fg(theme::dimmer()).add_modifier(Modifier::ITALIC),
+            );
+        }
+        cx += blame_w;
+
+        cx = put(buf, cx, y, area.right(), row.sign(), base.fg(sign_fg));
+        cx += 1;
+
+        // A badge on the first line of each note, and only there: repeating it
+        // down a twelve-line comment would be noise.
+        let badge = app.comment_head_at(row);
+        let end = if badge > 0 {
+            let label = format!(" ● {badge} ");
+            put_right(buf, area.right(), y, &label, base.fg(theme::yellow()))
+        } else {
+            area.right()
+        };
+
+        draw_code(buf, cx, y, end, &row.text, spans.get(i), base.fg(fg));
+    }
+}
+
+/// One line of code, coloured by the lexer where it has something to say.
+fn draw_code(
+    buf: &mut Buffer,
+    x: u16,
+    y: u16,
+    max: u16,
+    text: &str,
+    spans: Option<&Vec<crate::syntax::Span>>,
+    plain: Style,
+) {
+    let Some(spans) = spans.filter(|s| !s.is_empty()) else {
+        put_trunc(buf, x, y, max, text, plain);
+        return;
+    };
+    let mut cx = x;
+    let mut at = 0usize;
+    for s in spans {
+        if s.from >= text.len() || s.to > text.len() {
+            break;
+        }
+        if s.from > at {
+            cx = put(buf, cx, y, max, &text[at..s.from], plain);
+        }
+        cx = put(
+            buf,
+            cx,
+            y,
+            max,
+            &text[s.from..s.to],
+            plain.fg(kind_color(s.kind)),
+        );
+        at = s.to;
+        if cx >= max {
+            return;
+        }
+    }
+    if at < text.len() {
+        put_trunc(buf, cx, y, max, &text[at..], plain);
+    }
+}
+
+fn kind_color(kind: crate::syntax::Kind) -> ratatui::style::Color {
+    use crate::syntax::Kind as K;
+    match kind {
+        K::Comment => theme::dimmer(),
+        K::Str => theme::green(),
+        K::Number => theme::orange(),
+        K::Keyword => theme::purple(),
+        K::Type => theme::cyan_soft(),
+    }
+}
+
+// ------------------------------------------------------------------- queue
+
+fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
+    fill(buf, area, theme::panel_alt());
+    let head = Rect { height: 1, ..area };
+    fill(buf, head, theme::panel());
+    let hs = Style::default().bg(theme::panel());
+    put(
+        buf,
+        area.x + 1,
+        area.y,
+        area.right(),
+        "REVIEW QUEUE",
+        hs.fg(theme::yellow()),
+    );
+    put_right(
+        buf,
+        area.right() - 1,
+        area.y,
+        &app.comments.len().to_string(),
+        hs.fg(theme::dimmer()),
+    );
+    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+
+    // The footer names the target and what sending would do.
+    let foot_y = area.bottom() - 2;
+    hline(buf, area.x, foot_y - 1, area.width, theme::border_soft());
+    let fs = Style::default().bg(theme::panel_alt());
+    let (who, dot) = match app.agent() {
+        Some(a) => (
+            format!("{} · {}", a.kind, a.where_short()),
+            match a.status {
+                crate::data::AgentStatus::Working => theme::yellow(),
+                crate::data::AgentStatus::Blocked => theme::red(),
+                crate::data::AgentStatus::Idle | crate::data::AgentStatus::Done => theme::green(),
+                crate::data::AgentStatus::Unknown => theme::dimmer(),
+            },
+        ),
+        None => ("no agent — press a".into(), theme::dimmer()),
+    };
+    put(buf, area.x + 1, foot_y, area.right(), "●", fs.fg(dot));
+    put_trunc(
+        buf,
+        area.x + 3,
+        foot_y,
+        area.right() - 6,
+        &who,
+        fs.fg(theme::fg()),
+    );
+    put_right(buf, area.right() - 1, foot_y, "a", fs.fg(theme::dimmer()));
+
+    let send = format!(" ⏎ S · send {} ", app.comments.len());
+    let ready = !app.comments.is_empty();
+    put(
+        buf,
+        area.x + 1,
+        area.bottom() - 1,
+        area.right(),
+        &send,
+        Style::default()
+            .bg(if ready {
+                theme::yellow()
+            } else {
+                theme::panel()
+            })
+            .fg(if ready {
+                theme::panel()
+            } else {
+                theme::dimmer()
+            }),
+    );
+
+    let list = Rect {
+        y: area.y + 2,
+        height: foot_y.saturating_sub(area.y + 3),
+        ..area
+    };
+
+    if app.comments.is_empty() && app.replies.is_empty() {
+        for (n, line) in [
+            "No comments yet.",
+            "",
+            "Move to a line and press c.",
+            "V first to take a range.",
+        ]
+        .iter()
+        .enumerate()
+        {
+            put_trunc(
+                buf,
+                list.x + 2,
+                list.y + n as u16,
+                area.right() - 1,
+                line,
+                Style::default().bg(theme::panel_alt()).fg(theme::dimmer()),
+            );
+        }
+        return;
+    }
+
+    let focused = app.pane == Pane::Queue;
+    let mut y = list.y;
+    for (i, c) in app.comments.iter().enumerate() {
+        if y + 2 >= list.bottom() {
+            break;
+        }
+        let sel = focused && i == app.queue_sel;
+        let border = match c.state {
+            State::Sending | State::Sent => theme::green(),
+            State::Queued if sel => theme::yellow(),
+            State::Queued => theme::border(),
+        };
+        let base = Style::default().bg(theme::bg());
+        fill(
+            buf,
+            Rect {
+                x: list.x,
+                y,
+                width: list.width,
+                height: 3,
+            },
+            theme::bg(),
+        );
+        put(buf, list.x, y, area.right(), "▌", base.fg(border));
+
+        put(
+            buf,
+            list.x + 2,
+            y,
+            area.right(),
+            &format!("#{}", i + 1),
+            base.fg(theme::yellow()),
+        );
+        let state = match c.state {
+            State::Queued => "queued",
+            State::Sending => "sending →",
+            State::Sent => "sent",
+        };
+        let sx = put_right(buf, area.right() - 1, y, state, base.fg(border));
+        put_trunc(
+            buf,
+            list.x + 6,
+            y,
+            sx.saturating_sub(1),
+            &c.where_label(),
+            base.fg(theme::dim()),
+        );
+
+        put_trunc(
+            buf,
+            list.x + 2,
+            y + 1,
+            area.right() - 1,
+            &c.snippet,
+            base.fg(theme::dimmer()),
+        );
+        put_trunc(
+            buf,
+            list.x + 2,
+            y + 2,
+            area.right() - 1,
+            &c.body,
+            base.fg(theme::fg()),
+        );
+        y += 4;
+    }
+
+    for reply in &app.replies {
+        for line in reply.lines() {
+            if y >= list.bottom() {
+                return;
+            }
+            put_trunc(
+                buf,
+                list.x + 2,
+                y,
+                area.right() - 1,
+                line,
+                Style::default().bg(theme::panel_alt()).fg(theme::green()),
+            );
+            y += 1;
+        }
+        y += 1;
+    }
+}
+
+// ------------------------------------------------------------------ status
+
+fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
+    fill(buf, area, theme::panel());
+    let base = Style::default().bg(theme::panel());
+
+    let (mode, mode_bg) = match app.modal {
+        Some(Modal::Comment) => ("INSERT", theme::green()),
+        Some(_) => ("SEARCH", theme::purple()),
+        None if app.visual() => ("VISUAL LINE", theme::cyan()),
+        None => ("NORMAL", theme::yellow()),
+    };
+    let mut x = put(
+        buf,
+        0,
+        area.y,
+        area.right(),
+        &format!(" {mode} "),
+        Style::default()
+            .bg(mode_bg)
+            .fg(theme::panel())
+            .add_modifier(Modifier::BOLD),
+    );
+
+    x = put_trunc(
+        buf,
+        x + 1,
+        area.y,
+        area.right() / 2,
+        app.path(),
+        base.fg(theme::dim()),
+    );
+
+    let (lo, hi) = app.span();
+    let pos = if app.visual() {
+        format!("{} lines selected", hi - lo + 1)
+    } else {
+        format!("{}/{}", app.cursor + 1, app.diff_rows().len())
+    };
+    put(
+        buf,
+        x + 2,
+        area.y,
+        area.right(),
+        &pos,
+        base.fg(theme::dimmer()),
+    );
+
+    let hint = if app.visual() {
+        "j/k extend · c comment on range · esc cancel"
+    } else {
+        "j/k move · V range · c comment · a agent · S send · / find · : cmd · ? help"
+    };
+    let toast = format!(" {} ", app.toast);
+    let tx = put_right(
+        buf,
+        area.right(),
+        area.y,
+        &toast,
+        Style::default().bg(theme::sel()).fg(theme::yellow()),
+    );
+    put_right(
+        buf,
+        tx.saturating_sub(2),
+        area.y,
+        hint,
+        base.fg(theme::dimmer()),
+    );
+}
+
+// ------------------------------------------------------------------ modals
+
+fn centered(area: Rect, w: u16, h: u16) -> Rect {
+    let w = w.min(area.width.saturating_sub(4));
+    let h = h.min(area.height.saturating_sub(2));
+    Rect {
+        x: area.x + (area.width - w) / 2,
+        y: area.y + (area.height - h) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+fn frame(buf: &mut Buffer, area: Rect, color: ratatui::style::Color) {
+    clear(buf, area, theme::panel());
+    let s = Style::default().bg(theme::panel()).fg(color);
+    let top = "─".repeat(area.width.saturating_sub(2) as usize);
+    put(buf, area.x, area.y, area.right(), &format!("┌{top}┐"), s);
+    put(
+        buf,
+        area.x,
+        area.bottom() - 1,
+        area.right(),
+        &format!("└{top}┘"),
+        s,
+    );
+    for y in area.y + 1..area.bottom() - 1 {
+        put(buf, area.x, y, area.right(), "│", s);
+        put(buf, area.right() - 1, y, area.right(), "│", s);
+    }
+}
+
+fn rule(buf: &mut Buffer, area: Rect, y: u16, color: ratatui::style::Color) {
+    let line = "─".repeat(area.width.saturating_sub(2) as usize);
+    put(
+        buf,
+        area.x + 1,
+        y,
+        area.right(),
+        &line,
+        Style::default().bg(theme::panel()).fg(color),
+    );
+}
+
+/// The query line every searching modal starts with.
+fn query_line(buf: &mut Buffer, m: Rect, y: u16, app: &App, lead: &str, placeholder: &str) {
+    let base = Style::default().bg(theme::panel());
+    let x = put(
+        buf,
+        m.x + 2,
+        y,
+        m.right() - 2,
+        lead,
+        base.fg(theme::yellow()),
+    );
+    if app.query.is_empty() {
+        put_trunc(
+            buf,
+            x,
+            y,
+            m.right() - 2,
+            placeholder,
+            base.fg(theme::dimmer()),
+        );
+    } else {
+        let end = put_trunc(
+            buf,
+            x,
+            y,
+            m.right() - 2,
+            &app.query,
+            base.fg(theme::bright()),
+        );
+        if app.blink {
+            put(buf, end, y, m.right() - 2, "█", base.fg(theme::yellow()));
+        }
+    }
+}
+
+fn finder(buf: &mut Buffer, area: Rect, app: &App) {
+    let m = centered(
+        area,
+        area.width.saturating_sub(8).min(120),
+        area.height * 3 / 4,
+    );
+    frame(buf, m, theme::yellow());
+    let base = Style::default().bg(theme::panel());
+
+    let mut x = m.x + 2;
+    for t in FinderTab::ALL {
+        let on = t == app.finder_tab;
+        let style = if on {
+            base.bg(theme::yellow()).fg(theme::panel())
+        } else {
+            base.fg(theme::dim())
+        };
+        x = put(
+            buf,
+            x,
+            m.y + 1,
+            m.right() - 2,
+            &format!(" {} ", t.label()),
+            style,
+        );
+        x += 1;
+    }
+    put_right(
+        buf,
+        m.right() - 2,
+        m.y + 1,
+        "⇥ scope",
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, m, m.y + 2, theme::border());
+
+    let hits = app.hits();
+    query_line(buf, m, m.y + 3, app, "❯ ", "fuzzy find…");
+    put_right(
+        buf,
+        m.right() - 2,
+        m.y + 3,
+        &format!("{} results", hits.len()),
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, m, m.y + 4, theme::border());
+
+    // Results on the left, what the highlighted one looks like on the right.
+    let split = m.width * 44 / 100;
+    let list = Rect {
+        x: m.x + 1,
+        y: m.y + 5,
+        width: split,
+        height: m.height.saturating_sub(7),
+    };
+    vline(buf, m.x + split + 1, list.y, list.height, theme::border());
+
+    let mut scroll = app
+        .sel
+        .saturating_sub(list.height.saturating_sub(1) as usize);
+    scroll_into_view(&mut scroll, app.sel, list.height as usize, hits.len());
+    for (n, h) in hits.iter().enumerate().skip(scroll) {
+        let y = list.y + (n - scroll) as u16;
+        if y >= list.bottom() {
+            break;
+        }
+        let sel = n == app.sel;
+        let bg = if sel { theme::sel() } else { theme::panel() };
+        fill(
+            buf,
+            Rect {
+                x: list.x,
+                y,
+                width: list.width,
+                height: 1,
+            },
+            bg,
+        );
+        let s = Style::default().bg(bg);
+        if sel {
+            put(buf, list.x, y, list.right(), "▌", s.fg(theme::yellow()));
+        }
+        put(
+            buf,
+            list.x + 2,
+            y,
+            list.right(),
+            &h.icon,
+            s.fg(theme::cyan()),
+        );
+        let mx = put_right(buf, list.right() - 1, y, &h.meta, s.fg(theme::dimmer()));
+        put_trunc(
+            buf,
+            list.x + 4,
+            y,
+            mx.saturating_sub(1),
+            &h.label,
+            s.fg(if sel { theme::bright() } else { theme::fg() }),
+        );
+    }
+
+    // the preview
+    let pv = Rect {
+        x: m.x + split + 2,
+        y: m.y + 5,
+        width: m.width.saturating_sub(split + 3),
+        height: list.height,
+    };
+    if let Some(hit) = hits.get(app.sel) {
+        let path = app
+            .files
+            .get(hit.file)
+            .map(|f| f.path.as_str())
+            .unwrap_or("");
+        put_trunc(buf, pv.x, pv.y, pv.right(), path, base.fg(theme::dim()));
+        let rows = app.rows.get(path).cloned().unwrap_or_default();
+        let centre = hit.row.unwrap_or(0);
+        let start = centre.saturating_sub(4);
+        for (n, r) in rows.iter().enumerate().skip(start) {
+            let y = pv.y + 2 + (n - start) as u16;
+            if y >= pv.bottom() {
+                break;
+            }
+            let fg = match r.kind {
+                Kind::Added => theme::green(),
+                Kind::Deleted => theme::red(),
+                Kind::Header => theme::cyan_soft(),
+                Kind::Context => theme::dim(),
+            };
+            let bg = if Some(n) == hit.row {
+                theme::sel()
+            } else {
+                theme::panel()
+            };
+            fill(
+                buf,
+                Rect {
+                    x: pv.x,
+                    y,
+                    width: pv.width,
+                    height: 1,
+                },
+                bg,
+            );
+            let s = Style::default().bg(bg);
+            put_right(
+                buf,
+                pv.x + 5,
+                y,
+                &r.new.or(r.old).map(|v| v.to_string()).unwrap_or_default(),
+                s.fg(theme::dimmer()),
+            );
+            put_trunc(
+                buf,
+                pv.x + 7,
+                y,
+                pv.right(),
+                &format!("{}{}", r.sign(), r.text),
+                s.fg(fg),
+            );
+        }
+    }
+
+    put(
+        buf,
+        m.x + 2,
+        m.bottom() - 2,
+        m.right() - 2,
+        "↑↓ move · ↵ jump · ⇥ scope · esc close",
+        base.fg(theme::dimmer()),
+    );
+}
+
+fn palette(buf: &mut Buffer, area: Rect, app: &App) {
+    let hits = app.palette_hits();
+    let h = (hits.len() as u16 + 6).min(area.height.saturating_sub(4));
+    let m = centered(area, 64, h);
+    frame(buf, m, theme::purple());
+
+    query_line(buf, m, m.y + 1, app, ": ", "command…");
+    rule(buf, m, m.y + 2, theme::border());
+
+    for (n, label) in hits.iter().enumerate() {
+        let y = m.y + 3 + n as u16;
+        if y >= m.bottom() - 1 {
+            break;
+        }
+        let sel = n == app.sel;
+        let bg = if sel { theme::sel() } else { theme::panel() };
+        fill(
+            buf,
+            Rect {
+                x: m.x + 1,
+                y,
+                width: m.width - 2,
+                height: 1,
+            },
+            bg,
+        );
+        let s = Style::default().bg(bg);
+        if sel {
+            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::purple()));
+        }
+        put_trunc(buf, m.x + 3, y, m.right() - 8, label, s.fg(theme::fg()));
+        let key = super::input::COMMANDS
+            .iter()
+            .find(|(l, _)| l == label)
+            .map(|(_, k)| *k)
+            .unwrap_or("");
+        put_right(buf, m.right() - 2, y, key, s.fg(theme::yellow()));
+    }
+}
+
+fn comment(buf: &mut Buffer, area: Rect, app: &App) {
+    let anchors = app.selected_anchors();
+    let m = centered(area, 72, 9);
+    frame(buf, m, theme::yellow());
+    let base = Style::default().bg(theme::panel());
+
+    let head = Rect {
+        x: m.x + 1,
+        y: m.y + 1,
+        width: m.width - 2,
+        height: 1,
+    };
+    fill(buf, head, theme::yellow());
+    let hs = Style::default().bg(theme::yellow()).fg(theme::panel());
+    put(buf, head.x + 1, head.y, head.right(), "COMMENT", hs);
+    let where_ = match (anchors.first(), anchors.last()) {
+        (Some(a), Some(b)) if a.line == b.line => format!("{}:{}", short_path(&a.path), a.line),
+        (Some(a), Some(b)) => format!(
+            "{}:{}-{}  ({} lines)",
+            short_path(&a.path),
+            a.line.min(b.line),
+            a.line.max(b.line),
+            anchors.len()
+        ),
+        _ => "—".into(),
+    };
+    put_right(buf, head.right() - 1, head.y, &where_, hs);
+
+    let snippet = app
+        .diff_rows()
+        .get(app.span().0)
+        .map(|r| r.text.trim())
+        .unwrap_or("");
+    put_trunc(
+        buf,
+        m.x + 3,
+        m.y + 3,
+        m.right() - 2,
+        snippet,
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, m, m.y + 4, theme::border());
+
+    let x = put(
+        buf,
+        m.x + 2,
+        m.y + 5,
+        m.right() - 2,
+        "❯ ",
+        base.fg(theme::yellow()),
+    );
+    if app.draft.is_empty() {
+        put_trunc(
+            buf,
+            x,
+            m.y + 5,
+            m.right() - 2,
+            "what should the agent do here?",
+            base.fg(theme::dimmer()),
+        );
+    } else {
+        let end = put_trunc(
+            buf,
+            x,
+            m.y + 5,
+            m.right() - 2,
+            &app.draft,
+            base.fg(theme::bright()),
+        );
+        if app.blink {
+            put(
+                buf,
+                end,
+                m.y + 5,
+                m.right() - 2,
+                "█",
+                base.fg(theme::yellow()),
+            );
+        }
+    }
+
+    rule(buf, m, m.bottom() - 3, theme::border());
+    put(
+        buf,
+        m.x + 2,
+        m.bottom() - 2,
+        m.right() - 2,
+        "↵ save to queue · esc discard",
+        base.fg(theme::dimmer()),
+    );
+}
+
+fn short_path(p: &str) -> &str {
+    p.rsplit('/').next().unwrap_or(p)
+}
+
+fn agents(buf: &mut Buffer, area: Rect, app: &App) {
+    let h = (app.agents.len() as u16 * 2 + 6).min(area.height.saturating_sub(4));
+    let m = centered(area, 76, h.max(7));
+    frame(buf, m, theme::cyan());
+    let base = Style::default().bg(theme::panel());
+
+    put(
+        buf,
+        m.x + 2,
+        m.y + 1,
+        m.right() - 2,
+        "AGENTS ON THIS MACHINE",
+        base.fg(theme::yellow()),
+    );
+    put_right(
+        buf,
+        m.right() - 2,
+        m.y + 1,
+        "via herdr",
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, m, m.y + 2, theme::border());
+
+    if app.agents.is_empty() {
+        let msg = match app.agents_state.error() {
+            Some(e) => e.to_string(),
+            None if app.agents_state.is_loading() => "looking…".into(),
+            None => "none running — start one in herdr".into(),
+        };
+        put_trunc(
+            buf,
+            m.x + 3,
+            m.y + 3,
+            m.right() - 2,
+            &msg,
+            base.fg(theme::dimmer()),
+        );
+        return;
+    }
+
+    for (i, a) in app.agents.iter().enumerate() {
+        let y = m.y + 3 + (i as u16) * 2;
+        if y + 1 >= m.bottom() - 1 {
+            break;
+        }
+        let sel = i == app.sel;
+        let bg = if sel { theme::sel() } else { theme::panel() };
+        fill(
+            buf,
+            Rect {
+                x: m.x + 1,
+                y,
+                width: m.width - 2,
+                height: 2,
+            },
+            bg,
+        );
+        let s = Style::default().bg(bg);
+        if i == app.agent_idx {
+            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
+        }
+        let dot = match a.status {
+            crate::data::AgentStatus::Working => theme::yellow(),
+            crate::data::AgentStatus::Blocked => theme::red(),
+            crate::data::AgentStatus::Idle | crate::data::AgentStatus::Done => theme::green(),
+            crate::data::AgentStatus::Unknown => theme::dimmer(),
+        };
+        put(buf, m.x + 3, y, m.right(), "●", s.fg(dot));
+        put(buf, m.x + 5, y, m.right(), &a.icon(), s.fg(theme::purple()));
+        put_trunc(
+            buf,
+            m.x + 7,
+            y,
+            m.right() - 14,
+            &a.kind,
+            s.fg(theme::bright()),
+        );
+        put_right(buf, m.right() - 2, y, a.status.label(), s.fg(dot));
+        put_trunc(
+            buf,
+            m.x + 7,
+            y + 1,
+            m.right() - 2,
+            &a.cwd,
+            s.fg(theme::dimmer()),
+        );
+    }
+}
+
+fn deps(buf: &mut Buffer, area: Rect, app: &App) {
+    let m = centered(area, 86, 14);
+    frame(buf, m, theme::cyan());
+    let base = Style::default().bg(theme::panel());
+    put_trunc(
+        buf,
+        m.x + 2,
+        m.y + 1,
+        m.right() - 2,
+        &format!("BLAST RADIUS — {}", app.path()),
+        base.fg(theme::cyan()),
+    );
+    rule(buf, m, m.y + 2, theme::border());
+
+    // Said rather than guessed. An import graph needs a parser per language,
+    // which is the trade this program declined for colour and declines again
+    // here; claiming to know what depends on a file when nothing has been
+    // parsed would be worse than saying so.
+    for (n, line) in [
+        "No import graph.",
+        "",
+        "Working it out means a parser per language, which is the",
+        "same cost this program declined for syntax colour. Until",
+        "there is one, the honest answer is that it does not know.",
+        "",
+        "What it can tell you is what else this change touches:",
+    ]
+    .iter()
+    .enumerate()
+    {
+        put_trunc(
+            buf,
+            m.x + 3,
+            m.y + 4 + n as u16,
+            m.right() - 2,
+            line,
+            base.fg(if n == 0 { theme::fg() } else { theme::dimmer() }),
+        );
+    }
+    for (y, f) in (m.y + 11..m.bottom() - 1).zip(app.files.iter().take(2)) {
+        put_trunc(
+            buf,
+            m.x + 5,
+            y,
+            m.right() - 2,
+            &format!("└─ {}", f.path),
+            base.fg(theme::fg()),
+        );
+    }
+}
+
+fn help(buf: &mut Buffer, area: Rect) {
+    let rows = super::input::HELP;
+    let m = centered(area, 74, (rows.len() as u16).div_ceil(2) + 5);
+    frame(buf, m, theme::yellow());
+    let base = Style::default().bg(theme::panel());
+    put(
+        buf,
+        m.x + 2,
+        m.y + 1,
+        m.right() - 2,
+        "KEYMAP",
+        base.fg(theme::yellow()),
+    );
+    rule(buf, m, m.y + 2, theme::border());
+
+    let half = m.width / 2;
+    for (i, (k, d)) in rows.iter().enumerate() {
+        let col = i % 2;
+        let y = m.y + 3 + (i / 2) as u16;
+        if y >= m.bottom() - 1 {
+            break;
+        }
+        let x = m.x + 2 + col as u16 * half;
+        put(buf, x, y, x + 10, k, base.fg(theme::yellow()));
+        put_trunc(buf, x + 10, y, x + half - 1, d, base.fg(theme::dim()));
+    }
+    let _ = "".width();
+}

@@ -10,7 +10,7 @@ BIN := github-tui
 
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall build run demo test test-nvim lint fmt check clean
+.PHONY: help install uninstall build run diff demo test test-nvim lint fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -23,7 +23,7 @@ help: ## List what there is
 install: ## Build optimised and put it on the PATH (~/.cargo/bin)
 	cargo install --path . --locked
 	@echo
-	@echo "  $(BIN) is on your PATH — run it from anywhere."
+	@echo "  $(BIN) and diffline are on your PATH — run them from anywhere."
 	@command -v $(BIN) >/dev/null || echo "  add ~/.cargo/bin to your PATH first"
 
 uninstall: ## Take it off the PATH again
@@ -32,8 +32,11 @@ uninstall: ## Take it off the PATH again
 build: ## Optimised build, left in target/release
 	cargo build --release
 
-run: ## Run against real GitHub through gh
-	cargo run --release
+run: ## Run github-tui against real GitHub through gh
+	cargo run --release --bin github-tui
+
+diff: ## Run diffline on this repository
+	cargo run --release --bin diffline -- .
 
 demo: ## Run on the design's fixture, no network needed
 	cargo run --release -- --demo

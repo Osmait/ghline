@@ -7,5 +7,9 @@
 //! the agents on this machine — they share through the library rather than by
 //! being the same binary.
 
+pub mod app;
 pub mod git;
+pub mod input;
 pub mod model;
+pub mod service;
+pub mod ui;

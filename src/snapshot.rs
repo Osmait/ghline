@@ -22,7 +22,7 @@ fn key(code: KeyCode) -> KeyEvent {
 }
 
 /// Turns `"jj<enter>k"` into the equivalent key sequence.
-fn parse_keys(spec: &str) -> Vec<KeyEvent> {
+pub fn parse_keys(spec: &str) -> Vec<KeyEvent> {
     let mut out = Vec::new();
     let mut rest = spec;
     while !rest.is_empty() {
@@ -74,7 +74,7 @@ fn xml_escape(s: &str) -> String {
 }
 
 /// Dumps the buffer as SVG (a layer of background rects plus text runs).
-fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
+pub fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String {
     const CW: f32 = 9.6;
     const CH: f32 = 20.0;
     let w = CW * width as f32;
