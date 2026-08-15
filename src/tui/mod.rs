@@ -465,6 +465,197 @@ pub fn rows(
     out
 }
 
+// --- the modal container ----------------------------------------------------
+//
+// Every modal in both programs is the same box: something dimmed or not
+// behind it, a centred rectangle, a frame in an accent colour, a title with a
+// hint opposite, a rule, a body, and sometimes a footer. What differs is the
+// body — and the body is the caller's, which is why this hands back where to
+// put one instead of trying to take it as a parameter.
+
+/// Dims what is underneath, like the design's `background: #0b0e14bb`.
+pub fn scrim(buf: &mut Buffer, area: Rect) {
+    let shade = |c: Color| match c {
+        Color::Rgb(r, g, b) => Color::Rgb(
+            (r as f32 * 0.42) as u8,
+            (g as f32 * 0.42) as u8,
+            (b as f32 * 0.42) as u8,
+        ),
+        other => other,
+    };
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                let s = cell.style();
+                let fg = s.fg.unwrap_or(theme::fg());
+                let bg = s.bg.unwrap_or(theme::bg());
+                cell.set_style(Style::default().fg(shade(fg)).bg(shade(bg)));
+            }
+        }
+    }
+}
+
+/// The box a modal is drawn in.
+///
+/// `Dialog` rather than `Modal` because both programs already call the
+/// question "which modal is open" a `Modal`, and one word cannot be both the
+/// state and the box it is drawn in.
+///
+/// A builder rather than a function with eight arguments, because most modals
+/// want most of the defaults and a call site reading `.hint("esc")` says what
+/// `("", "esc", false, true, 60, 12)` does not.
+pub struct Dialog<'a> {
+    title: &'a str,
+    hint: &'a str,
+    accent: Color,
+    width: u16,
+    height: u16,
+    scrim: bool,
+    over_content: bool,
+    footer: u16,
+}
+
+impl<'a> Dialog<'a> {
+    pub fn new(title: &'a str) -> Self {
+        Self {
+            title,
+            hint: "",
+            accent: theme::yellow(),
+            width: 60,
+            height: 12,
+            scrim: false,
+            over_content: false,
+            footer: 0,
+        }
+    }
+
+    /// What to press, shown opposite the title.
+    pub fn hint(mut self, hint: &'a str) -> Self {
+        self.hint = hint;
+        self
+    }
+
+    pub fn accent(mut self, accent: Color) -> Self {
+        self.accent = accent;
+        self
+    }
+
+    pub fn size(mut self, width: u16, height: u16) -> Self {
+        self.width = width;
+        self.height = height;
+        self
+    }
+
+    /// Dim what is behind it, so the eye stops at the modal.
+    pub fn scrim(mut self) -> Self {
+        self.scrim = true;
+        self
+    }
+
+    /// Keep a gutter either side, for a modal over something still being
+    /// read rather than over something finished with.
+    pub fn over_content(mut self) -> Self {
+        self.over_content = true;
+        self
+    }
+
+    /// Reserve `rows` at the bottom, kept out of the body.
+    pub fn footer(mut self, rows: u16) -> Self {
+        self.footer = rows;
+        self
+    }
+
+    /// Draws the box and says where its parts ended up.
+    pub fn open(self, buf: &mut Buffer, area: Rect) -> Body {
+        if self.scrim {
+            scrim(buf, area);
+        }
+        let outer = if self.over_content {
+            centered_over(area, self.width, self.height)
+        } else {
+            centered(area, self.width, self.height)
+        };
+        let top = modal_head(buf, outer, self.title, self.hint, self.accent);
+        let bottom = outer.bottom().saturating_sub(1 + self.footer);
+        Body {
+            outer,
+            accent: self.accent,
+            inner: Rect {
+                x: outer.x + 1,
+                y: top,
+                width: outer.width.saturating_sub(2),
+                height: bottom.saturating_sub(top),
+            },
+            footer: Rect {
+                x: outer.x + 1,
+                y: bottom,
+                width: outer.width.saturating_sub(2),
+                height: self.footer,
+            },
+        }
+    }
+}
+
+/// A modal that has been drawn, and where its parts are.
+#[derive(Clone, Copy, Debug)]
+pub struct Body {
+    /// The whole box, frame included — what a click on the chrome hits.
+    pub outer: Rect,
+    /// Between the rule and the footer. Everything a caller draws goes here.
+    pub inner: Rect,
+    /// Empty when none was asked for.
+    pub footer: Rect,
+    pub accent: Color,
+}
+
+impl Body {
+    /// The body as a list of selectable rows.
+    pub fn rows(
+        &self,
+        buf: &mut Buffer,
+        count: usize,
+        row_h: u16,
+        sel: usize,
+        scroll: usize,
+    ) -> Vec<RowSlot> {
+        rows(buf, self.inner, count, row_h, sel, scroll, self.accent)
+    }
+
+    /// Draws a query line at the top of the body and returns what is left
+    /// below it.
+    ///
+    /// Two calls rather than one that does both: a `search(…)` taking the
+    /// query *and* the list took ten arguments, which is the same smell as a
+    /// component with five optional parameters. Chained, it reads as what it
+    /// is — a query line, and then rows under it.
+    pub fn query(
+        &self,
+        buf: &mut Buffer,
+        query: &str,
+        lead: &str,
+        placeholder: &str,
+        caret: bool,
+    ) -> Self {
+        query_line(
+            buf,
+            self.outer,
+            self.inner.y,
+            query,
+            lead,
+            placeholder,
+            caret,
+        );
+        Self {
+            inner: Rect {
+                y: self.inner.y + 2,
+                height: self.inner.height.saturating_sub(2),
+                ..self.inner
+            },
+            ..*self
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -840,5 +1031,85 @@ mod tests {
             theme::yellow(),
         );
         assert_eq!(slots.len(), 4, "treated as one row each");
+    }
+
+    // --- the dialog container ---
+
+    #[test]
+    fn a_dialog_keeps_its_body_inside_its_frame() {
+        let mut buf = buffer(40, 12);
+        let b = Dialog::new("T")
+            .size(30, 8)
+            .open(&mut buf, Rect::new(0, 0, 40, 12));
+        assert!(b.inner.y > b.outer.y, "below the rule");
+        assert!(b.inner.bottom() < b.outer.bottom(), "above the frame");
+        assert!(b.inner.x > b.outer.x, "inside the left edge");
+        assert!(b.inner.right() < b.outer.right());
+    }
+
+    #[test]
+    fn a_footer_comes_out_of_the_body_rather_than_off_the_bottom() {
+        let mut buf = buffer(40, 12);
+        let plain = Dialog::new("T")
+            .size(30, 8)
+            .open(&mut buf, Rect::new(0, 0, 40, 12));
+        let mut buf = buffer(40, 12);
+        let footed = Dialog::new("T")
+            .size(30, 8)
+            .footer(2)
+            .open(&mut buf, Rect::new(0, 0, 40, 12));
+        assert_eq!(footed.outer, plain.outer, "the box is the same size");
+        assert_eq!(footed.inner.height, plain.inner.height - 2);
+        assert_eq!(footed.footer.height, 2);
+        assert_eq!(footed.footer.y, footed.inner.bottom());
+    }
+
+    #[test]
+    fn a_dialog_too_big_for_the_screen_is_cut_to_fit() {
+        let mut buf = buffer(20, 6);
+        let b = Dialog::new("T")
+            .size(200, 200)
+            .open(&mut buf, Rect::new(0, 0, 20, 6));
+        assert!(b.outer.width <= 20);
+        assert!(b.outer.height <= 6);
+    }
+
+    #[test]
+    fn the_scrim_only_dims_when_it_is_asked_for() {
+        let base = Rect::new(0, 0, 20, 6);
+        let mut lit = buffer(20, 6);
+        fill(&mut lit, base, theme::green());
+        Dialog::new("T").size(6, 3).open(&mut lit, base);
+
+        let mut dimmed = buffer(20, 6);
+        fill(&mut dimmed, base, theme::green());
+        Dialog::new("T").size(6, 3).scrim().open(&mut dimmed, base);
+
+        let corner = |b: &Buffer| b.cell((0u16, 0u16)).map(|c| c.bg);
+        assert_ne!(
+            corner(&lit),
+            corner(&dimmed),
+            "the scrim changed the ground"
+        );
+    }
+
+    #[test]
+    fn a_search_body_puts_its_rows_under_the_query_not_over_it() {
+        let mut buf = buffer(40, 12);
+        let b = Dialog::new("/")
+            .size(30, 10)
+            .open(&mut buf, Rect::new(0, 0, 40, 12));
+        let slots = b
+            .query(&mut buf, "abc", "> ", "", false)
+            .rows(&mut buf, 3, 1, 0, 0);
+        assert!(!slots.is_empty());
+        assert!(
+            slots[0].area.y > b.inner.y,
+            "the first row sits below the query line"
+        );
+        assert!(
+            row(&buf, b.inner.y).contains("abc"),
+            "and the query is drawn"
+        );
     }
 }

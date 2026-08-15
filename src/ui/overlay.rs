@@ -2,36 +2,15 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 
 use crate::app::App;
 use crate::app::hit::{Region, Target};
 use crate::data::HELP;
 use crate::theme;
-use crate::tui::{centered, frame, rule};
+use crate::tui::Dialog;
+use crate::tui::{centered, frame, rule, scrim};
 use crate::tui::{fill, put, put_right, put_trunc};
-
-/// Dims what is underneath, like the design's `background: #0b0e14bb`.
-pub fn scrim(buf: &mut Buffer, area: Rect) {
-    let shade = |c: Color| match c {
-        Color::Rgb(r, g, b) => Color::Rgb(
-            (r as f32 * 0.42) as u8,
-            (g as f32 * 0.42) as u8,
-            (b as f32 * 0.42) as u8,
-        ),
-        other => other,
-    };
-    for y in area.top()..area.bottom() {
-        for x in area.left()..area.right() {
-            if let Some(cell) = buf.cell_mut((x, y)) {
-                let s = cell.style();
-                let fg = s.fg.unwrap_or(theme::fg());
-                let bg = s.bg.unwrap_or(theme::bg());
-                cell.set_style(Style::default().fg(shade(fg)).bg(shade(bg)));
-            }
-        }
-    }
-}
 
 pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
@@ -150,28 +129,19 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     use crate::theme::Theme;
 
     let all = Theme::all();
-    let modal = centered(area, 60, all.len() as u16 * 2 + 7);
-    let top = crate::tui::modal_head(
-        buf,
-        modal,
-        "THEME",
-        "j/k previews · enter · esc",
-        theme::purple(),
-    );
+    let body = Dialog::new("THEME")
+        .hint("j/k previews · enter · esc")
+        .accent(theme::purple())
+        .size(60, all.len() as u16 * 2 + 7)
+        .open(buf, area);
 
-    let list = Rect {
-        x: modal.x + 1,
-        y: top,
-        width: modal.width - 2,
-        height: modal.bottom().saturating_sub(top),
-    };
-    // The modal as a whole first, so a click on its chrome is absorbed
-    // rather than falling through to the pane behind it; the rows go on top.
-    app.hits.push(Region::plain(Target::Themes, modal));
+    // The box as a whole first, so a click on its chrome is absorbed rather
+    // than falling through to the pane behind it; the rows go on top.
+    app.hits.push(Region::plain(Target::Themes, body.outer));
     app.hits
-        .push(Region::rows(Target::Themes, list, 2, 0, all.len()));
+        .push(Region::rows(Target::Themes, body.inner, 2, 0, all.len()));
 
-    for slot in crate::tui::rows(buf, list, all.len(), 2, app.theme_sel, 0, theme::purple()) {
+    for slot in body.rows(buf, all.len(), 2, app.theme_sel, 0) {
         let Some(t) = all.get(slot.index) else {
             continue;
         };

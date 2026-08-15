@@ -4,12 +4,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::overlay::scrim;
 use crate::actions::Prompt;
 use crate::app::App;
 use crate::data::MERGE_METHODS;
 use crate::data::ReviewState;
 use crate::theme;
+use crate::tui::scrim;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc};
 

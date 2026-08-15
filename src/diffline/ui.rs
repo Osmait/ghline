@@ -16,7 +16,7 @@ use super::hit::{Region, Target};
 use super::model::{Kind, State};
 use crate::theme;
 use crate::tui::{
-    centered_over as centered, clear, fill, frame, hline, put, put_right, put_trunc, rule,
+    Dialog, centered_over as centered, clear, fill, frame, hline, put, put_right, put_trunc, rule,
     scroll_into_view, skel_bar, vline,
 };
 
@@ -1382,41 +1382,38 @@ fn finder(buf: &mut Buffer, area: Rect, app: &App) {
 
 fn palette(buf: &mut Buffer, area: Rect, app: &App) {
     let hits = app.palette_hits();
-    let h = (hits.len() as u16 + 6).min(area.height.saturating_sub(4));
-    let m = centered(area, 64, h);
-    frame(buf, m, theme::purple());
+    let body = Dialog::new(":")
+        .hint("⏎ run · esc")
+        .accent(theme::purple())
+        .size(70, (hits.len() as u16 + 6).min(area.height - 2))
+        .over_content()
+        .open(buf, area);
 
-    crate::tui::query_line(buf, m, m.y + 1, &app.query, ": ", "command…", app.blink);
-    rule(buf, m, m.y + 2, theme::border());
-
-    for (n, label) in hits.iter().enumerate() {
-        let y = m.y + 3 + n as u16;
-        if y >= m.bottom() - 1 {
-            break;
-        }
-        let sel = n == app.sel;
-        let bg = if sel { theme::sel() } else { theme::panel() };
-        fill(
-            buf,
-            Rect {
-                x: m.x + 1,
-                y,
-                width: m.width - 2,
-                height: 1,
-            },
-            bg,
-        );
-        let s = Style::default().bg(bg);
-        if sel {
-            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::purple()));
-        }
-        put_trunc(buf, m.x + 3, y, m.right() - 8, label, s.fg(theme::fg()));
+    let list = body.query(buf, &app.query, ": ", "command…", app.blink);
+    for slot in list.rows(buf, hits.len(), 1, app.sel, 0) {
+        let Some(label) = hits.get(slot.index) else {
+            continue;
+        };
         let key = super::input::COMMANDS
             .iter()
             .find(|(l, _)| l == label)
             .map(|(_, k)| *k)
             .unwrap_or("");
-        put_right(buf, m.right() - 2, y, key, s.fg(theme::yellow()));
+        put_trunc(
+            buf,
+            slot.area.x + 2,
+            slot.area.y,
+            slot.area.right() - 10,
+            label,
+            slot.style.fg(theme::bright()),
+        );
+        put_right(
+            buf,
+            slot.area.right() - 1,
+            slot.area.y,
+            key,
+            slot.style.fg(theme::dimmer()),
+        );
     }
 }
 
@@ -1673,20 +1670,18 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
 /// is what you are actually judging the colours against.
 fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let all = crate::theme::Theme::all();
-    let m = centered(area, 60, (all.len() as u16 * 2 + 5).min(area.height - 2));
-    let top = crate::tui::modal_head(buf, m, "THEME", "⏎ keep · esc undo", theme::cyan());
-    app.hits.push(Region::plain(Target::Modal, m));
+    let body = Dialog::new("THEME")
+        .hint("⏎ keep · esc undo")
+        .accent(theme::cyan())
+        .size(60, (all.len() as u16 * 2 + 5).min(area.height - 2))
+        .over_content()
+        .open(buf, area);
 
-    let list = Rect {
-        x: m.x + 1,
-        y: top,
-        width: m.width - 2,
-        height: m.bottom().saturating_sub(top + 1),
-    };
+    app.hits.push(Region::plain(Target::Modal, body.outer));
     app.hits
-        .push(Region::rows(Target::Modal, list, 2, 0, all.len()));
+        .push(Region::rows(Target::Modal, body.inner, 2, 0, all.len()));
 
-    for slot in crate::tui::rows(buf, list, all.len(), 2, app.sel, 0, theme::yellow()) {
+    for slot in body.rows(buf, all.len(), 2, app.sel, 0) {
         let Some(t) = all.get(slot.index) else {
             continue;
         };
@@ -1707,8 +1702,8 @@ fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
             t.about(),
             s.fg(theme::dimmer()),
         );
-        // A row of the accents, so the list shows the theme rather than
-        // naming it — the picker is already painted in whichever is selected.
+        // The accents themselves, so the list shows a theme rather than
+        // naming one — the picker is already painted in whichever is chosen.
         let mut x = slot.area.right() - 11;
         for c in [
             theme::green(),

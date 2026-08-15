@@ -8,12 +8,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::overlay::scrim;
 use crate::app::App;
 use crate::app::hit::{Region, Target};
 use crate::finder::{HitKind, Source};
 use crate::fuzzy;
 use crate::theme;
+use crate::tui::scrim;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc, scroll_into_view};
 
