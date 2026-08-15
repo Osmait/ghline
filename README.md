@@ -741,6 +741,26 @@ INSTA_UPDATE=always cargo test --test frames   # accept without cargo-insta
 A golden is only worth what the look at it was worth. Accepting a frame you
 have not read turns a failing test into a passing one and nothing else.
 
+## What a frame costs
+
+```sh
+cargo bench             # all four
+cargo bench -- draw     # one
+```
+
+| | on one desk, for scale |
+|---|---|
+| `draw` — a whole frame at 160×44 | ~145 µs |
+| `highlight` — the lexer over 600 lines | ~96 µs |
+| `rank` — the finder over 500 repositories | ~57 µs |
+| `wrap_ranges` — one long line | ~410 ns |
+
+The loop never waits longer than 16 ms for a keystroke, so a frame has about
+a hundred times its own cost in hand. The numbers are here to be compared
+against themselves after a change, not against another machine — which is also
+why CI does not run them: a shared runner varies by more than the differences
+worth catching.
+
 ## Terminal-free renders
 
 Useful for comparing against the design or debugging the layout:

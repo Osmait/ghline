@@ -82,5 +82,19 @@ lto = "fat"
 codegen-units = 1
 strip = true
 
+# Neither of these is compiled into anything that ships.
 [dev-dependencies]
+# The bench harness. divan rather than criterion: a tenth of the dependencies
+# for what is wanted here, which is four numbers and a comparison against the
+# last run.
+divan = "0.1.21"
+# Golden frames — see tests/frames.rs. Default features off: the point is to
+# compare one string against another, and the rest of it is serde, yaml, ron,
+# toml and a glob walker for snapshotting things that are not strings.
 insta = { version = "1.48.0", default-features = false }
+
+# `harness = false` because divan brings its own; without it, libtest runs
+# first and finds no `#[test]` to run.
+[[bench]]
+name = "frame"
+harness = false
