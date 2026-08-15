@@ -4,6 +4,15 @@ version = "0.1.0"
 edition = "2024"
 description = "A GitHub TUI: repositories, issues, pull requests and Actions, over the gh CLI"
 repository = "https://github.com/Osmait/github-tui"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["github", "tui", "terminal", "git", "diff"]
+categories = ["command-line-utilities", "development-tools"]
+# The version this is developed against, said a second time and for a second
+# audience: `rust-toolchain.toml` installs it for whoever clones the repo,
+# this tells cargo to refuse with a version number rather than with whatever
+# syntax error an older compiler happens to reach first. Raise both together.
+rust-version = "1.96"
 
 [dependencies]
 crossterm = "0.28"
@@ -18,6 +27,15 @@ unicode-width = "0.2"
 [lints.rust]
 unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
+
+# The crate is documented at a density that only holds if breaking it is an
+# error. A link that names a moved item is a doc comment that lies, and it
+# lies silently: `cargo doc` is not something anybody runs before a push, so
+# CI runs it instead. All three of these are clean today.
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "deny"
+missing_crate_level_docs = "deny"
 
 [lints.clippy]
 # Nothing panics: no `unwrap`, no `expect`, no bare `panic!`; tests opt out
@@ -41,3 +59,25 @@ redundant_closure_for_method_calls = "warn"
 needless_pass_by_value = "warn"
 semicolon_if_nothing_returned = "warn"
 uninlined_format_args = "warn"
+
+# What the tarballs on the releases page are built with. The defaults are
+# tuned for rebuilding often, which is the opposite of what a binary someone
+# downloads once wants: `lto = "fat"` and one codegen unit let the optimiser
+# see across crate boundaries — most of the drawing path is ratatui's code
+# called from ours — and `strip` drops debug symbols nobody on the other end
+# can use. Optimised for speed rather than size: the recent work here has
+# been about what each frame costs, and `opt-level = "z"` would give some of
+# it back to save a download that LTO and stripping already halve.
+#
+# The cost is build time. `cargo build --release` gets slower; `cargo build`
+# and `cargo test`, which is what you actually run, are untouched.
+#
+# `panic = "abort"` is deliberately not here. `Terminal_`'s `Drop` is what
+# puts the terminal back, and aborting skips it — the panic hook covers the
+# same ground, but that would leave two answers to "who restores?" with only
+# one of them written down where the type is.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

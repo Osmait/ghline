@@ -770,3 +770,12 @@ arrows in angle brackets.
   the `CI #1841` and the billing line the design had hard-coded.
 - The account picker lists your user and your organisations on github.com; the
   design also included a GHE host, which is not covered here.
+
+## Licence
+
+MIT or Apache-2.0, at your option — the pair that most of the Rust ecosystem
+uses, so this can be depended on by anything either half of it can. The texts
+are in [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
+
+Any contribution you deliberately submit for inclusion in this work shall be
+dual-licensed as above, with no additional terms.
