@@ -3,6 +3,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use super::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
+use super::keys::{self, Action};
 use super::model::{Comment, Kind, State};
 use super::service::Request;
 
@@ -23,44 +24,11 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("prev scope", "[s"),
     ("split view", "␣v"),
     ("pick a theme", "␣t"),
+    ("write a keymap to start from", ""),
     ("write a theme to start from", ""),
     ("refresh", "␣r"),
     ("open help", "␣?"),
     ("quit", "␣q"),
-];
-
-pub const HELP: &[(&str, &str)] = &[
-    ("— motions —", ""),
-    ("j / k", "line down / up"),
-    ("{count}j", "that many lines"),
-    ("gg / G", "first / last line"),
-    ("{count}G", "go to that line"),
-    ("H / M / L", "top / middle / bottom of screen"),
-    ("^d / ^u", "half a screen"),
-    ("^f / ^b", "a whole screen"),
-    ("^e / ^y", "scroll without moving"),
-    ("{ / }", "previous / next hunk"),
-    ("[c / ]c", "previous / next change"),
-    ("[f / ]f", "previous / next file"),
-    ("[s / ]s", "previous / next scope"),
-    ("zz / zt / zb", "cursor to middle / top / bottom"),
-    ("h / l", "scroll the line"),
-    ("w / b / e", "by words"),
-    ("0 / ^ / $", "start / first word / end"),
-    ("/ then n / N", "search, then repeat"),
-    ("v or V", "visual line mode"),
-    ("o", "to the other end of the selection"),
-    ("— leader (␣) —", ""),
-    ("␣e / ␣c", "show or hide tree / comments"),
-    ("␣d", "back to the code"),
-    ("␣n / ␣x", "note on selection / delete note"),
-    ("␣a / ␣s", "pick agent / send queue"),
-    ("␣v / ␣b", "split view / inline blame"),
-    ("␣g", "blast radius"),
-    ("␣+ / ␣-", "expand / collapse context"),
-    ("␣t", "pick a theme"),
-    ("␣r / ␣? / ␣q", "refresh / help / quit"),
-    (":", "everything else"),
 ];
 
 impl App {
@@ -716,6 +684,10 @@ impl App {
             "next scope" => self.step_scope(1),
             "prev scope" => self.step_scope(-1),
             "pick a theme" => self.open_themes(),
+            "write a keymap to start from" => match crate::diffline::keys::write_template() {
+                Ok(p) => self.flash(format!("wrote {}", p.display())),
+                Err(e) => self.flash(format!("could not write it: {e}")),
+            },
             "write a theme to start from" => match crate::theme::write_template("mine") {
                 Ok(p) => self.flash(format!("wrote {}", p.display())),
                 Err(e) => self.flash(format!("could not write it: {e}")),
@@ -789,201 +761,163 @@ impl App {
             self.modal_key(m, ev, ctrl);
             return;
         }
-        // --- ^keys: the window and the page, as in vim ---
-        if ctrl {
-            let h = self.view_height.max(1) as i64;
-            match ev.code {
-                KeyCode::Char('d') => self.move_by(h / 2),
-                KeyCode::Char('u') => self.move_by(-h / 2),
-                KeyCode::Char('f') => self.move_by(h),
-                KeyCode::Char('b') => self.move_by(-h),
-                KeyCode::Char('e') => self.diff_scroll += 1,
-                KeyCode::Char('y') => self.diff_scroll = self.diff_scroll.saturating_sub(1),
-                _ => {}
-            }
-            self.count = None;
-            return;
-        }
+        // --- what is this key bound to? ---
+        let chord = keys::Chord {
+            prefix: std::mem::take(&mut self.pending),
+            ctrl,
+            code: ev.code,
+        };
 
-        // --- a prefix that is already open owns this key ---
-        match std::mem::take(&mut self.pending) {
-            Pending::Leader => {
-                self.leader_key(ev.code);
-                self.count = None;
-                return;
-            }
-            Pending::G => {
-                let n = self.count.take().unwrap_or(1) as i64;
-                match ev.code {
-                    // `gg`, or `{count}gg`
-                    KeyCode::Char('g') => {
-                        if n > 1 {
-                            self.goto_line(n as usize);
-                        } else {
-                            self.cursor = first_code(self.diff_rows(), 0);
-                        }
-                    }
-                    // `gj` / `gk`: down and up a *display* line. Nothing here
-                    // wraps, so they are `j` and `k` — which is exactly what
-                    // vim does when nothing wraps, and it means a hand that
-                    // types them out of habit is not left holding a dead key.
-                    KeyCode::Char('j') => self.move_by(n),
-                    KeyCode::Char('k') => self.move_by(-n),
-                    _ => {}
-                }
-                return;
-            }
-            Pending::Z => {
-                match ev.code {
-                    KeyCode::Char('z') => self.scroll_cursor_to(0),
-                    KeyCode::Char('t') => self.scroll_cursor_to(i64::MIN),
-                    KeyCode::Char('b') => self.scroll_cursor_to(1),
-                    _ => {}
-                }
-                self.count = None;
-                return;
-            }
-            Pending::Bracket(d) => {
-                match ev.code {
-                    // `]c` is the next change, as it is in a merge conflict
-                    KeyCode::Char('c') => self.change(d),
-                    // and the two things this program has that vim does not
-                    KeyCode::Char('f') => self.step_file(d),
-                    KeyCode::Char('s') => self.step_scope(d),
-                    _ => {}
-                }
-                self.count = None;
-                return;
-            }
-            Pending::None => {}
-        }
-
-        // --- a count in front of a motion ---
-        if let KeyCode::Char(c @ '1'..='9') = ev.code {
+        // A digit is a count unless a count is what it would continue: `0`
+        // alone is the start of the line, `10` is ten. Only ever at the top
+        // level — `g5` is not a thing.
+        if chord.prefix == Pending::None
+            && !ctrl
+            && let KeyCode::Char(c @ '0'..='9') = ev.code
+            && (c != '0' || self.count.is_some())
+        {
             let d = c.to_digit(10).unwrap_or(0) as usize;
             self.count = Some(self.count.unwrap_or(0) * 10 + d);
             return;
         }
-        if ev.code == KeyCode::Char('0') && self.count.is_some() {
-            self.count = Some(self.count.unwrap_or(0) * 10);
-            return;
-        }
+
         // A prefix opens an alphabet and keeps the count for whatever
-        // finishes it: `5gg` is one command, and taking the count here would
-        // leave the `gg` with nothing to act on.
-        self.pending = match ev.code {
-            KeyCode::Char(' ') => Pending::Leader,
-            KeyCode::Char('g') => Pending::G,
-            KeyCode::Char('z') => Pending::Z,
-            KeyCode::Char('[') => Pending::Bracket(-1),
-            KeyCode::Char(']') => Pending::Bracket(1),
-            _ => Pending::None,
-        };
-        if self.pending != Pending::None {
+        // finishes it: `5gg` is one command, and spending the count here
+        // would leave the `gg` with nothing to act on.
+        if chord.prefix == Pending::None && !ctrl && self.keys.is_prefix(ev.code) {
+            self.pending = match ev.code {
+                KeyCode::Char(' ') => Pending::Leader,
+                KeyCode::Char('g') => Pending::G,
+                KeyCode::Char('z') => Pending::Z,
+                KeyCode::Char('[') => Pending::Bracket(-1),
+                _ => Pending::Bracket(1),
+            };
             return;
         }
 
         let n = self.count.take().unwrap_or(1) as i64;
+        if let Some(action) = self.keys.get(chord) {
+            self.run(action, n);
+        }
+    }
 
-        match ev.code {
-            // --- vertical ---
-            KeyCode::Char('j') | KeyCode::Down => self.move_by(n),
-            KeyCode::Char('k') | KeyCode::Up => self.move_by(-n),
-            KeyCode::Char('G') => match self.count.take() {
-                Some(l) => self.goto_line(l),
-                // `{count}G` was consumed into `n` above, so a bare G is n == 1
-                None if n > 1 => self.goto_line(n as usize),
-                None => {
+    /// Does one thing, `n` times where that means anything.
+    ///
+    /// Every key in the program arrives here, which is what makes the keymap
+    /// a table a reader can edit rather than a `match` only a compiler reads.
+    pub fn run(&mut self, action: Action, n: i64) {
+        let h = self.view_height.max(1) as i64;
+        match action {
+            // --- motions ---
+            Action::LineDown => self.move_by(n),
+            Action::LineUp => self.move_by(-n),
+            Action::Top => {
+                if n > 1 {
+                    self.goto_line(n as usize);
+                } else {
+                    self.cursor = first_code(self.diff_rows(), 0);
+                }
+            }
+            Action::Bottom => {
+                if n > 1 {
+                    self.goto_line(n as usize);
+                } else {
                     self.cursor = self.diff_rows().len().saturating_sub(1);
                     if !self.diff_rows().is_empty() && !self.diff_rows()[self.cursor].kind.is_code()
                     {
                         self.move_cursor(-1);
                     }
                 }
-            },
-            KeyCode::Char('H') => self.goto_screen(i64::MIN),
-            KeyCode::Char('M') => self.goto_screen(0),
-            KeyCode::Char('L') => self.goto_screen(1),
-            KeyCode::Char('{') => self.hunk(-1),
-            KeyCode::Char('}') => self.hunk(1),
-            KeyCode::PageDown => self.move_by(self.view_height as i64),
-            KeyCode::PageUp => self.move_by(-(self.view_height as i64)),
+            }
+            Action::ScreenTop => self.goto_screen(i64::MIN),
+            Action::ScreenMiddle => self.goto_screen(0),
+            Action::ScreenBottom => self.goto_screen(1),
+            Action::HalfDown => self.move_by(h / 2),
+            Action::HalfUp => self.move_by(-h / 2),
+            Action::PageDown => self.move_by(h),
+            Action::PageUp => self.move_by(-h),
+            Action::ViewDown => self.diff_scroll += 1,
+            Action::ViewUp => self.diff_scroll = self.diff_scroll.saturating_sub(1),
+            Action::HunkPrev => self.hunk(-1),
+            Action::HunkNext => self.hunk(1),
+            Action::ChangePrev => self.change(-1),
+            Action::ChangeNext => self.change(1),
+            Action::FilePrev => self.step_file(-1),
+            Action::FileNext => self.step_file(1),
+            Action::ScopePrev => self.step_scope(-1),
+            Action::ScopeNext => self.step_scope(1),
+            Action::CursorToMiddle => self.scroll_cursor_to(0),
+            Action::CursorToTop => self.scroll_cursor_to(i64::MIN),
+            Action::CursorToBottom => self.scroll_cursor_to(1),
 
-            // --- horizontal, which here means the window over a long line ---
-            KeyCode::Char('l') | KeyCode::Right if self.pane == Pane::Diff => {
+            // --- along the line ---
+            Action::ScrollRight if self.pane == Pane::Diff => {
                 self.hscroll = (self.hscroll + n as usize).min(self.longest_line());
             }
-            KeyCode::Char('h') | KeyCode::Left if self.pane == Pane::Diff && self.hscroll > 0 => {
+            Action::ScrollLeft if self.pane == Pane::Diff && self.hscroll > 0 => {
                 self.hscroll = self.hscroll.saturating_sub(n as usize);
             }
-            KeyCode::Char('w') if self.pane == Pane::Diff => self.word(1, false),
-            KeyCode::Char('e') if self.pane == Pane::Diff => self.word(1, true),
-            KeyCode::Char('b') if self.pane == Pane::Diff => self.word(-1, false),
-            KeyCode::Char('0') if self.pane == Pane::Diff => self.hscroll = 0,
-            KeyCode::Char('^') if self.pane == Pane::Diff => self.first_non_blank(),
-            KeyCode::Char('$') if self.pane == Pane::Diff => self.hscroll = self.longest_line(),
-            KeyCode::Char('h') | KeyCode::Left => self.focus_by(-1),
-            KeyCode::Char('l') | KeyCode::Right => self.focus_by(1),
-            KeyCode::Tab => self.focus_by(1),
-            KeyCode::BackTab => self.focus_by(-1),
+            // Off the diff, or already at the start, these are the only way
+            // left to walk between panes.
+            Action::ScrollLeft => self.focus_by(-1),
+            Action::ScrollRight => self.focus_by(1),
+            Action::WordForward => self.word(1, false),
+            Action::WordEnd => self.word(1, true),
+            Action::WordBack => self.word(-1, false),
+            Action::LineStart => self.hscroll = 0,
+            Action::FirstWord => self.first_non_blank(),
+            Action::LineEnd => self.hscroll = self.longest_line(),
+            Action::PaneNext => self.focus_by(1),
+            Action::PanePrev => self.focus_by(-1),
+            Action::PaneLeft => self.focus_by(-1),
+            Action::PaneRight => self.focus_by(1),
 
-            // --- search ---
-            KeyCode::Char('/') => {
+            // --- search and modes ---
+            Action::Search => {
                 self.modal = Some(Modal::Finder);
                 self.query.clear();
                 self.sel = 0;
             }
-            KeyCode::Char('n') => self.search(1),
-            KeyCode::Char('N') => self.search(-1),
-
-            // --- modes ---
-            KeyCode::Char('V' | 'v') => {
+            Action::SearchNext => self.search(1),
+            Action::SearchPrev => self.search(-1),
+            Action::Visual => {
                 self.anchor = if self.anchor.is_none() {
                     Some(self.cursor)
                 } else {
                     None
                 };
             }
-            // `o` in visual: to the other end of the selection, so a range
-            // can be grown from the end you did not start at.
-            KeyCode::Char('o') => {
+            Action::OtherEnd => {
                 if let Some(a) = self.anchor {
                     self.anchor = Some(self.cursor);
                     self.cursor = a;
                 }
             }
-            KeyCode::Esc => {
+            Action::Cancel => {
                 self.anchor = None;
                 self.count = None;
             }
-
-            KeyCode::Char(':') => {
+            Action::Commands => {
                 self.modal = Some(Modal::Palette);
                 self.query.clear();
                 self.sel = 0;
             }
-            KeyCode::Enter if self.pane == Pane::Tree => self.pane = Pane::Diff,
-            _ => {}
-        }
-    }
+            Action::Enter => {
+                if self.pane == Pane::Tree {
+                    self.pane = Pane::Diff;
+                }
+            }
+            Action::Redraw => self.wants_redraw = true,
 
-    /// The leader's alphabet: everything that is not a motion.
-    ///
-    /// The split is the point of the rewrite — a plain key moves, and a key
-    /// after the leader does something. Anything not here is in `:`.
-    fn leader_key(&mut self, code: KeyCode) {
-        match code {
-            // panes
-            KeyCode::Char('e') => self.toggle_pane(Pane::Tree),
-            KeyCode::Char('c') => self.toggle_pane(Pane::Queue),
-            KeyCode::Char('d') => self.pane = Pane::Diff,
-            // the review
-            KeyCode::Char('n') => self.open_comment(),
-            KeyCode::Char('x') => self.delete_comment(),
-            KeyCode::Char('a') => self.open_agents(),
-            KeyCode::Char('s') => self.send_queue(),
-            // the view
-            KeyCode::Char('v') => {
+            // --- commands ---
+            Action::TreePane => self.toggle_pane(Pane::Tree),
+            Action::QueuePane => self.toggle_pane(Pane::Queue),
+            Action::CodePane => self.pane = Pane::Diff,
+            Action::Note => self.open_comment(),
+            Action::DeleteNote => self.delete_comment(),
+            Action::Agents => self.open_agents(),
+            Action::Send => self.send_queue(),
+            Action::Split => {
                 self.split = !self.split;
                 // the columns halve, so wherever the code was scrolled to
                 // means something else now
@@ -994,18 +928,17 @@ impl App {
                     "unified view"
                 });
             }
-            KeyCode::Char('b') => self.toggle_blame(),
-            KeyCode::Char('g') => self.modal = Some(Modal::Deps),
-            KeyCode::Char('+' | '=') => self.set_context(self.context as i64 + 3),
-            KeyCode::Char('-') => self.set_context(self.context as i64 - 3),
-            KeyCode::Char('r') => {
+            Action::Blame => self.toggle_blame(),
+            Action::Deps => self.modal = Some(Modal::Deps),
+            Action::ContextMore => self.set_context(self.context as i64 + 3),
+            Action::ContextLess => self.set_context(self.context as i64 - 3),
+            Action::Refresh => {
                 self.refresh();
                 self.flash("refreshing…");
             }
-            KeyCode::Char('t') => self.open_themes(),
-            KeyCode::Char('?') => self.modal = Some(Modal::Help),
-            KeyCode::Char('q') => self.should_quit = true,
-            _ => {}
+            Action::Help => self.modal = Some(Modal::Help),
+            Action::Themes => self.open_themes(),
+            Action::Quit => self.should_quit = true,
         }
     }
 
@@ -1566,6 +1499,38 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         });
+    }
+
+    #[test]
+    fn a_rebound_key_does_the_new_thing_and_the_old_key_does_nothing() {
+        let mut a = app();
+        a.keys = crate::diffline::keys::Map::with("s = split\nj = none\n<C-n> = line-down\n");
+        a.pane = Pane::Diff;
+
+        assert!(!a.split);
+        press(&mut a, KeyCode::Char('s'));
+        assert!(a.split, "s was bound to split");
+
+        let before = a.cursor;
+        press(&mut a, KeyCode::Char('j'));
+        assert_eq!(a.cursor, before, "j was taken away");
+
+        ctrl(&mut a, 'n');
+        assert_ne!(a.cursor, before, "and ^n took its job");
+    }
+
+    #[test]
+    fn unbinding_everything_behind_a_prefix_gives_the_prefix_back() {
+        // `]` swallowed the next key because it was hardcoded as a prefix.
+        // Now it is one only while something lives behind it, so a reader who
+        // clears them out can bind `]` to something itself.
+        let mut a = app();
+        a.keys =
+            crate::diffline::keys::Map::with("]c = none\n]f = none\n]s = none\n] = line-down\n");
+        a.pane = Pane::Diff;
+        let before = a.cursor;
+        press(&mut a, KeyCode::Char(']'));
+        assert_ne!(a.cursor, before, "] should have moved, not waited");
     }
 
     #[test]

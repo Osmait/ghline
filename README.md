@@ -520,6 +520,30 @@ that run together beat letters scattered about, the start of a word beats the
 middle, and a shorter name beats a longer one. It matches greedily, which is
 documented where it could otherwise look like a bug.
 
+## Keys
+
+diffline's keymap is a table, not a `match`: `<config>/keys` is read at
+startup and applied over the shipped one.
+
+```
+<C-n> = line-down
+s     = split
+j     = none          # takes a key away
+```
+
+`:write a keymap to start from` writes every default binding with its action
+name and what it does. Keys read as a letter, `<C-d>`, `<leader>x`, `gg`,
+`]c`, `<esc>`, `<cr>`, `<tab>`, `<s-tab>`, `<space>` and the arrows; the
+leader is space.
+
+A line that names an action that does not exist, or a key that cannot be
+read, is skipped and reported at the top of the help — a key that silently
+does nothing is worse than one that says why. `␣?` is generated from the map
+rather than written down, so it is right the moment you rebind something.
+
+`g`, `z`, `[`, `]` and the leader are prefixes only while something is bound
+behind them, so clearing those bindings gives you the key itself back.
+
 ## Themes
 
 `t` opens the picker. It applies as you move through it, so what you are judging

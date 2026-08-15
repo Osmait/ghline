@@ -41,7 +41,7 @@ pub enum Pane {
 /// vim's grammar is prefixes: `g` and `z` open a second alphabet, `[` and `]`
 /// open the "go to the previous or next one of these" alphabet, and the
 /// leader opens this program's own.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum Pending {
     #[default]
     None,
@@ -175,6 +175,9 @@ pub struct App {
     pub should_quit: bool,
     pub wants_redraw: bool,
     /// Half of a `gg`. Cleared by any other key, so `g` then `j` is a `j`.
+    /// What the keys mean. Read once at startup from `<config>/keys`, or
+    /// the shipped map when there is no file.
+    pub keys: super::keys::Map,
     /// A key that begins something longer and is waiting for the rest of it.
     pub pending: Pending,
     /// Digits typed before a motion. `5j` is five lines, not a five and a j.
@@ -233,6 +236,7 @@ impl App {
             anim: 0,
             should_quit: false,
             wants_redraw: false,
+            keys: super::keys::load(),
             pending: Pending::None,
             count: None,
             last_search: String::new(),

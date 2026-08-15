@@ -129,7 +129,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         Some(Modal::Agents) => agents(buf, area, app),
         Some(Modal::Themes) => themes(buf, area, app),
         Some(Modal::Deps) => deps(buf, area, app),
-        Some(Modal::Help) => help(buf, area),
+        Some(Modal::Help) => help(buf, area, app),
         None => {}
     }
 }
@@ -1828,9 +1828,14 @@ fn deps(buf: &mut Buffer, area: Rect, app: &App) {
 /// it agreeing.
 const KEY_W: u16 = 14;
 
-fn help(buf: &mut Buffer, area: Rect) {
-    let rows = super::input::HELP;
-    let m = centered(area, 86, (rows.len() as u16).div_ceil(2) + 5);
+/// The keymap, read off the keymap.
+///
+/// Generated rather than written down: a help that is a second list of the
+/// bindings is a help that is wrong the first time somebody rebinds a key,
+/// and being wrong about that is worse than not being there.
+fn help(buf: &mut Buffer, area: Rect, app: &App) {
+    let rows = app.keys.listing();
+    let m = centered(area, 86, (rows.len() as u16).div_ceil(2) + 6);
     frame(buf, m, theme::yellow());
     let base = Style::default().bg(theme::panel());
     put(
@@ -1841,20 +1846,53 @@ fn help(buf: &mut Buffer, area: Rect) {
         "KEYMAP",
         base.fg(theme::yellow()),
     );
+    put_right(
+        buf,
+        m.right() - 2,
+        m.y + 1,
+        &match crate::diffline::keys::path() {
+            Some(p) => format!("{}", p.display()),
+            None => "no config directory".into(),
+        },
+        base.fg(theme::dimmer()),
+    );
     rule(buf, m, m.y + 2, theme::border());
 
+    // Anything the reader's file got wrong, before the bindings — a key that
+    // does nothing because of a typo three lines up is worth interrupting for.
+    let mut top = m.y + 3;
+    for problem in app.keys.problems.iter().take(3) {
+        if top + 1 >= m.bottom() {
+            break;
+        }
+        put_trunc(
+            buf,
+            m.x + 2,
+            top,
+            m.right() - 2,
+            &format!("keys: {problem}"),
+            base.fg(theme::red()),
+        );
+        top += 1;
+    }
+
     let half = m.width / 2;
-    for (i, (k, d)) in rows.iter().enumerate() {
+    for (i, (spec, action)) in rows.iter().enumerate() {
         let col = i % 2;
-        let y = m.y + 3 + (i / 2) as u16;
+        let y = top + (i / 2) as u16;
         if y >= m.bottom() - 1 {
             break;
         }
         let x = m.x + 2 + col as u16 * half;
-        // Wide enough for the longest of them: `zz / zt / zb` and
-        // `{count}j` were being cut, which turns a keymap into a puzzle.
-        put(buf, x, y, x + KEY_W, k, base.fg(theme::yellow()));
-        put_trunc(buf, x + KEY_W, y, x + half - 1, d, base.fg(theme::dim()));
+        put(buf, x, y, x + KEY_W, spec, base.fg(theme::yellow()));
+        put_trunc(
+            buf,
+            x + KEY_W,
+            y,
+            x + half - 1,
+            action.about(),
+            base.fg(theme::dim()),
+        );
     }
 }
 
