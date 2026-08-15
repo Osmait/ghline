@@ -92,7 +92,9 @@ fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
             let mut parts = line.split('\t');
             let add = parts.next()?;
             let del = parts.next()?;
-            let path = parts.last()?.trim();
+            // `next_back` rather than `last`: a rename writes both paths and
+            // the one that matters is the new one, at the end
+            let path = parts.next_back()?.trim();
             if path.is_empty() {
                 return None;
             }
