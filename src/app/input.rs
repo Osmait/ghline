@@ -255,10 +255,7 @@ impl App {
             (repo, cur.num, cur.title.clone(), url)
         };
         let context = self.dispatch_context(subject);
-        let template = crate::config::with_note(
-            &crate::config::prompt_template(subject),
-            &self.dispatch_note,
-        );
+        let template = crate::config::with_note(&subject.template(), &self.dispatch_note);
         let text = crate::config::render_prompt(&template, &repo, num, &title, &url, &context);
 
         self.dispatch_open = false;

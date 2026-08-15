@@ -30,6 +30,29 @@ impl Style {
     }
 }
 
+/// The mark an agent is known by, for the ones that have one.
+///
+/// Only two of these are real. `π` is what pi puts in its own terminal title,
+/// and `✳` is what Claude Code prints for itself — both are the agent's own
+/// choice, not ours. Codex and opencode have no glyph of their own, so they
+/// get a neutral one rather than an invented brand: a made-up icon is
+/// decoration pretending to be information.
+///
+/// Deliberately plain BMP symbols rather than Nerd Font glyphs. A Nerd Font
+/// icon lives in the private use area, where `unicode-width` has to guess it
+/// is one column wide while the non-Mono font variants draw it across two —
+/// which is how a column chart quietly goes crooked. Anyone whose font can do
+/// better can say so in the config.
+pub fn agent(kind: &str) -> &'static str {
+    match kind {
+        "claude" => "✳",
+        "pi" => "π",
+        "codex" => "◆",
+        "opencode" => "◇",
+        _ => "▪",
+    }
+}
+
 /// The glyph for a directory, open or closed.
 pub fn folder(style: Style, open: bool) -> &'static str {
     match (style, open) {

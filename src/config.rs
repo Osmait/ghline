@@ -120,11 +120,16 @@ pub fn save_theme(theme: Theme) -> io::Result<()> {
 ///
 /// A config file is one line per key, so `\n` in a value is those two
 /// characters; they become real newlines on the way out.
-pub fn prompt_template(subject: crate::subject::Subject) -> String {
+/// The template stored under `key`, or `fallback` when there is none.
+///
+/// Takes a key and a default rather than the thing they belong to, so this
+/// module — which both programs share — does not have to know what a GitHub
+/// issue is.
+pub fn template(key: &str, fallback: &str) -> String {
     load()
-        .get(subject.key())
+        .get(key)
         .map(|t| t.replace("\\n", "\n"))
-        .unwrap_or_else(|| subject.default_template().to_string())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// Fills the template in. An unknown placeholder is left alone rather than
@@ -179,7 +184,7 @@ pub fn agent_icon(kind: &str) -> String {
     load()
         .get(ICONS)
         .and_then(|spec| lookup_icon(spec, kind))
-        .unwrap_or_else(|| crate::data::default_agent_icon(kind).to_string())
+        .unwrap_or_else(|| crate::icons::agent(kind).to_string())
 }
 
 /// Reads `claude=✳, codex=⌬` and finds one entry.
@@ -340,13 +345,13 @@ mod tests {
     fn an_agent_with_no_mark_of_its_own_gets_a_neutral_one() {
         // inventing a brand glyph would be decoration pretending to be
         // information; a plain mark is honest
-        assert_eq!(crate::data::default_agent_icon("something-new"), "▪");
+        assert_eq!(crate::icons::agent("something-new"), "▪");
     }
 
     #[test]
     fn the_two_agents_that_have_a_real_mark_keep_it() {
-        assert_eq!(crate::data::default_agent_icon("pi"), "π");
-        assert_eq!(crate::data::default_agent_icon("claude"), "✳");
+        assert_eq!(crate::icons::agent("pi"), "π");
+        assert_eq!(crate::icons::agent("claude"), "✳");
     }
 
     #[test]
@@ -354,7 +359,7 @@ mod tests {
         // the column is fixed; a wide glyph would push the row sideways
         use unicode_width::UnicodeWidthStr;
         for kind in ["claude", "codex", "opencode", "pi", "anything"] {
-            let icon = crate::data::default_agent_icon(kind);
+            let icon = crate::icons::agent(kind);
             assert_eq!(icon.width(), 1, "{kind} draws {icon}");
         }
     }

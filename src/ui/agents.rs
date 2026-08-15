@@ -146,7 +146,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             text_x,
             y,
             area.right(),
-            &a.icon(),
+            &crate::config::agent_icon(&a.kind),
             base.fg(theme::purple()),
         );
         let kind_end = put_trunc(

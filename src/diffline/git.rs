@@ -248,7 +248,7 @@ fn parse_blame(text: &str) -> Vec<String> {
                 "{} {} {}",
                 &sha[..sha.len().min(7)],
                 author,
-                crate::gh::ago_epoch(when)
+                crate::ago::since(when)
             ));
         } else if let Some(first) = line.split(' ').next()
             && first.len() == 40

@@ -1752,8 +1752,8 @@ mod dispatch {
     #[test]
     fn each_subject_gets_its_own_wording() {
         use crate::subject::Subject;
-        let issue = crate::config::prompt_template(Subject::Issue);
-        let run = crate::config::prompt_template(Subject::Run);
+        let issue = Subject::Issue.template();
+        let run = Subject::Run.template();
         assert!(issue.starts_with("Work on"));
         assert!(run.starts_with("Diagnose"));
         assert_ne!(issue, run, "the first line is what an agent leans on");
@@ -2392,7 +2392,7 @@ mod note {
         // whatever the fixture happens to be showing; the point is that the
         // message begins where the template begins
         let subject = app.dispatch_subject().expect("something to send");
-        let template = crate::config::prompt_template(subject);
+        let template = subject.template();
         let opening = template.split('{').next().unwrap_or_default().to_string();
         assert!(!opening.is_empty(), "every template opens with words");
 

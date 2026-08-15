@@ -251,10 +251,19 @@ impl App {
         self.ask_send(agent.pane, text);
     }
 
-    fn ask_send(&self, pane: String, text: String) {
-        if let Some(s) = &self.service {
-            s.send(Request::Send { pane, text });
+    fn ask_send(&mut self, pane: String, text: String) -> bool {
+        let sent = self
+            .service
+            .as_ref()
+            .is_some_and(|s| s.send(Request::Send { pane, text }));
+        if !sent {
+            self.busy = false;
+            for c in &mut self.comments {
+                c.state = State::Queued;
+            }
+            self.flash("the worker thread is gone — restart diffline");
         }
+        sent
     }
 
     /// The whole queue as one message.

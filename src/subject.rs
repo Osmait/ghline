@@ -27,6 +27,12 @@ pub enum Subject {
 }
 
 impl Subject {
+    /// What an agent is told about this kind of thing, from the config or
+    /// from the default below.
+    pub fn template(self) -> String {
+        crate::config::template(self.key(), self.default_template())
+    }
+
     /// The config key holding this subject's template.
     pub fn key(self) -> &'static str {
         match self {

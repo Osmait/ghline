@@ -1291,7 +1291,14 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
             crate::data::AgentStatus::Unknown => theme::dimmer(),
         };
         put(buf, m.x + 3, y, m.right(), "●", s.fg(dot));
-        put(buf, m.x + 5, y, m.right(), &a.icon(), s.fg(theme::purple()));
+        put(
+            buf,
+            m.x + 5,
+            y,
+            m.right(),
+            &crate::config::agent_icon(&a.kind),
+            s.fg(theme::purple()),
+        );
         put_trunc(
             buf,
             m.x + 7,
@@ -1389,7 +1396,6 @@ fn help(buf: &mut Buffer, area: Rect) {
         put(buf, x, y, x + 10, k, base.fg(theme::yellow()));
         put_trunc(buf, x + 10, y, x + half - 1, d, base.fg(theme::dim()));
     }
-    let _ = "".width();
 }
 
 #[cfg(test)]

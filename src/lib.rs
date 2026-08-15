@@ -11,6 +11,7 @@
 //! one's state about its own subject. The shared modules below are the seam.
 
 // --- shared by both ---
+pub mod ago;
 pub mod clones;
 pub mod config;
 pub mod error;

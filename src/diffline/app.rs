@@ -264,10 +264,19 @@ impl App {
 
     // --- talking to the worker ---
 
-    fn ask(&self, req: Request) {
-        if let Some(s) = &self.service {
-            s.send(req);
-        }
+    /// Hands a request to the worker. `false` means it never got there.
+    fn ask(&self, req: Request) -> bool {
+        self.service.as_ref().is_some_and(|s| s.send(req))
+    }
+
+    /// What a state becomes when the worker cannot be reached.
+    ///
+    /// A thread that has died would otherwise leave every pane marked
+    /// `Loading`, animating a skeleton over data that is never coming — a
+    /// loader that cannot finish is worse than an error, because it looks
+    /// like progress.
+    fn gone() -> Load {
+        Load::Failed("the worker thread is gone — restart diffline".into())
     }
 
     pub fn poll(&self) -> Option<Response> {
@@ -288,10 +297,12 @@ impl App {
     pub fn ensure(&mut self) {
         if self.files_state == Load::Idle {
             self.files_state = Load::Loading;
-            self.ask(Request::Files {
+            if !self.ask(Request::Files {
                 repo: self.repo.clone(),
                 scope: self.scope.clone(),
-            });
+            }) {
+                self.files_state = Self::gone();
+            }
             return;
         }
 
@@ -301,12 +312,15 @@ impl App {
         }
         if self.rows_state.get(&path).unwrap_or(&Load::Idle) == &Load::Idle {
             self.rows_state.insert(path.clone(), Load::Loading);
-            self.ask(Request::Diff {
+            let sent = self.ask(Request::Diff {
                 repo: self.repo.clone(),
                 scope: self.scope.clone(),
-                path,
+                path: path.clone(),
                 context: self.context,
             });
+            if !sent {
+                self.rows_state.insert(path, Self::gone());
+            }
             return;
         }
 
@@ -314,17 +328,21 @@ impl App {
         // over the file's whole history, and most reading never wants it.
         if self.blame_on && self.blame_state.get(&path).unwrap_or(&Load::Idle) == &Load::Idle {
             self.blame_state.insert(path.clone(), Load::Loading);
-            self.ask(Request::Blame {
+            if !self.ask(Request::Blame {
                 repo: self.repo.clone(),
-                path,
-            });
+                path: path.clone(),
+            }) {
+                self.blame_state.insert(path, Self::gone());
+            }
         }
 
         // The agent list is wanted by the picker and by the footer that names
         // the target, so it is asked for once at the start.
         if self.agents_state == Load::Idle {
             self.agents_state = Load::Loading;
-            self.ask(Request::Agents);
+            if !self.ask(Request::Agents) {
+                self.agents_state = Self::gone();
+            }
         }
     }
 

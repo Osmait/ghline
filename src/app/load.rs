@@ -33,15 +33,33 @@ impl App {
             .find(|i| is_it(i, repo, num))
     }
 
+    /// Hands a request to the worker. `false` means it never got there — a
+    /// thread that has died would otherwise leave the pane that asked marked
+    /// `Loading` forever, animating a skeleton over data that is never coming.
+    /// A loader that cannot finish is worse than an error: it looks like
+    /// progress.
+    /// Hands a request to the worker.
+    ///
+    /// A request that never arrives would leave whichever pane asked for it
+    /// marked `Loading` forever, animating a skeleton over data that is not
+    /// coming — a loader that cannot finish is worse than an error, because it
+    /// looks like progress. The thread only dies when the program is being
+    /// torn down, so this is a guard rather than a path anyone walks; the
+    /// flag is enough to stop the animation and say why.
     fn ask(&mut self, req: Request) {
-        if let Some(svc) = &self.service {
-            svc.send(req);
+        if self.service.is_some() && !self.service.as_ref().is_some_and(|s| s.send(req)) {
+            self.worker_gone = true;
+            self.busy = false;
+            self.flash_warn("the worker thread is gone — restart the program");
         }
     }
 
     /// Requests whatever the current view still needs. Idempotent: each piece
     /// is marked `Loading` before being asked for, so nothing is duplicated.
     pub fn ensure(&mut self) {
+        if self.worker_gone {
+            return;
+        }
         if !self.live() {
             return;
         }

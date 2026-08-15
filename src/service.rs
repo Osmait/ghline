@@ -211,8 +211,13 @@ impl Service {
         Self { tx, rx }
     }
 
-    pub fn send(&self, req: Request) {
-        let _ = self.tx.send(req);
+    /// Hands a request to the worker, reporting whether it got there.
+    ///
+    /// The answer matters: a request dropped because the thread is gone would
+    /// otherwise leave whatever asked for it marked `Loading` forever, with a
+    /// skeleton animating over data that is never coming.
+    pub fn send(&self, req: Request) -> bool {
+        self.tx.send(req).is_ok()
     }
 
     pub fn poll(&self) -> Option<Response> {

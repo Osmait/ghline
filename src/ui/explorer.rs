@@ -8,7 +8,6 @@
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use unicode_width::UnicodeWidthStr;
 
 use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 use crate::app::hit::{Region, Target};
@@ -436,6 +435,5 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
                 .fg(theme::dimmer())
                 .add_modifier(Modifier::DIM),
         );
-        let _ = label.width();
     }
 }

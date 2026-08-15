@@ -123,7 +123,12 @@ pub enum Dest {
 impl Dest {
     pub fn title(&self) -> String {
         match self {
-            Self::Running(a) => format!("{} {}  ·  {}", a.icon(), a.kind, a.where_short()),
+            Self::Running(a) => format!(
+                "{} {}  ·  {}",
+                crate::config::agent_icon(&a.kind),
+                a.kind,
+                a.where_short()
+            ),
             Self::Fresh {
                 kind,
                 in_place: Some(branch),
@@ -336,6 +341,9 @@ pub struct App {
     /// difference between two buffers, so nothing inside a frame can make it
     /// repaint a cell it believes is already correct.
     pub wants_redraw: bool,
+    /// The worker stopped answering. Nothing more is asked of it, and no
+    /// skeleton is animated over an answer that is not coming.
+    pub worker_gone: bool,
     /// Set when `E` has been pressed: the file to open and the line to open it
     /// at. The main loop picks this up, because leaving the alternate screen
     /// and coming back is the terminal's business, not the reducer's.
@@ -467,6 +475,7 @@ impl App {
             file_scroll: 0,
             wants_edit: false,
             wants_redraw: false,
+            worker_gone: false,
             edit_request: None,
             clones: crate::clones::Index::new(),
             clones_state: Load::Idle,
@@ -496,19 +505,20 @@ impl App {
 
     /// Is anything requested and still unanswered? The loop waits less if so.
     pub fn waiting(&self) -> bool {
-        self.busy
-            || self.accounts_state.is_loading()
-            || self.repos_state.values().any(Load::is_loading)
-            || self.lists_state.values().any(Load::is_loading)
-            || self.jobs_state.values().any(Load::is_loading)
-            || self.logs_state.values().any(Load::is_loading)
-            || self.diff_state.values().any(Load::is_loading)
-            || self.detail_state.values().any(Load::is_loading)
-            || self.finder_state.is_loading()
-            || self.agents_state.is_loading()
-            || self.clones_state.is_loading()
-            || self.trees_state.values().any(Load::is_loading)
-            || self.file_state.values().any(Load::is_loading)
+        !self.worker_gone
+            && (self.busy
+                || self.accounts_state.is_loading()
+                || self.repos_state.values().any(Load::is_loading)
+                || self.lists_state.values().any(Load::is_loading)
+                || self.jobs_state.values().any(Load::is_loading)
+                || self.logs_state.values().any(Load::is_loading)
+                || self.diff_state.values().any(Load::is_loading)
+                || self.detail_state.values().any(Load::is_loading)
+                || self.finder_state.is_loading()
+                || self.agents_state.is_loading()
+                || self.clones_state.is_loading()
+                || self.trees_state.values().any(Load::is_loading)
+                || self.file_state.values().any(Load::is_loading))
     }
 
     // --- selectores ---
