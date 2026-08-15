@@ -10,8 +10,20 @@ env:
 
 jobs:
   check:
-    name: fmt · clippy · test
-    runs-on: ubuntu-latest
+    name: fmt · clippy · test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # macOS is here because the releases page has an aarch64-apple-darwin
+      # tarball on it. Building a binary for a platform nothing has ever run
+      # the tests on is publishing a guess; crossterm is where the two
+      # actually differ, and crossterm is most of what the event loop is.
+      #
+      # No Windows: nothing is built for it and neither program has been
+      # designed against it, so a red tick there would be reporting a
+      # platform that was never claimed.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +45,14 @@ jobs:
       - name: Tests
         run: cargo test --all-targets --locked
 
+      # The rustdoc lints are denied in Cargo.toml, so this is the step that
+      # makes them fire: `cargo doc` is not part of anybody's edit loop, and a
+      # doc link that names a moved item breaks nothing you would notice.
+      # Once — the output is the same on both runners.
+      - name: Documentation
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo doc --no-deps --locked
+
   deps:
     name: dependencies
     runs-on: ubuntu-latest
@@ -45,12 +65,16 @@ jobs:
       - name: Install the auditors
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-machete,cargo-audit
+          tool: cargo-machete,cargo-deny
 
       - name: Unused dependencies
         run: cargo machete
 
-      # advisories in the tree are reported but do not fail the build: most of
-      # them arrive through ratatui and are not ours to fix
-      - name: Advisories
-        run: cargo audit || true
+      # This used to be `cargo audit || true`, which reported advisories and
+      # then passed regardless — including for an advisory that was ours. The
+      # three that arrive through ratatui are now named in deny.toml with the
+      # reason each one is tolerated, and anything that is not one of those
+      # three fails the build. deny also checks the licences of the tree and
+      # where its crates were fetched from, which audit never did.
+      - name: Advisories, licences, sources
+        run: cargo deny --locked check

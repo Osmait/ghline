@@ -1,0 +1,74 @@
+# What the dependency tree is allowed to contain.
+#
+# This replaces `cargo audit || true`, which printed advisories and then
+# passed anyway — including for an advisory that would have been ours. Here
+# every tolerated advisory is named, with the reason it is tolerated, and
+# anything not on the list fails the build. The list is meant to shrink: each
+# entry is a thing to check on when ratatui moves.
+#
+# `cargo deny check` locally is the same command CI runs.
+
+[graph]
+# The three platforms binaries are published for. Without this, deny reads
+# every target's dependencies — including the Windows ones — and reports
+# advisories against crates that never get compiled into anything shipped.
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "aarch64-unknown-linux-gnu" },
+    { triple = "aarch64-apple-darwin" },
+]
+
+[advisories]
+# `unsound` defaults to `workspace`, which means an unsound advisory against a
+# dependency is not reported at all — and every dependency here is somebody
+# else's. `all` is what `cargo audit` was doing, and the point of this file is
+# to be at least as loud as what it replaced.
+unsound = "all"
+# A yanked crate in the lockfile is a version its author withdrew. Warning
+# about it and carrying on is how it stays there.
+yanked = "deny"
+
+# Nothing here is reachable from anything either binary does, and none of the
+# three has a fixed version to move to: they arrive through ratatui, which is
+# where the fix has to happen.
+ignore = [
+    # `paste`, a proc-macro crate, is archived and unmaintained. It runs at
+    # compile time and is not in the binary. ratatui 0.30 drops it.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, pulled in by ratatui, no fix available" },
+    # Both of these are `lru` 0.12, which ratatui 0.29 uses for its layout
+    # cache. Neither is reachable from here: `IterMut` is never called, and
+    # `pop()` is only unsound if a `Drop` panics — the key is a `Rect` and the
+    # value is a layout, and neither has a `Drop`. ratatui-core 0.1 is already
+    # on `lru` 0.18, where both are fixed; this goes when ratatui follows.
+    { id = "RUSTSEC-2026-0002", reason = "lru 0.12 via ratatui 0.29; IterMut is never called from this crate" },
+    { id = "RUSTSEC-2026-0253", reason = "lru 0.12 via ratatui 0.29; a panicking Drop is unreachable for its key and value types" },
+]
+
+[licenses]
+# Every licence actually in the tree today, and nothing else. A dependency
+# arriving under a copyleft licence would fail here rather than be noticed by
+# nobody — which matters because this crate is MIT OR Apache-2.0, and it can
+# only promise that if what it links can be given away on those terms.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSL-1.0",     # ryu
+    "Unicode-3.0", # unicode-ident
+    "Unlicense",   # aho-corasick, memchr — both dual with MIT
+    "Zlib",        # foldhash
+]
+
+[bans]
+# Duplicate versions are warned about, not denied. There are several —
+# hashbrown, itertools and unicode-width are each in the tree twice — and all
+# of them are two dependencies disagreeing rather than anything this crate
+# chose. Denying it would mean pinning other people's dependencies.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+# Everything comes from crates.io. A git dependency appearing is worth
+# stopping for: it is a crate nobody has yanked, audited or versioned.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

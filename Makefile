@@ -10,7 +10,7 @@ BIN := github-tui
 
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall hooks build run diff demo test test-nvim lint fmt check clean
+.PHONY: help install uninstall hooks build run diff demo test test-nvim lint audit fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -54,6 +54,11 @@ test-nvim: ## The neovim plugin's tests (needs nvim and a running herdr)
 lint: ## Formatting and lints, exactly as CI runs them
 	cargo fmt --all --check
 	cargo clippy --all-targets -- -D warnings
+	cargo doc --no-deps
+
+audit: ## Advisories, licences and sources (needs cargo-deny and cargo-machete)
+	cargo machete
+	cargo deny --locked check
 
 fmt: ## Apply the formatter
 	cargo fmt --all
