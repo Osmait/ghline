@@ -20,8 +20,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     let dests = app.dispatch_dests();
     let width = area.width.saturating_sub(8).min(84);
-    // header, rule, the rows, rule, footer, and the frame's two borders
-    let height = (dests.len() as u16 * 2 + 9).min(area.height.saturating_sub(4));
+    // header, rule, the note and its rule, the rows, rule, footer, and the
+    // frame's two borders
+    let height = (dests.len() as u16 * 2 + 11).min(area.height.saturating_sub(4));
     let modal = centered(area, width, height);
     frame(buf, modal, theme::cyan());
 
@@ -59,7 +60,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         buf,
         cx + 2,
         modal.y + 1,
-        max.saturating_sub(14),
+        // enough for the hint on the right, which grew when the arrows
+        // took over moving
+        max.saturating_sub(22),
         &what,
         base.fg(theme::bright()),
     );
@@ -67,16 +70,45 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         buf,
         max,
         modal.y + 1,
-        "enter · esc",
+        "↑↓ or ^n/^p · enter",
         base.fg(theme::dimmer()),
     );
     rule(buf, modal, modal.y + 2, theme::cyan());
 
+    // The instruction line. Typing lands here rather than moving the
+    // selection, which is why the arrows do the moving — the same bargain the
+    // finder makes, and for the same reason.
+    let ny = modal.y + 3;
+    let nx = put(buf, modal.x + 2, ny, max, "❯ ", base.fg(theme::cyan()));
+    if app.dispatch_note.is_empty() {
+        put_trunc(
+            buf,
+            nx,
+            ny,
+            max,
+            "say something specific, or leave it blank for the template",
+            base.fg(theme::dimmer()),
+        );
+    } else {
+        let end = put_trunc(
+            buf,
+            nx,
+            ny,
+            max,
+            &app.dispatch_note,
+            base.fg(theme::bright()),
+        );
+        if app.blink {
+            put(buf, end, ny, max, "█", base.fg(theme::cyan()));
+        }
+    }
+    rule(buf, modal, modal.y + 4, theme::cyan());
+
     let list = Rect {
         x: modal.x + 1,
-        y: modal.y + 3,
+        y: modal.y + 5,
         width: modal.width - 2,
-        height: modal.bottom().saturating_sub(modal.y + 6),
+        height: modal.bottom().saturating_sub(modal.y + 8),
     };
     let rows = (list.height / 2) as usize;
 
@@ -179,7 +211,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         modal.x + 2,
         foot_y,
         max,
-        "+ branches a worktree · ⌂ works in the checkout you already have",
+        "type to add an instruction · + worktree · ⌂ the checkout you have",
         base.fg(theme::dimmer()),
     );
 }

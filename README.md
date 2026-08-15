@@ -273,6 +273,27 @@ shown`. A truncation the agent cannot see is worse than a shorter excerpt,
 because it will reason confidently about a log it thinks it has all of. With
 nothing flagged, the tail travels instead, and says so.
 
+### Saying something specific
+
+The templates say the standard thing. When the standard thing is not what you
+want said, **type it into the picker**: whatever you write leads the message
+and the template follows as context.
+
+```
+SEND issue  #87  Investigar implementación de Passkeys…    ↑↓ or ^n/^p · enter
+❯ only the parser, ignore the tests
+```
+
+Typing goes to that line rather than moving the selection, so the arrows and
+`^n`/`^p` do the moving — the same bargain the finder makes, for the same
+reason. `esc` closes; `x` is now just a letter. An instruction is not
+remembered between questions, because a specific thing is specific.
+
+It goes in front by default, since that is what an agent reads first. A
+template that names `{note}` places it wherever you like instead, and one that
+does not mention it — which is every default and every config written before
+this existed — is unchanged when you type nothing.
+
 The confirmation shows the first fourteen lines of what would be sent and the
 total size, so a template that renders badly is caught before an agent reads it.
 

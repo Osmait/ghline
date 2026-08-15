@@ -774,6 +774,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("E", "edit the file in $EDITOR"),
     ("^l", "repaint the screen"),
     ("x", "send this to an agent"),
+    ("x then type", "…and say something specific"),
 ];
 
 /// A log line already split by job and step.

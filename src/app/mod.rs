@@ -348,6 +348,9 @@ pub struct App {
     pub pending_fresh: Option<Fresh>,
     /// The dispatch picker, open over an issue or pull request.
     pub dispatch_open: bool,
+    /// A specific instruction typed into the picker, or empty for the
+    /// template on its own.
+    pub dispatch_note: String,
     pub dispatch_sel: usize,
     pub dispatch_scroll: usize,
     /// Selected row of the Agents tab.
@@ -469,6 +472,7 @@ impl App {
             clones_state: Load::Idle,
             pending_fresh: None,
             dispatch_open: false,
+            dispatch_note: String::new(),
             dispatch_sel: 0,
             dispatch_scroll: 0,
             agents: Vec::new(),

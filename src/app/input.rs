@@ -223,6 +223,7 @@ impl App {
         // decision about which agent is free right now.
         self.agents_state = Load::Idle;
         self.dispatch_open = true;
+        self.dispatch_note.clear();
         self.dispatch_sel = 0;
         self.dispatch_scroll = 0;
     }
@@ -254,14 +255,11 @@ impl App {
             (repo, cur.num, cur.title.clone(), url)
         };
         let context = self.dispatch_context(subject);
-        let text = crate::config::render_prompt(
+        let template = crate::config::with_note(
             &crate::config::prompt_template(subject),
-            &repo,
-            num,
-            &title,
-            &url,
-            &context,
+            &self.dispatch_note,
         );
+        let text = crate::config::render_prompt(&template, &repo, num, &title, &url, &context);
 
         self.dispatch_open = false;
         match dest {
@@ -305,17 +303,26 @@ impl App {
         }
     }
 
+    /// The picker owns every key while it is up, because the letters are the
+    /// instruction. Moving therefore lives on the arrows and on `^n`/`^p`,
+    /// exactly as it does in the finder.
     fn dispatch_key(&mut self, ev: KeyEvent) {
+        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
         let len = self.dispatch_dests().len();
+        let last = len.saturating_sub(1);
         match ev.code {
-            KeyCode::Esc | KeyCode::Char('q' | 'x') => self.dispatch_open = false,
+            KeyCode::Esc => self.dispatch_open = false,
             KeyCode::Enter => self.dispatch_accept(),
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.dispatch_sel = (self.dispatch_sel + 1).min(len.saturating_sub(1));
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
+            KeyCode::Down => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
+            KeyCode::Up => self.dispatch_sel = self.dispatch_sel.saturating_sub(1),
+            KeyCode::Char('n') if ctrl => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
+            KeyCode::Char('p') if ctrl => {
                 self.dispatch_sel = self.dispatch_sel.saturating_sub(1);
             }
+            KeyCode::Backspace => {
+                self.dispatch_note.pop();
+            }
+            KeyCode::Char(c) if !ctrl => self.dispatch_note.push(c),
             _ => {}
         }
     }

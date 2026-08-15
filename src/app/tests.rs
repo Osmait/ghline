@@ -2298,3 +2298,130 @@ mod residue {
         );
     }
 }
+
+// --------------------------------------------------- a specific instruction
+//
+// The templates say the standard thing. Sometimes the standard thing is not
+// what you want said, and typing beats editing a config file for that.
+
+mod note {
+    use super::*;
+    use crate::data::AgentStatus;
+
+    fn open_picker() -> App {
+        let mut app = demo();
+        app.source = Source::Live;
+        app.agents = vec![crate::data::Agent {
+            kind: "claude".into(),
+            status: AgentStatus::Idle,
+            cwd: "/home/x/orca/thing".into(),
+            pane: "wA:p1".into(),
+            title: String::new(),
+            focused: false,
+        }];
+        app.open_dispatch();
+        app
+    }
+
+    fn typed(app: &mut App, text: &str) {
+        for c in text.chars() {
+            press(app, KeyCode::Char(c));
+        }
+    }
+
+    #[test]
+    fn typing_in_the_picker_writes_an_instruction() {
+        let mut app = open_picker();
+        typed(&mut app, "only the parser");
+        assert_eq!(app.dispatch_note, "only the parser");
+    }
+
+    #[test]
+    fn the_letters_that_move_elsewhere_are_letters_here() {
+        // `j` and `k` walk lists everywhere else in this program; inside the
+        // picker they are just letters, which is why the arrows do the moving
+        let mut app = open_picker();
+        typed(&mut app, "jk");
+        assert_eq!(app.dispatch_note, "jk");
+        assert_eq!(app.dispatch_sel, 0, "nothing moved");
+    }
+
+    #[test]
+    fn the_arrows_move_without_typing() {
+        let mut app = open_picker();
+        // a second destination, or there is nowhere to move to
+        let mut other = app.agents[0].clone();
+        other.pane = "wB:p1".into();
+        app.agents.push(other);
+        press(&mut app, KeyCode::Down);
+        assert!(app.dispatch_sel > 0);
+        assert!(app.dispatch_note.is_empty());
+        press(&mut app, KeyCode::Up);
+        assert_eq!(app.dispatch_sel, 0);
+    }
+
+    #[test]
+    fn backspace_takes_a_character_back() {
+        let mut app = open_picker();
+        typed(&mut app, "abc");
+        press(&mut app, KeyCode::Backspace);
+        assert_eq!(app.dispatch_note, "ab");
+    }
+
+    #[test]
+    fn an_instruction_leads_the_message_that_is_sent() {
+        let mut app = open_picker();
+        typed(&mut app, "only the parser, ignore the tests");
+        app.dispatch_accept();
+
+        match app.prompt {
+            Some(Prompt::Dispatch { ref text, .. }) => {
+                assert!(
+                    text.starts_with("only the parser, ignore the tests"),
+                    "the specific thing is what an agent reads first:\n{text}"
+                );
+                assert!(text.contains('#'), "and the template still follows it");
+            }
+            _ => panic!("nothing was queued"),
+        }
+    }
+
+    #[test]
+    fn no_instruction_sends_exactly_what_it_sent_before() {
+        let mut app = open_picker();
+        // whatever the fixture happens to be showing; the point is that the
+        // message begins where the template begins
+        let subject = app.dispatch_subject().expect("something to send");
+        let template = crate::config::prompt_template(subject);
+        let opening = template.split('{').next().unwrap_or_default().to_string();
+        assert!(!opening.is_empty(), "every template opens with words");
+
+        app.dispatch_accept();
+        match app.prompt {
+            Some(Prompt::Dispatch { ref text, .. }) => {
+                assert!(
+                    text.starts_with(&opening),
+                    "the template, untouched — expected it to open with {opening:?}:\n{text}"
+                );
+            }
+            _ => panic!("nothing was queued"),
+        }
+    }
+
+    #[test]
+    fn the_instruction_does_not_outlive_the_question_it_was_for() {
+        let mut app = open_picker();
+        typed(&mut app, "just this once");
+        app.dispatch_accept();
+
+        app.open_dispatch();
+        assert!(app.dispatch_note.is_empty(), "a specific thing is specific");
+    }
+
+    #[test]
+    fn escape_still_closes_the_picker_rather_than_typing() {
+        let mut app = open_picker();
+        press(&mut app, KeyCode::Esc);
+        assert!(!app.dispatch_open);
+    }
+}

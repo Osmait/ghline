@@ -206,6 +206,26 @@ pub fn file_icons() -> crate::icons::Style {
         .map_or(crate::icons::Style::Nerd, |v| crate::icons::Style::parse(v))
 }
 
+/// Puts a typed instruction into a rendered message.
+///
+/// A template that names `{note}` decides where it goes. One that does not —
+/// which is every default, and every config written before notes existed —
+/// gets it in front, because a specific instruction is what the agent should
+/// read first and the template is the context for it.
+///
+/// An empty note leaves the message exactly as it was, so nothing changes for
+/// anyone who does not type one.
+pub fn with_note(template: &str, note: &str) -> String {
+    let note = note.trim();
+    if template.contains("{note}") {
+        return template.replace("{note}", note);
+    }
+    if note.is_empty() {
+        return template.to_string();
+    }
+    format!("{note}\n\n{template}")
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -367,6 +387,36 @@ mod tests {
         // one character, two columns — `put` clears the cell it covers, so
         // this is the reader's call to make
         assert_eq!(lookup_icon("claude=漢", "claude").as_deref(), Some("漢"));
+    }
+
+    #[test]
+    fn a_note_leads_the_message_when_the_template_does_not_place_it() {
+        let out = with_note("Work on {repo}", "only the parser, ignore the tests");
+        assert_eq!(out, "only the parser, ignore the tests\n\nWork on {repo}");
+    }
+
+    #[test]
+    fn a_template_that_names_the_note_decides_where_it_goes() {
+        let out = with_note("Context first.\n\n{note}", "then this");
+        assert_eq!(out, "Context first.\n\nthen this");
+    }
+
+    #[test]
+    fn no_note_leaves_the_message_exactly_as_it_was() {
+        // nothing changes for anyone who never types one
+        assert_eq!(with_note("Work on {repo}", ""), "Work on {repo}");
+        assert_eq!(with_note("Work on {repo}", "   "), "Work on {repo}");
+    }
+
+    #[test]
+    fn a_template_that_names_the_note_drops_the_placeholder_when_empty() {
+        assert_eq!(with_note("a {note} b", ""), "a  b");
+    }
+
+    #[test]
+    fn a_note_is_trimmed_but_not_otherwise_touched() {
+        let out = with_note("T", "  spaces around, %d inside  ");
+        assert!(out.starts_with("spaces around, %d inside\n"), "{out}");
     }
 
     #[test]
