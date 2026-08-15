@@ -20,6 +20,7 @@ pub mod nav;
 pub mod settings;
 pub mod syntax;
 pub mod text;
+pub mod worker;
 
 #[cfg(test)]
 #[allow(

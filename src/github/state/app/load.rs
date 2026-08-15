@@ -47,7 +47,7 @@ impl App {
     /// torn down, so this is a guard rather than a path anyone walks; the
     /// flag is enough to stop the animation and say why.
     fn ask(&mut self, req: Request) {
-        if self.service.is_some() && !self.service.as_ref().is_some_and(|s| s.send(req)) {
+        if self.service.is_some() && !self.service.as_ref().is_some_and(|w| w.send(req)) {
             self.worker_gone = true;
             self.busy = false;
             self.flash_warn("the worker thread is gone — restart the program");

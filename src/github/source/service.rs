@@ -3,7 +3,9 @@
 //! The main loop sends a `Request` and calls `try_recv` each pass, so the
 //! interface never blocks waiting on the network.
 
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+
+use crate::shared::worker::{Gone, Worker};
 use std::thread;
 
 use crate::github::data::Kind;
@@ -211,18 +213,24 @@ impl Service {
 
         Self { tx, rx }
     }
+}
 
-    /// Hands a request to the worker, reporting whether it got there.
-    ///
-    /// The answer matters: a request dropped because the thread is gone would
-    /// otherwise leave whatever asked for it marked `Loading` forever, with a
-    /// skeleton animating over data that is never coming.
-    pub fn send(&self, req: Request) -> bool {
+impl Worker<Request, Response> for Service {
+    fn send(&self, req: Request) -> bool {
         self.tx.send(req).is_ok()
     }
 
-    pub fn poll(&self) -> Option<Response> {
-        self.rx.try_recv().ok()
+    /// `Disconnected` is not the same as `Empty` and must not be flattened
+    /// into it: the send side already refuses to leave a request in the air,
+    /// but a worker that dies *after* taking one would otherwise leave that
+    /// one loading for ever — a `None` looks exactly like an answer that has
+    /// not come yet.
+    fn poll(&self) -> Result<Option<Response>, Gone> {
+        match self.rx.try_recv() {
+            Ok(r) => Ok(Some(r)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(Gone),
+        }
     }
 }
 

@@ -147,7 +147,11 @@ impl GithubTui {
             app: App::new(
                 source,
                 // Demo mode has nothing to ask, so it gets no thread.
-                (source == Source::Live).then(github_tui::github::service::Service::spawn),
+                // Demo mode has nothing to ask, so it gets no thread.
+                (source == Source::Live).then(|| {
+                    Box::new(github_tui::github::service::Service::spawn())
+                        as Box<dyn github_tui::shared::worker::Worker<_, _>>
+                }),
             ),
             tick: now,
             blink: now,

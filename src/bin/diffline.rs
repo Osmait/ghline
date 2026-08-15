@@ -90,7 +90,7 @@ fn main() -> io::Result<()> {
         repo,
         opening,
         scopes,
-        Some(github_tui::diffline::service::Service::spawn()),
+        Some(Box::new(github_tui::diffline::service::Service::spawn())),
     );
 
     if let Some(i) = svg {

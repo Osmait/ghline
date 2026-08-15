@@ -24,7 +24,8 @@ use crate::shared::error::{Error, Failure};
 
 use crate::github::data::{Account, Item, Job, RawLog, Status};
 use crate::github::demo;
-use crate::github::service::{Response, Service};
+use crate::github::service::{Request, Response};
+use crate::shared::worker::Worker;
 
 /// Where the data comes from.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -267,7 +268,7 @@ pub struct LogRow {
 
 pub struct App {
     pub source: Source,
-    pub service: Option<Service>,
+    pub service: Option<Box<dyn Worker<Request, Response>>>,
     pub accounts: Vec<Account>,
     pub accounts_state: Load,
     /// Load state of each account's repos, keyed by login.
@@ -418,7 +419,7 @@ pub struct App {
 impl App {
     /// The worker is handed in rather than made here — the binary is the only
     /// part that should decide there is one.
-    pub fn new(source: Source, service: Option<Service>) -> Self {
+    pub fn new(source: Source, service: Option<Box<dyn Worker<Request, Response>>>) -> Self {
         let accounts = if source == Source::Demo {
             demo::accounts()
         } else {
@@ -542,10 +543,49 @@ impl App {
         self.source == Source::Live
     }
 
-    pub fn poll_service(&self) -> Option<Response> {
-        self.service
-            .as_ref()
-            .and_then(crate::github::service::Service::poll)
+    /// The next answer from the worker, if one has arrived.
+    ///
+    /// Takes `&mut self` because finding out the worker is gone is itself a
+    /// state change: everything still waiting would wait for ever otherwise,
+    /// which on screen is a skeleton animating over data that is not coming.
+    /// The trait made this case impossible to keep ignoring — the old
+    /// `Option` had no way to say it.
+    pub fn poll_service(&mut self) -> Option<Response> {
+        match self.service.as_ref().map(|w| w.poll()) {
+            Some(Ok(r)) => r,
+            Some(Err(_)) => {
+                self.worker_died();
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// Fails everything that was waiting, once, when the worker goes.
+    fn worker_died(&mut self) {
+        if self.service.is_none() {
+            return;
+        }
+        // Dropped so this runs once rather than on every frame from here on.
+        self.service = None;
+        let gone = || Load::refused("the worker thread is gone — restart github-tui");
+        for st in [
+            &mut self.accounts_state,
+            &mut self.agents_state,
+            &mut self.finder_state,
+        ] {
+            if st.is_loading() {
+                *st = gone();
+            }
+        }
+        for map in [&mut self.repos_state, &mut self.trees_state] {
+            for st in map.values_mut() {
+                if st.is_loading() {
+                    *st = gone();
+                }
+            }
+        }
+        self.flash_warn("the worker thread is gone — restart github-tui");
     }
 
     /// Is anything requested and still unanswered? The loop waits less if so.

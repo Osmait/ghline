@@ -8,8 +8,9 @@ use crate::shared::error::Failure;
 use crate::shared::nav::Dir;
 
 use crate::diffline::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
-use crate::diffline::service::{Request, Response, Service};
+use crate::diffline::service::{Request, Response};
 use crate::shared::mux::Agent;
+use crate::shared::worker::Worker;
 
 /// Load state of one piece of data.
 #[derive(Clone, Debug, Default)]
@@ -149,7 +150,7 @@ pub struct Hit {
 
 pub struct App {
     pub repo: String,
-    pub service: Option<Service>,
+    pub service: Option<Box<dyn Worker<Request, Response>>>,
 
     // --- what is being reviewed ---
     pub scope: Scope,
@@ -245,7 +246,12 @@ impl App {
     /// should decide there is one. It also stops the tests setting
     /// `service = None` afterwards as a way of undoing a thread they never
     /// wanted — they pass `None` and mean it.
-    pub fn new(repo: String, scope: Scope, scopes: Vec<Scope>, service: Option<Service>) -> Self {
+    pub fn new(
+        repo: String,
+        scope: Scope,
+        scopes: Vec<Scope>,
+        service: Option<Box<dyn Worker<Request, Response>>>,
+    ) -> Self {
         Self {
             repo,
             service,
@@ -451,7 +457,7 @@ impl App {
 
     /// Hands a request to the worker. `false` means it never got there.
     fn ask(&self, req: Request) -> bool {
-        self.service.as_ref().is_some_and(|s| s.send(req))
+        self.service.as_ref().is_some_and(|w| w.send(req))
     }
 
     /// What a state becomes when the worker cannot be reached.
@@ -476,7 +482,7 @@ impl App {
     /// state change: everything still waiting will wait for ever otherwise,
     /// which on screen is a skeleton animating over data that is not coming.
     pub fn poll(&mut self) -> Option<Response> {
-        match self.service.as_ref().map(Service::poll) {
+        match self.service.as_ref().map(|w| w.poll()) {
             Some(Ok(r)) => r,
             Some(Err(_)) => {
                 self.worker_died();
@@ -931,19 +937,48 @@ mod tests {
     }
 
     #[test]
+    fn a_request_and_its_answer_can_be_walked_without_a_thread() {
+        // What the trait bought: before it, the only way to exercise the
+        // round trip was to start a real worker and hope it answered before
+        // the assertion ran. Now the answer is decided here.
+        use crate::shared::worker::Immediate;
+        let mut a = app();
+        a.files.clear();
+        a.files_state = Load::Idle;
+        a.service = Some(Box::new(Immediate::new(|req| match req {
+            Request::Files { scope, .. } => Response::Files {
+                scope,
+                result: Ok(vec![ChangedFile {
+                    path: "src/answered.rs".into(),
+                    status: crate::diffline::model::Status::Added,
+                    add: 1,
+                    del: 0,
+                }]),
+            },
+            _ => Response::Sent(Ok(())),
+        })));
+
+        a.ensure();
+        assert!(a.files_state.is_loading(), "it asked");
+        while let Some(res) = a.poll() {
+            a.apply(res);
+        }
+        assert_eq!(a.files.len(), 1, "and the answer landed");
+        assert_eq!(a.files[0].path, "src/answered.rs");
+        assert!(!a.waiting());
+    }
+
+    #[test]
     fn a_worker_that_dies_mid_flight_does_not_leave_a_skeleton_turning() {
         // The send side already refused to leave a request in the air. The
         // receive side turned "the worker is gone" into "nothing yet", which
         // looks identical and lasts for ever.
+        // A worker that is already gone, rather than a real thread started
+        // and killed: the trait is what makes that sayable in one line.
         let mut a = app();
-        a.service = Some(Service::spawn());
+        a.service = Some(Box::new(crate::shared::worker::Dead));
         a.files_state = Load::Loading;
         a.rows_state.insert("src/a.rs".into(), Load::Loading);
-
-        // Dropping the worker's end of the channel is what dying looks like
-        // from here.
-        drop(a.service.take());
-        a.service = Some(Service::dead());
 
         assert!(a.poll().is_none());
         assert!(!a.waiting(), "nothing may still be marked as on its way");
