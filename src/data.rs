@@ -537,11 +537,11 @@ pub struct Job {
 pub struct LogLine {
     pub time: String,
     pub text: String,
-    pub kind: &'static str,
+    pub kind: LogKind,
 }
 
-/// A demo line: text plus a colour class.
-pub type DemoLine = (&'static str, &'static str);
+/// A demo line: text plus what kind of line it is.
+pub type DemoLine = (&'static str, LogKind);
 
 pub struct Tab {
     pub id: &'static str,
@@ -638,7 +638,28 @@ pub struct RawLog {
     pub step: String,
     pub time: String,
     pub text: String,
-    pub kind: &'static str,
+    pub kind: LogKind,
+}
+
+/// What a line of a log *is*.
+///
+/// Not what colour it should be, which is what this used to say — the parser
+/// returned `"red"` and the view looked `"red"` back up in the palette. A
+/// model that names colours has taken a decision that belongs to whoever is
+/// drawing, and it takes it in a string nothing checks.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum LogKind {
+    /// `##[group]` / `##[endgroup]`, the collapsible headings.
+    Group,
+    /// A failure: `##[error]`, a panic, a failing test.
+    Error,
+    Warning,
+    /// A passing test, or a run that finished clean.
+    Success,
+    /// The command being run, echoed by the runner.
+    Command,
+    #[default]
+    Plain,
 }
 
 /// Converts the raw log into the shape the view consumes.
@@ -711,14 +732,14 @@ mod tests {
                 step: "Set up job".into(),
                 time: "10:00:00".into(),
                 text: "one".into(),
-                kind: "fg",
+                kind: LogKind::Plain,
             },
             RawLog {
                 job: "build".into(),
                 step: "UNKNOWN STEP".into(),
                 time: "10:00:01".into(),
                 text: "two".into(),
-                kind: "fg",
+                kind: LogKind::Plain,
             },
         ];
         // an exact step match wins

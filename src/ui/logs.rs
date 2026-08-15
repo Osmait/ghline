@@ -7,20 +7,22 @@ use ratatui::style::{Color, Style};
 use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, NodeKind, Pane};
+use crate::data::LogKind;
 use crate::data::Status;
 use crate::theme;
 
 const TREE_W: u16 = 38;
 
-fn log_color(kind: &str) -> Color {
+/// What a kind of line looks like. The view's decision, made where the rest
+/// of the view's decisions are.
+fn log_color(kind: LogKind) -> Color {
     match kind {
-        "green" => theme::green(),
-        "red" => theme::red(),
-        "yellow" => theme::yellow(),
-        "dim" => theme::dim(),
-        "group" => theme::purple(),
-        "fg" => theme::log_fg(),
-        _ => theme::fg(),
+        LogKind::Success => theme::green(),
+        LogKind::Error => theme::red(),
+        LogKind::Warning => theme::yellow(),
+        LogKind::Command => theme::dim(),
+        LogKind::Group => theme::purple(),
+        LogKind::Plain => theme::log_fg(),
     }
 }
 
@@ -241,7 +243,10 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
 
     let rows = app.log_lines();
-    let err_count = rows.iter().filter(|l| l.kind == "red").count();
+    let err_count = rows
+        .iter()
+        .filter(|l| l.kind == crate::data::LogKind::Error)
+        .count();
     let stats = format!(
         "{} lines{} · {}",
         rows.len(),
@@ -293,7 +298,12 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         n: Option<usize>,
         time: String,
         text: String,
-        kind: &'static str,
+        kind: LogKind,
+        /// The "… still running" line the view adds, which is not a line of
+        /// the log at all. It used to ride in `kind` as the string `"tail"`,
+        /// in the same field as the log's own classification — two
+        /// vocabularies in one `&str`, and nothing to stop them meeting.
+        tail: bool,
     }
     let mut disp: Vec<Disp> = Vec::new();
     for l in &rows {
@@ -309,6 +319,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
                 time: if first { l.time.clone() } else { String::new() },
                 text: part,
                 kind: l.kind,
+                tail: false,
             });
             first = false;
         }
@@ -359,7 +370,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         n: None,
         time: String::new(),
         text: tail,
-        kind: "tail",
+        kind: LogKind::Plain,
+        tail: true,
     });
 
     let h = view.height as usize;
@@ -388,7 +400,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             );
         }
         let d = &disp[i];
-        let bg = if d.kind == "red" {
+        let bg = if d.kind == LogKind::Error {
             theme::err_bg()
         } else {
             theme::bg()
@@ -405,7 +417,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         );
         let base = Style::default().bg(bg);
 
-        if d.kind == "tail" {
+        if d.tail {
             put(buf, text_x, y, area.right(), &d.text, base.fg(theme::dim()));
             continue;
         }

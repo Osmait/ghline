@@ -2,8 +2,8 @@
 //! logs. It is a fixture, kept apart from the model it fills in.
 
 use crate::data::{
-    Account, Comment, DemoLine, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail,
-    Repo, Review, ReviewState, RunDetail, Status, Step,
+    Account, Comment, DemoLine, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, LogKind,
+    PrDetail, Repo, Review, ReviewState, RunDetail, Status, Step,
 };
 use crate::demo_diffs;
 
@@ -600,233 +600,272 @@ pub fn job_templates() -> Vec<Job> {
 pub fn logs_for(status: Status) -> &'static [DemoLine] {
     match status {
         Status::Success => &[
-            ("##[group]Run cargo test --all", "group"),
-            ("  cargo test --all --locked", "dim"),
+            ("##[group]Run cargo test --all", LogKind::Group),
+            ("  cargo test --all --locked", LogKind::Command),
             (
                 "   Compiling tuikit v0.9.3 (/home/runner/work/tuikit)",
-                "fg",
+                LogKind::Plain,
             ),
             (
                 "    Finished test profile [unoptimized + debuginfo] in 41.22s",
-                "fg",
+                LogKind::Plain,
             ),
-            ("     Running unittests src/lib.rs", "fg"),
-            ("test layout::solver::clamps_negative_width ... ok", "green"),
-            ("test render::diff::skips_unchanged_cells ... ok", "green"),
-            ("test keymap::vim::parses_counts ... ok", "green"),
-            ("test result: ok. 148 passed; 0 failed; 2 ignored", "green"),
-            ("##[endgroup]", "group"),
+            ("     Running unittests src/lib.rs", LogKind::Plain),
+            (
+                "test layout::solver::clamps_negative_width ... ok",
+                LogKind::Success,
+            ),
+            (
+                "test render::diff::skips_unchanged_cells ... ok",
+                LogKind::Success,
+            ),
+            ("test keymap::vim::parses_counts ... ok", LogKind::Success),
+            (
+                "test result: ok. 148 passed; 0 failed; 2 ignored",
+                LogKind::Success,
+            ),
+            ("##[endgroup]", LogKind::Group),
         ],
         Status::Failure => &[
-            ("##[group]Run cargo test --all", "group"),
-            ("  cargo test --all --locked", "dim"),
+            ("##[group]Run cargo test --all", LogKind::Group),
+            ("  cargo test --all --locked", LogKind::Command),
             (
                 "   Compiling tuikit v0.9.3 (/Users/runner/work/tuikit)",
-                "fg",
+                LogKind::Plain,
             ),
-            ("    Finished test profile in 1m 12s", "fg"),
-            ("     Running unittests src/lib.rs", "fg"),
-            ("test keymap::vim::parses_counts ... ok", "green"),
-            ("test render::diff::skips_unchanged_cells ... ok", "green"),
+            ("    Finished test profile in 1m 12s", LogKind::Plain),
+            ("     Running unittests src/lib.rs", LogKind::Plain),
+            ("test keymap::vim::parses_counts ... ok", LogKind::Success),
+            (
+                "test render::diff::skips_unchanged_cells ... ok",
+                LogKind::Success,
+            ),
             (
                 "test layout::solver::clamps_negative_width ... FAILED",
-                "red",
+                LogKind::Error,
             ),
-            ("", "fg"),
-            ("failures:", "red"),
+            ("", LogKind::Plain),
+            ("failures:", LogKind::Error),
             (
                 "---- layout::solver::clamps_negative_width stdout ----",
-                "dim",
+                LogKind::Command,
             ),
             (
                 "thread 'main' panicked at src/layout/solver.rs:212:9:",
-                "red",
+                LogKind::Error,
             ),
             (
                 "assertion `left == right` failed: sidebar width must never go below 12",
-                "red",
+                LogKind::Error,
             ),
-            ("  left: -4", "red"),
-            (" right: 12", "red"),
+            ("  left: -4", LogKind::Error),
+            (" right: 12", LogKind::Error),
             (
                 "note: run with `RUST_BACKTRACE=1` to see a backtrace",
-                "dim",
+                LogKind::Command,
             ),
-            ("##[error]Process completed with exit code 101.", "red"),
-            ("##[endgroup]", "group"),
+            (
+                "##[error]Process completed with exit code 101.",
+                LogKind::Error,
+            ),
+            ("##[endgroup]", LogKind::Group),
         ],
         Status::Running => &[
             (
                 "##[group]Run cross build --target aarch64-apple-darwin",
-                "group",
+                LogKind::Group,
             ),
             (
                 "  cross build --release --target aarch64-apple-darwin",
-                "dim",
+                LogKind::Command,
             ),
-            ("   Compiling libc v0.2.161", "fg"),
-            ("   Compiling crossterm v0.28.1", "fg"),
-            ("   Compiling unicode-width v0.2.0", "fg"),
-            ("   Compiling tuikit v0.9.3", "fg"),
-            ("warning: unused variable: `cols`", "yellow"),
-            ("  --> src/layout/solver.rs:198:13", "dim"),
+            ("   Compiling libc v0.2.161", LogKind::Plain),
+            ("   Compiling crossterm v0.28.1", LogKind::Plain),
+            ("   Compiling unicode-width v0.2.0", LogKind::Plain),
+            ("   Compiling tuikit v0.9.3", LogKind::Plain),
+            ("warning: unused variable: `cols`", LogKind::Warning),
+            ("  --> src/layout/solver.rs:198:13", LogKind::Command),
         ],
         Status::Skipped => &[(
             "This step was skipped because a previous step failed.",
-            "dim",
+            LogKind::Command,
         )],
-        _ => &[("Waiting for a runner to pick up this job…", "dim")],
+        _ => &[(
+            "Waiting for a runner to pick up this job…",
+            LogKind::Command,
+        )],
     }
 }
 
 pub const STREAM: &[DemoLine] = &[
-    ("   Compiling ratatui v0.29.0", "fg"),
-    ("   Compiling signal-hook v0.3.17", "fg"),
-    ("   Compiling tui-textarea v0.7.0", "fg"),
-    ("warning: field `last_tick` is never read", "yellow"),
-    ("   Compiling tuikit-macros v0.9.3", "fg"),
-    ("    Finished release profile in 2m 08s", "green"),
-    ("##[group]Run codesign --deep --force", "group"),
+    ("   Compiling ratatui v0.29.0", LogKind::Plain),
+    ("   Compiling signal-hook v0.3.17", LogKind::Plain),
+    ("   Compiling tui-textarea v0.7.0", LogKind::Plain),
+    ("warning: field `last_tick` is never read", LogKind::Warning),
+    ("   Compiling tuikit-macros v0.9.3", LogKind::Plain),
+    ("    Finished release profile in 2m 08s", LogKind::Success),
+    ("##[group]Run codesign --deep --force", LogKind::Group),
     (
         "  codesign --sign \"Developer ID Application\" target/release/gh-tui",
-        "dim",
+        LogKind::Command,
     ),
     (
         "target/release/gh-tui: signed Mach-O universal binary",
-        "green",
+        LogKind::Success,
     ),
 ];
 
 /// The design's `stepLog(name)`: per-step-name canned logs.
-pub fn step_log(name: &str) -> Option<Vec<(String, &'static str)>> {
+pub fn step_log(name: &str) -> Option<Vec<(String, LogKind)>> {
     let n = name.to_lowercase();
-    let owned = |lines: &[DemoLine]| -> Option<Vec<(String, &'static str)>> {
+    let owned = |lines: &[DemoLine]| -> Option<Vec<(String, LogKind)>> {
         Some(lines.iter().map(|(t, k)| (t.to_string(), *k)).collect())
     };
 
     if n.starts_with("set up job") {
-        let mut v: Vec<(String, &'static str)> = vec![
-            ("Current runner version: '2.320.0'".into(), "dim"),
-            ("##[group]Operating System".into(), "group"),
-            ("  Ubuntu 24.04.1 LTS".into(), "fg"),
-            ("##[endgroup]".into(), "group"),
-            ("##[group]Runner Image".into(), "group"),
-            ("  Image: ubuntu-24.04  Version: 20250803.1".into(), "fg"),
-            ("##[endgroup]".into(), "group"),
-            ("Prepare workflow directory".into(), "fg"),
+        let mut v: Vec<(String, LogKind)> = vec![
+            ("Current runner version: '2.320.0'".into(), LogKind::Command),
+            ("##[group]Operating System".into(), LogKind::Group),
+            ("  Ubuntu 24.04.1 LTS".into(), LogKind::Plain),
+            ("##[endgroup]".into(), LogKind::Group),
+            ("##[group]Runner Image".into(), LogKind::Group),
+            (
+                "  Image: ubuntu-24.04  Version: 20250803.1".into(),
+                LogKind::Plain,
+            ),
+            ("##[endgroup]".into(), LogKind::Group),
+            ("Prepare workflow directory".into(), LogKind::Plain),
             (
                 "Download action repository 'actions/checkout@v4'".into(),
-                "fg",
+                LogKind::Plain,
             ),
         ];
-        v.push((format!("Complete job name: {name}"), "green"));
+        v.push((format!("Complete job name: {name}"), LogKind::Success));
         return Some(v);
     }
     if n.starts_with("checkout") {
         return owned(&[
-            ("##[group]Run actions/checkout@v4", "group"),
-            ("  with:", "dim"),
-            ("    fetch-depth: 0", "dim"),
-            ("    persist-credentials: true", "dim"),
-            ("##[endgroup]", "group"),
-            ("Syncing repository: marasanz/tuikit", "fg"),
-            ("/usr/bin/git init /home/runner/work/tuikit/tuikit", "dim"),
+            ("##[group]Run actions/checkout@v4", LogKind::Group),
+            ("  with:", LogKind::Command),
+            ("    fetch-depth: 0", LogKind::Command),
+            ("    persist-credentials: true", LogKind::Command),
+            ("##[endgroup]", LogKind::Group),
+            ("Syncing repository: marasanz/tuikit", LogKind::Plain),
+            (
+                "/usr/bin/git init /home/runner/work/tuikit/tuikit",
+                LogKind::Command,
+            ),
             (
                 "/usr/bin/git fetch --prune --no-recurse-submodules origin",
-                "dim",
+                LogKind::Command,
             ),
             (
                 "HEAD is now at 8e1c04b fix(layout): clamp sidebar width",
-                "green",
+                LogKind::Success,
             ),
         ]);
     }
     if n.starts_with("setup toolchain") {
         return owned(&[
-            ("##[group]Run dtolnay/rust-toolchain@stable", "group"),
-            ("  toolchain: 1.83.0  components: rustfmt, clippy", "dim"),
-            ("##[endgroup]", "group"),
-            ("info: downloading component 'clippy'", "fg"),
+            ("##[group]Run dtolnay/rust-toolchain@stable", LogKind::Group),
+            (
+                "  toolchain: 1.83.0  components: rustfmt, clippy",
+                LogKind::Command,
+            ),
+            ("##[endgroup]", LogKind::Group),
+            ("info: downloading component 'clippy'", LogKind::Plain),
             (
                 "info: default toolchain set to '1.83.0-x86_64-unknown-linux-gnu'",
-                "fg",
+                LogKind::Plain,
             ),
-            ("rustc 1.83.0 (90b35a623 2025-11-26)", "green"),
+            ("rustc 1.83.0 (90b35a623 2025-11-26)", LogKind::Success),
         ]);
     }
     if n.starts_with("cache") {
         return owned(&[
-            ("##[group]Run actions/cache@v4", "group"),
-            ("  path: ~/.cargo/registry  target/", "dim"),
-            ("  key: cargo-linux-8e1c04b", "dim"),
-            ("##[endgroup]", "group"),
+            ("##[group]Run actions/cache@v4", LogKind::Group),
+            ("  path: ~/.cargo/registry  target/", LogKind::Command),
+            ("  key: cargo-linux-8e1c04b", LogKind::Command),
+            ("##[endgroup]", LogKind::Group),
             (
                 "Received 214893120 of 214893120 (100.0%), 96.4 MBs/sec",
-                "fg",
+                LogKind::Plain,
             ),
-            ("Cache restored from key: cargo-linux-2f9ab01", "green"),
+            (
+                "Cache restored from key: cargo-linux-2f9ab01",
+                LogKind::Success,
+            ),
         ]);
     }
     if n.starts_with("cargo fmt") {
         return owned(&[
-            ("##[group]Run cargo fmt --all --check", "group"),
-            ("  cargo fmt --all -- --check", "dim"),
-            ("##[endgroup]", "group"),
-            ("no formatting differences found in 84 files", "green"),
+            ("##[group]Run cargo fmt --all --check", LogKind::Group),
+            ("  cargo fmt --all -- --check", LogKind::Command),
+            ("##[endgroup]", LogKind::Group),
+            (
+                "no formatting differences found in 84 files",
+                LogKind::Success,
+            ),
         ]);
     }
     if n.starts_with("clippy") {
         return owned(&[
             (
                 "##[group]Run cargo clippy --all-targets -- -D warnings",
-                "group",
+                LogKind::Group,
             ),
             (
                 "    Checking tuikit v0.9.3 (/home/runner/work/tuikit)",
-                "fg",
+                LogKind::Plain,
             ),
-            ("##[endgroup]", "group"),
+            ("##[endgroup]", LogKind::Group),
             (
                 "warning: this `if` has identical blocks (allowed via #[allow])",
-                "yellow",
+                LogKind::Warning,
             ),
-            ("    Finished dev profile in 13.9s", "fg"),
-            ("clippy: 0 errors, 1 allowed warning", "green"),
+            ("    Finished dev profile in 13.9s", LogKind::Plain),
+            ("clippy: 0 errors, 1 allowed warning", LogKind::Success),
         ]);
     }
     if n.starts_with("upload coverage") || n.starts_with("upload artifacts") {
         return owned(&[
-            ("##[group]Run actions/upload-artifact@v4", "group"),
-            ("  name: coverage  path: lcov.info", "dim"),
-            ("##[endgroup]", "group"),
-            ("Uploaded 1 file (312 KB) in 3.1s", "fg"),
+            ("##[group]Run actions/upload-artifact@v4", LogKind::Group),
+            ("  name: coverage  path: lcov.info", LogKind::Command),
+            ("##[endgroup]", LogKind::Group),
+            ("Uploaded 1 file (312 KB) in 3.1s", LogKind::Plain),
             (
                 "Artifact coverage has been successfully uploaded, id: 3841192",
-                "green",
+                LogKind::Success,
             ),
         ]);
     }
     if n.starts_with("post job cleanup") {
         return owned(&[
-            ("Post job cleanup.", "dim"),
+            ("Post job cleanup.", LogKind::Command),
             (
                 "/usr/bin/git config --local --unset-all http.extraheader",
-                "dim",
+                LogKind::Command,
             ),
-            ("Cleaning up orphan processes", "green"),
+            ("Cleaning up orphan processes", LogKind::Success),
         ]);
     }
     if n.starts_with("sign binaries") {
         return owned(&[(
             "Waiting for the build step to finish before signing…",
-            "dim",
+            LogKind::Command,
         )]);
     }
     if n.starts_with("publish draft") {
-        return owned(&[("Waiting for a runner to pick up this step…", "dim")]);
+        return owned(&[(
+            "Waiting for a runner to pick up this step…",
+            LogKind::Command,
+        )]);
     }
     if n.starts_with("run vhs tapes") {
-        return owned(&[("Waiting for the e2e-tui job to be scheduled…", "dim")]);
+        return owned(&[(
+            "Waiting for the e2e-tui job to be scheduled…",
+            LogKind::Command,
+        )]);
     }
     None
 }

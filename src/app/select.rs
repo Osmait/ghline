@@ -118,7 +118,10 @@ impl App {
             return Err(Load::Ready);
         }
         if e.size > crate::gh::FILE_LIMIT {
-            return Err(Load::Failed(format!(
+            // A refusal, not an error: nothing ran and failed, this program
+            // declined — and it will decline the same way next time, which is
+            // what `is_transient` now says without being asked to guess.
+            return Err(Load::refused(format!(
                 "{} is {} KB — too large to open here",
                 e.name(),
                 e.size / 1024
@@ -189,7 +192,7 @@ impl App {
                     .iter()
                     .map(|r| crate::subject::Line {
                         text: &r.text,
-                        is_error: r.kind == "red",
+                        is_error: r.kind == crate::data::LogKind::Error,
                     })
                     .collect();
                 let excerpt = crate::subject::log_excerpt(&lines);
@@ -580,7 +583,7 @@ impl App {
             None
         };
 
-        let mut lines: Vec<(String, &'static str)> = match step_specific {
+        let mut lines: Vec<(String, crate::data::LogKind)> = match step_specific {
             Some(v) => v,
             None => demo::logs_for(status)
                 .iter()

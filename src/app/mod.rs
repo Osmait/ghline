@@ -18,6 +18,10 @@ use std::time::Instant;
 
 use self::hit::Region;
 use crate::actions::{Flash, Prompt};
+use std::sync::Arc;
+
+use crate::error::{Error, Failure};
+
 use crate::data::{Account, Item, Job, RawLog, Status};
 use crate::demo;
 use crate::service::{Response, Service};
@@ -32,23 +36,68 @@ pub enum Source {
 }
 
 /// Load state of one piece of data.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub enum Load {
+    #[default]
     Idle,
     Loading,
     Ready,
-    Failed(String),
+    /// Why it is not here, kept whole.
+    ///
+    /// The failure rather than a sentence about it: an `Error` knows whether
+    /// it is worth retrying and what caused it, and flattening it here threw
+    /// both away. `Arc` because the state is cloned to be rendered and
+    /// `io::Error` is not `Clone`; sharing is right anyway, since there is one
+    /// failure and several places that describe it.
+    Failed(Arc<Failure>),
 }
 
 impl Load {
     pub fn is_loading(&self) -> bool {
         *self == Self::Loading
     }
-    pub fn error(&self) -> Option<&str> {
+
+    /// The failure, for anything that wants more than a sentence.
+    pub fn failure(&self) -> Option<&Failure> {
         match self {
-            Self::Failed(e) => Some(e),
+            Self::Failed(f) => Some(f),
             _ => None,
         }
+    }
+
+    /// One line for a status bar or an empty pane.
+    pub fn error(&self) -> Option<String> {
+        self.failure().map(Failure::brief)
+    }
+
+    /// Whether trying again might work.
+    pub fn is_transient(&self) -> bool {
+        self.failure().is_some_and(Failure::is_transient)
+    }
+
+    /// A failure this program decided on, with no error underneath.
+    pub fn refused(msg: impl Into<String>) -> Self {
+        Self::Failed(Arc::new(Failure::Refused(msg.into())))
+    }
+}
+
+impl From<Error> for Load {
+    fn from(e: Error) -> Self {
+        Self::Failed(Arc::new(Failure::Ran(e)))
+    }
+}
+
+impl PartialEq for Load {
+    /// Two failures are the same state as far as the interface is concerned:
+    /// it asks "loading, ready, or broken", not which error it was.
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Idle, Self::Idle)
+                | (Self::Loading, Self::Loading)
+                | (Self::Ready, Self::Ready)
+                | (Self::Failed(_), Self::Failed(_))
+        )
     }
 }
 
@@ -213,7 +262,7 @@ pub struct LogRow {
     /// Real HH:MM:SS when the log comes from GitHub; synthetic in demo mode.
     pub time: String,
     pub text: String,
-    pub kind: &'static str,
+    pub kind: crate::data::LogKind,
 }
 
 pub struct App {

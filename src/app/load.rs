@@ -339,7 +339,7 @@ impl App {
             }
             Response::Accounts(Err(e)) => {
                 self.flash_warn(self.advice(&e));
-                self.accounts_state = Load::Failed(e.brief());
+                self.accounts_state = Load::from(e);
             }
 
             Response::Dispatched { result } => {
@@ -374,7 +374,7 @@ impl App {
                     self.trees_state.insert(repo, Load::Ready);
                 }
                 Err(e) => {
-                    self.trees_state.insert(repo, Load::Failed(e.brief()));
+                    self.trees_state.insert(repo, Load::from(e));
                 }
             },
 
@@ -387,8 +387,7 @@ impl App {
                     self.file_state.insert((repo, path), Load::Ready);
                 }
                 Err(e) => {
-                    self.file_state
-                        .insert((repo, path), Load::Failed(e.brief()));
+                    self.file_state.insert((repo, path), Load::from(e));
                 }
             },
 
@@ -407,7 +406,7 @@ impl App {
                     self.agents_state = Load::Ready;
                 }
                 Err(e) => {
-                    self.agents_state = Load::Failed(e.brief());
+                    self.agents_state = Load::from(e);
                 }
             },
 
@@ -428,7 +427,7 @@ impl App {
                 }
                 Err(e) => {
                     self.flash_warn(self.advice(&e));
-                    self.repos_state.insert(login, Load::Failed(e.brief()));
+                    self.repos_state.insert(login, Load::from(e));
                 }
             },
 
@@ -439,20 +438,19 @@ impl App {
                 }
                 Err(e) => {
                     self.flash_warn(self.advice(&e));
-                    self.lists_state
-                        .insert((repo, tab), Load::Failed(e.brief()));
+                    self.lists_state.insert((repo, tab), Load::from(e));
                 }
             },
 
             Response::IssueDetail { repo, num, result } => {
-                self.detail_state.insert(
-                    (repo.clone(), num),
-                    match &result {
-                        Ok(_) => Load::Ready,
-                        Err(e) => Load::Failed(e.brief()),
-                    },
-                );
-                if let Ok((body, comments)) = result
+                // Split rather than borrowed: the state wants to *own* the
+                // error now, and the body is still needed below.
+                let (state, got) = match result {
+                    Ok(v) => (Load::Ready, Some(v)),
+                    Err(e) => (Load::from(e), None),
+                };
+                self.detail_state.insert((repo.clone(), num), state);
+                if let Some((body, comments)) = got
                     && let Some(it) = self.item_mut(&repo, 0, num)
                 {
                     it.body = body;
@@ -464,14 +462,12 @@ impl App {
             }
 
             Response::PrDetail { repo, num, result } => {
-                self.detail_state.insert(
-                    (repo.clone(), num),
-                    match &result {
-                        Ok(_) => Load::Ready,
-                        Err(e) => Load::Failed(e.brief()),
-                    },
-                );
-                if let Ok((body, files, reviews)) = result
+                let (state, got) = match result {
+                    Ok(v) => (Load::Ready, Some(v)),
+                    Err(e) => (Load::from(e), None),
+                };
+                self.detail_state.insert((repo.clone(), num), state);
+                if let Some((body, files, reviews)) = got
                     && let Some(it) = self.item_mut(&repo, 1, num)
                 {
                     it.body = body;
@@ -519,7 +515,7 @@ impl App {
                         self.finder_state = Load::Ready;
                     }
                     Err(e) => {
-                        self.finder_state = Load::Failed(e.brief());
+                        self.finder_state = Load::from(e);
                         self.finder_hits.clear();
                     }
                 }
@@ -538,8 +534,8 @@ impl App {
                     }
                 }
                 Err(e) => {
-                    self.diff_state.insert((repo, num), Load::Failed(e.brief()));
                     self.flash_warn(e.brief());
+                    self.diff_state.insert((repo, num), Load::from(e));
                 }
             },
 
@@ -553,8 +549,7 @@ impl App {
                     self.jobs_state.insert((repo, run_id), Load::Ready);
                 }
                 Err(e) => {
-                    self.jobs_state
-                        .insert((repo, run_id), Load::Failed(e.brief()));
+                    self.jobs_state.insert((repo, run_id), Load::from(e));
                 }
             },
 
@@ -568,8 +563,7 @@ impl App {
                     self.logs_state.insert((repo, run_id), Load::Ready);
                 }
                 Err(e) => {
-                    self.logs_state
-                        .insert((repo, run_id), Load::Failed(e.brief()));
+                    self.logs_state.insert((repo, run_id), Load::from(e));
                 }
             },
 

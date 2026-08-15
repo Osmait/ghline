@@ -139,6 +139,73 @@ impl std::error::Error for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Why a piece of data is not here.
+///
+/// Wider than `Error` on purpose. Most failures are a program we ran saying
+/// no, and those keep their `Error` whole — `is_transient` and the cause
+/// chain are the reason it exists. But some are this program declining: a
+/// file too large to open, a worker thread that is gone. Those have no
+/// subprocess underneath, and inventing one to fit — a `Spawn` error for a
+/// dead thread — reads as a lie the first time somebody prints the cause.
+#[derive(Debug)]
+pub enum Failure {
+    /// Something we ran failed.
+    Ran(Error),
+    /// Something we decided, with nothing underneath it.
+    Refused(String),
+}
+
+impl Failure {
+    /// One line, for a status bar or an empty pane.
+    pub fn brief(&self) -> String {
+        match self {
+            Self::Ran(e) => e.brief(),
+            Self::Refused(msg) => msg.clone(),
+        }
+    }
+
+    /// Is trying again worthwhile? A decision is never transient — it will be
+    /// made the same way next time.
+    pub fn is_transient(&self) -> bool {
+        match self {
+            Self::Ran(e) => e.is_transient(),
+            Self::Refused(_) => false,
+        }
+    }
+
+    /// The error underneath, when there is one.
+    pub fn error(&self) -> Option<&Error> {
+        match self {
+            Self::Ran(e) => Some(e),
+            Self::Refused(_) => None,
+        }
+    }
+}
+
+impl From<Error> for Failure {
+    fn from(e: Error) -> Self {
+        Self::Ran(e)
+    }
+}
+
+impl fmt::Display for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ran(e) => write!(f, "{e}"),
+            Self::Refused(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl std::error::Error for Failure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Ran(e) => Some(e),
+            Self::Refused(_) => None,
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

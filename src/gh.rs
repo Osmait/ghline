@@ -7,11 +7,11 @@ use std::process::Command;
 
 use serde_json::Value;
 
-use crate::data::Kind;
 use crate::data::{
     Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
     Repo, Review, ReviewState, RunDetail, Status, Step, TreeEntry,
 };
+use crate::data::{Kind, LogKind};
 
 pub use crate::error::{Error, Result as Res};
 
@@ -580,26 +580,29 @@ fn strip_ansi(s: &str) -> String {
     out
 }
 
-/// Classifies a log line for colouring, the way the Actions web UI does.
-fn log_kind(line: &str) -> &'static str {
+/// Classifies a log line, the way the Actions web UI does.
+///
+/// What the line is, not what colour to paint it: the palette is the view's
+/// business, and this used to answer `"red"`.
+fn log_kind(line: &str) -> LogKind {
     let l = line.trim_start();
     if l.starts_with("##[group]") || l.starts_with("##[endgroup]") {
-        "group"
+        LogKind::Group
     } else if l.starts_with("##[error]")
         || l.contains("panicked at")
         || l.contains("FAILED")
         || l.starts_with("error:")
         || l.starts_with("error[")
     {
-        "red"
+        LogKind::Error
     } else if l.starts_with("##[warning]") || l.starts_with("warning:") {
-        "yellow"
+        LogKind::Warning
     } else if l.contains("... ok") || l.starts_with("test result: ok") {
-        "green"
+        LogKind::Success
     } else if l.starts_with("##[command]") || l.starts_with('+') {
-        "dim"
+        LogKind::Command
     } else {
-        "fg"
+        LogKind::Plain
     }
 }
 
@@ -884,7 +887,13 @@ const ALL_QUERY: &str = r#"query($q:String!){
   }
 }"#;
 
-fn search_all(owner: &str, kind: &str) -> Res<Vec<Value>> {
+fn search_all(owner: &str, kind: Kind) -> Res<Vec<Value>> {
+    // `is:issue` / `is:pr`, which is a closed set and was a `&str` — the same
+    // shape as `search_issues` two screens up, missed while fixing it.
+    let kind = match kind {
+        Kind::Pr => "pr",
+        _ => "issue",
+    };
     // `sort:updated-desc` so the newest work is at the top, which is the only
     // ordering that makes a list spanning sixty repositories worth reading.
     let q = format!("owner:{owner} is:{kind} sort:updated-desc");
@@ -930,7 +939,7 @@ fn gql_repo(v: &Value) -> String {
 
 /// Open issues across every repository the owner has.
 pub fn all_issues(owner: &str) -> Res<Vec<Item>> {
-    Ok(search_all(owner, "issue")?
+    Ok(search_all(owner, Kind::Issue)?
         .iter()
         .map(|i| {
             let mut it = Item::issue();
@@ -993,7 +1002,7 @@ fn run_id_in(url: &str) -> Option<i64> {
 
 /// Pull requests across every repository the owner has.
 pub fn all_prs(owner: &str) -> Res<Vec<Item>> {
-    Ok(search_all(owner, "pr")?
+    Ok(search_all(owner, Kind::Pr)?
         .iter()
         .map(|p| {
             let mut it = Item::pr();
@@ -1254,16 +1263,19 @@ mod tests {
 
     #[test]
     fn log_kind_classifies_the_lines_actions_emits() {
-        assert_eq!(log_kind("##[group]Run cargo test"), "group");
-        assert_eq!(log_kind("##[endgroup]"), "group");
-        assert_eq!(log_kind("##[error]Process completed"), "red");
-        assert_eq!(log_kind("thread 'main' panicked at src/lib.rs:1:1"), "red");
-        assert_eq!(log_kind("test foo ... FAILED"), "red");
-        assert_eq!(log_kind("error[E0308]: mismatched types"), "red");
-        assert_eq!(log_kind("warning: unused variable"), "yellow");
-        assert_eq!(log_kind("test foo ... ok"), "green");
-        assert_eq!(log_kind("test result: ok. 148 passed"), "green");
-        assert_eq!(log_kind("  Compiling serde v1.0"), "fg");
+        assert_eq!(log_kind("##[group]Run cargo test"), LogKind::Group);
+        assert_eq!(log_kind("##[endgroup]"), LogKind::Group);
+        assert_eq!(log_kind("##[error]Process completed"), LogKind::Error);
+        assert_eq!(
+            log_kind("thread 'main' panicked at src/lib.rs:1:1"),
+            LogKind::Error
+        );
+        assert_eq!(log_kind("test foo ... FAILED"), LogKind::Error);
+        assert_eq!(log_kind("error[E0308]: mismatched types"), LogKind::Error);
+        assert_eq!(log_kind("warning: unused variable"), LogKind::Warning);
+        assert_eq!(log_kind("test foo ... ok"), LogKind::Success);
+        assert_eq!(log_kind("test result: ok. 148 passed"), LogKind::Success);
+        assert_eq!(log_kind("  Compiling serde v1.0"), LogKind::Plain);
     }
 
     #[test]

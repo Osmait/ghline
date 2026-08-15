@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use std::sync::Arc;
 
-use crate::error::Error;
+use crate::error::Failure;
 use crate::nav::Dir;
 
 use super::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
@@ -28,7 +28,7 @@ pub enum Load {
     /// `Arc` because the state is cloned to be rendered and `io::Error` is
     /// not `Clone`; sharing it is right anyway, since there is one failure and
     /// several places that describe it.
-    Failed(Arc<Error>),
+    Failed(Arc<Failure>),
 }
 
 impl Load {
@@ -37,7 +37,7 @@ impl Load {
     }
 
     /// The failure, for anything that wants more than a sentence.
-    pub fn failure(&self) -> Option<&Error> {
+    pub fn failure(&self) -> Option<&Failure> {
         match self {
             Self::Failed(e) => Some(e),
             _ => None,
@@ -46,13 +46,13 @@ impl Load {
 
     /// One line for the status bar or an empty pane.
     pub fn error(&self) -> Option<String> {
-        self.failure().map(Error::brief)
+        self.failure().map(Failure::brief)
     }
 
     /// Whether trying again might work. A network blip is worth a retry; a
     /// missing `git` is not, and offering one would be a lie.
     pub fn is_transient(&self) -> bool {
-        self.failure().is_some_and(Error::is_transient)
+        self.failure().is_some_and(Failure::is_transient)
     }
 }
 
@@ -409,13 +409,13 @@ impl App {
     /// loader that cannot finish is worse than an error, because it looks
     /// like progress.
     fn gone() -> Load {
-        Load::Failed(Arc::new(Error::Spawn {
-            program: "the worker thread",
-            source: std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "it is gone — restart diffline",
-            ),
-        }))
+        // A refusal, not a spawn failure. Nothing was launched and failed —
+        // the thread that was there is not there any more, and dressing that
+        // up as an `io::Error` reads as a lie the moment anybody prints the
+        // cause chain.
+        Load::Failed(Arc::new(Failure::Refused(
+            "the worker thread is gone — restart diffline".into(),
+        )))
     }
 
     /// The next answer from the worker, if one has arrived.
@@ -546,7 +546,7 @@ impl App {
                     }
                     Err(e) => {
                         self.flash(e.brief());
-                        self.files_state = Load::Failed(Arc::new(e));
+                        self.files_state = Load::Failed(Arc::new(Failure::Ran(e)));
                     }
                 }
             }
@@ -571,7 +571,8 @@ impl App {
                         self.rows_state.insert(path, Load::Ready);
                     }
                     Err(e) => {
-                        self.rows_state.insert(path, Load::Failed(Arc::new(e)));
+                        self.rows_state
+                            .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
                     }
                 }
             }
@@ -582,7 +583,8 @@ impl App {
                     self.blame_state.insert(path, Load::Ready);
                 }
                 Err(e) => {
-                    self.blame_state.insert(path, Load::Failed(Arc::new(e)));
+                    self.blame_state
+                        .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
                 }
             },
 
@@ -592,7 +594,7 @@ impl App {
                     self.agents_state = Load::Ready;
                 }
                 Err(e) => {
-                    self.agents_state = Load::Failed(Arc::new(e));
+                    self.agents_state = Load::Failed(Arc::new(Failure::Ran(e)));
                 }
             },
 

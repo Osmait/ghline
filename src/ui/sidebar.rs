@@ -91,7 +91,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = match app.repos_state.get(app.login()).and_then(|s| s.error()) {
+        let (msg, color) = match app
+            .repos_state
+            .get(app.login())
+            .and_then(crate::app::Load::error)
+        {
             Some(e) => (e.to_string(), theme::red()),
             None => ("no repositories".to_string(), theme::dimmer()),
         };

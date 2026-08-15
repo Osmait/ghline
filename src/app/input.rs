@@ -946,7 +946,11 @@ impl App {
                 }
             }
             KeyCode::Char('e') if self.view == View::Logs => {
-                if let Some(i) = self.log_lines().iter().position(|l| l.kind == "red") {
+                if let Some(i) = self
+                    .log_lines()
+                    .iter()
+                    .position(|l| l.kind == crate::data::LogKind::Error)
+                {
                     self.log_scroll = i.saturating_sub(3);
                     self.follow = false;
                 }

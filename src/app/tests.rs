@@ -1929,8 +1929,15 @@ mod explorer {
 
         assert_eq!(app.fs_selected_file(), None, "it is never asked for");
         match app.file_body() {
-            Err(Load::Failed(msg)) => assert!(msg.contains("too large"), "{msg}"),
-            _ => panic!("the reason should reach the pane"),
+            Err(st) => {
+                let msg = st.error().unwrap_or_default();
+                assert!(msg.contains("too large"), "{msg}");
+                assert!(
+                    !st.is_transient(),
+                    "a file that is too large will be too large next time"
+                );
+            }
+            Ok(_) => panic!("the reason should reach the pane"),
         }
     }
 
