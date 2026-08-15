@@ -656,6 +656,161 @@ impl Body {
     }
 }
 
+// --- panes ------------------------------------------------------------------
+
+/// Trims a rectangle inwards. The concept the whole interface was missing:
+/// there are three hundred and eighty-three hand-written `area.x + 2`s
+/// between the two programs, and every one of them is this.
+pub fn pad(area: Rect, x: u16, y: u16) -> Rect {
+    Rect {
+        x: area.x + x.min(area.width / 2),
+        y: area.y + y.min(area.height / 2),
+        width: area.width.saturating_sub(x * 2),
+        height: area.height.saturating_sub(y * 2),
+    }
+}
+
+/// A titled region of the interface: a filled ground, a heading with a title
+/// and a count opposite, and a rule under it.
+///
+/// `Section` and not `Pane` for the same reason the dialog is not a `Modal` —
+/// both programs already call the question "which pane has focus" a `Pane`,
+/// and one word cannot be the focus and the furniture.
+///
+/// The fixed-furniture twin of `Dialog`, and the same bargain — it draws the
+/// chrome and hands back the body, so no caller counts rows.
+pub struct Section<'a> {
+    title: &'a str,
+    count: Option<String>,
+    ground: Color,
+    head_bg: Color,
+    focused: bool,
+}
+
+impl<'a> Section<'a> {
+    pub fn new(title: &'a str) -> Self {
+        Self {
+            title,
+            count: None,
+            ground: theme::panel_alt(),
+            head_bg: theme::panel(),
+            focused: false,
+        }
+    }
+
+    /// The number opposite the title — how many files, how many results.
+    pub fn count(mut self, n: usize) -> Self {
+        self.count = Some(n.to_string());
+        self
+    }
+
+    /// Anything else opposite the title, when it is not a plain count.
+    pub fn note(mut self, text: impl Into<String>) -> Self {
+        self.count = Some(text.into());
+        self
+    }
+
+    /// What the pane sits on. The trees are darker than the diff beside them.
+    pub fn ground(mut self, bg: Color) -> Self {
+        self.ground = bg;
+        self
+    }
+
+    /// A focused pane says so in its title rather than with a border, which
+    /// would cost a column the content wants.
+    pub fn focused(mut self, yes: bool) -> Self {
+        self.focused = yes;
+        self
+    }
+
+    /// Draws it and returns the body below the rule.
+    pub fn open(self, buf: &mut Buffer, area: Rect) -> Rect {
+        fill(buf, area, self.ground);
+        let head = Rect { height: 1, ..area };
+        fill(buf, head, self.head_bg);
+        let hs = Style::default().bg(self.head_bg);
+        put(
+            buf,
+            area.x + 1,
+            area.y,
+            area.right(),
+            self.title,
+            hs.fg(if self.focused {
+                theme::yellow()
+            } else {
+                theme::dim()
+            }),
+        );
+        if let Some(count) = &self.count {
+            put_right(buf, area.right() - 1, area.y, count, hs.fg(theme::dimmer()));
+        }
+        hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+        Rect {
+            y: area.y + 2,
+            height: area.height.saturating_sub(2),
+            ..area
+        }
+    }
+}
+
+/// What a pane shows when it has nothing to show.
+///
+/// Three states rather than two, because they read differently and the code
+/// kept collapsing them: still coming, came back empty, and went wrong. An
+/// error painted the same grey as "nothing here" is an error nobody notices.
+pub fn empty(buf: &mut Buffer, area: Rect, state: &Empty<'_>, ground: Color) {
+    match state {
+        Empty::Loading { widths, phase } => {
+            for (row, w) in widths.iter().enumerate() {
+                let y = area.y + row as u16;
+                if y >= area.bottom() {
+                    break;
+                }
+                skel_bar(
+                    buf,
+                    area.x + 2,
+                    y,
+                    pct(area.width.saturating_sub(4), *w),
+                    row,
+                    *phase,
+                );
+            }
+        }
+        Empty::Nothing(msg) => {
+            put_trunc(
+                buf,
+                area.x + 2,
+                area.y,
+                area.right() - 1,
+                msg,
+                Style::default().bg(ground).fg(theme::dimmer()),
+            );
+        }
+        Empty::Failed(msg) => {
+            put_trunc(
+                buf,
+                area.x + 2,
+                area.y,
+                area.right() - 1,
+                msg,
+                Style::default().bg(ground).fg(theme::red()),
+            );
+        }
+    }
+}
+
+/// Why a pane is empty.
+pub enum Empty<'a> {
+    /// On its way. `widths` are percentages, so a skeleton keeps its
+    /// proportions at any pane size; `phase` travels the highlight down them,
+    /// which is what separates "coming" from "stuck".
+    Loading { widths: &'a [u16], phase: u64 },
+    /// Came back with nothing, which is an answer.
+    Nothing(&'a str),
+    /// Went wrong.
+    Failed(&'a str),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1111,5 +1266,118 @@ mod tests {
             row(&buf, b.inner.y).contains("abc"),
             "and the query is drawn"
         );
+    }
+
+    // --- panes ---
+
+    #[test]
+    fn padding_trims_from_both_sides() {
+        let r = pad(Rect::new(10, 5, 20, 10), 2, 1);
+        assert_eq!((r.x, r.y), (12, 6));
+        assert_eq!((r.width, r.height), (16, 8));
+    }
+
+    #[test]
+    fn padding_a_rectangle_smaller_than_the_padding_does_not_invert_it() {
+        // The arithmetic this replaces was `area.x + 2` written by hand, and
+        // by hand it wraps.
+        let r = pad(Rect::new(0, 0, 2, 1), 5, 5);
+        assert!(r.width == 0 || r.width <= 2);
+        assert!(r.x <= 1, "it must not walk off the right");
+    }
+
+    #[test]
+    fn a_section_hands_back_the_body_under_its_rule() {
+        let mut buf = buffer(20, 10);
+        let body = Section::new("TITLE").open(&mut buf, Rect::new(0, 0, 20, 10));
+        assert_eq!(body.y, 2, "heading and rule");
+        assert_eq!(body.height, 8);
+        assert!(row(&buf, 0).contains("TITLE"));
+    }
+
+    #[test]
+    fn a_count_sits_opposite_the_title() {
+        let mut buf = buffer(20, 4);
+        Section::new("FILES")
+            .count(12)
+            .open(&mut buf, Rect::new(0, 0, 20, 4));
+        let head = row(&buf, 0);
+        assert!(head.starts_with(" FILES"), "{head:?}");
+        assert!(head.trim_end().ends_with("12"), "{head:?}");
+    }
+
+    #[test]
+    fn a_focused_section_says_so_in_its_title() {
+        let mut lit = buffer(20, 4);
+        Section::new("T")
+            .focused(true)
+            .open(&mut lit, Rect::new(0, 0, 20, 4));
+        let mut dim = buffer(20, 4);
+        Section::new("T")
+            .focused(false)
+            .open(&mut dim, Rect::new(0, 0, 20, 4));
+        assert_ne!(
+            lit.cell((1u16, 0u16)).map(|c| c.fg),
+            dim.cell((1u16, 0u16)).map(|c| c.fg),
+            "a focused pane has to be visible as one"
+        );
+    }
+
+    #[test]
+    fn an_error_is_not_painted_the_same_as_having_nothing() {
+        // They were collapsing into one grey line, and an error nobody
+        // notices is an error nobody fixes.
+        let area = Rect::new(0, 0, 30, 3);
+        let mut nothing = buffer(30, 3);
+        empty(
+            &mut nothing,
+            area,
+            &Empty::Nothing("no files"),
+            theme::panel(),
+        );
+        let mut failed = buffer(30, 3);
+        empty(
+            &mut failed,
+            area,
+            &Empty::Failed("no files"),
+            theme::panel(),
+        );
+        assert_eq!(row(&nothing, 0), row(&failed, 0), "same words");
+        assert_ne!(
+            nothing.cell((2u16, 0u16)).map(|c| c.fg),
+            failed.cell((2u16, 0u16)).map(|c| c.fg),
+            "different colours"
+        );
+    }
+
+    #[test]
+    fn a_loading_pane_draws_a_skeleton_rather_than_a_word() {
+        let mut buf = buffer(30, 4);
+        empty(
+            &mut buf,
+            Rect::new(0, 0, 30, 4),
+            &Empty::Loading {
+                widths: &[60, 40],
+                phase: 0,
+            },
+            theme::panel(),
+        );
+        assert!(!row(&buf, 0).trim().is_empty(), "something was drawn");
+        assert!(!row(&buf, 1).trim().is_empty());
+    }
+
+    #[test]
+    fn a_skeleton_taller_than_the_pane_stops_at_the_bottom() {
+        let mut buf = buffer(30, 2);
+        empty(
+            &mut buf,
+            Rect::new(0, 0, 30, 2),
+            &Empty::Loading {
+                widths: &[60, 40, 80, 30, 70],
+                phase: 0,
+            },
+            theme::panel(),
+        );
+        // it did not panic, which is the assertion
     }
 }

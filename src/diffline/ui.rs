@@ -16,8 +16,8 @@ use super::hit::{Region, Target};
 use super::model::{Kind, State};
 use crate::theme;
 use crate::tui::{
-    Dialog, centered_over as centered, clear, fill, frame, hline, put, put_right, put_trunc, rule,
-    scroll_into_view, skel_bar, vline,
+    Dialog, Section, centered_over as centered, clear, fill, frame, hline, put, put_right,
+    put_trunc, rule, scroll_into_view, skel_bar, vline,
 };
 
 /// The file tree's width, and the queue's. Both fixed: the diff is what the
@@ -275,46 +275,29 @@ fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {
 // -------------------------------------------------------------------- tree
 
 fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
-    fill(buf, area, theme::panel_alt());
-    let head = Rect { height: 1, ..area };
-    fill(buf, head, theme::panel());
-    let hs = Style::default().bg(theme::panel()).fg(theme::dim());
-    put(buf, area.x + 1, area.y, area.right(), "CHANGES", hs);
-    put_right(
-        buf,
-        area.right() - 1,
-        area.y,
-        &app.files.len().to_string(),
-        hs.fg(theme::dimmer()),
-    );
-    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
-
-    let list = Rect {
-        y: area.y + 2,
-        height: area.height.saturating_sub(2),
-        ..area
-    };
+    let list = Section::new("CHANGES")
+        .count(app.files.len())
+        .focused(app.pane == Pane::Tree)
+        .open(buf, area);
     let rows = list.height as usize;
 
     if app.files.is_empty() {
         let state = app.files_state.clone();
-        if state.is_loading() {
-            for row in 0..rows.min(6) {
-                skel_bar(buf, list.x + 2, list.y + row as u16, 20, row, app.anim);
-            }
-            return;
-        }
-        let (msg, color) = match state.error() {
-            Some(e) => (e.to_string(), theme::red()),
-            None => ("nothing changed".into(), theme::dimmer()),
-        };
-        put_trunc(
+        let failure = state.error();
+        crate::tui::empty(
             buf,
-            list.x + 2,
-            list.y,
-            area.right() - 1,
-            &msg,
-            Style::default().bg(theme::panel_alt()).fg(color),
+            list,
+            &if state.is_loading() {
+                crate::tui::Empty::Loading {
+                    widths: &[64, 40, 78, 30, 56, 70],
+                    phase: app.anim,
+                }
+            } else if let Some(e) = &failure {
+                crate::tui::Empty::Failed(e)
+            } else {
+                crate::tui::Empty::Nothing("nothing changed")
+            },
+            theme::panel_alt(),
         );
         return;
     }
