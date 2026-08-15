@@ -428,10 +428,33 @@ pub const ROLES: &[(&str, &str)] = &[
 /// thread shares this module, even though only the render reads it.
 static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 
+/// The active theme.
+///
+/// Worked out from the index rather than by indexing `all()`, because `all()`
+/// builds a `Vec` — and this is called by every colour lookup, which is once
+/// per cell per frame. It was allocating thousands of times a frame to answer
+/// a question with three possible shapes. `built_in_count` and the order in
+/// `all()` are the two halves of the same fact, and a test below holds them
+/// together.
 pub fn current() -> Theme {
-    let all = Theme::all();
-    all[ACTIVE.load(Ordering::Relaxed).min(all.len() - 1)]
+    let i = ACTIVE.load(Ordering::Relaxed);
+    match i {
+        0 => Theme::Design,
+        1 => Theme::Mocha,
+        n => {
+            let k = n - BUILT_IN;
+            if k < custom().len() {
+                Theme::Custom(k)
+            } else {
+                // An index left over from a theme file that has since gone.
+                Theme::Mocha
+            }
+        }
+    }
 }
+
+/// How many themes ship, and so where the custom ones start.
+const BUILT_IN: usize = 2;
 
 pub fn set(theme: Theme) {
     let i = Theme::all().iter().position(|t| *t == theme).unwrap_or(0);
@@ -569,6 +592,29 @@ pub const PUBLIC_MARK: &str = "";
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn the_active_index_and_the_list_agree() {
+        // `current()` works the theme out from the index instead of indexing
+        // `all()`, because `all()` allocates and this is called once per cell
+        // per frame. The two are now separate statements of one fact, so
+        // this is what stops them drifting.
+        let _g = LOCK.lock();
+        for (i, t) in Theme::all().into_iter().enumerate() {
+            ACTIVE.store(i, Ordering::Relaxed);
+            assert_eq!(current(), t, "index {i}");
+        }
+        set(Theme::Design);
+    }
+
+    #[test]
+    fn an_index_past_the_end_falls_back_rather_than_panicking() {
+        // A config naming a theme file that has since been deleted.
+        let _g = LOCK.lock();
+        ACTIVE.store(999, Ordering::Relaxed);
+        assert_eq!(current(), Theme::Mocha);
+        set(Theme::Design);
+    }
 
     fn hexof(c: Color) -> String {
         hex_of(c)

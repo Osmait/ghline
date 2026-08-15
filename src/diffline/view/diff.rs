@@ -70,9 +70,14 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: area.height.saturating_sub(2),
         ..area
     };
-    let rows = app.diff_rows().to_vec();
+    // Counted rather than copied. This used to be `.to_vec()`, which deep
+    // copies every row and its text on every frame — eight thousand `String`
+    // allocations to draw the forty that fit. It was copied because the
+    // mutations below borrow `app` mutably while the loop wants it
+    // immutably, and the way out of that is to do the mutations first.
+    let len = app.diff_rows().len();
 
-    if rows.is_empty() {
+    if len == 0 {
         let state = app.diff_state();
         if state.is_loading() {
             let avail = body.width.saturating_sub(12);
@@ -109,7 +114,7 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 
     if app.split {
-        draw_split(buf, body, app, &rows);
+        draw_split(buf, body, app);
         return;
     }
 
@@ -118,24 +123,26 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     // about the window: they are the motions that need to know its size, and
     // this is the only place it is known.
     app.view_height = height;
-    scroll_into_view(&mut app.diff_scroll, app.cursor, height, rows.len());
-    app.hits.push(Region::rows(
-        Target::Pane(Pane::Diff),
-        body,
-        1,
-        app.diff_scroll,
-        rows.len(),
-    ));
+    let cursor = app.cursor;
+    scroll_into_view(&mut app.diff_scroll, cursor, height, len);
+    let scroll = app.diff_scroll;
+    app.hits
+        .push(Region::rows(Target::Pane(Pane::Diff), body, 1, scroll, len));
 
+    // Everything mutable is done with; from here the borrows are shared and
+    // nothing is copied.
+    let app = &*app;
     let (lo, hi) = app.span();
     let visual = app.visual();
-    let spans = app.spans.get(app.path()).cloned().unwrap_or_default();
-    let blame = app.blame_lines().cloned().unwrap_or_default();
+    let empty_spans = Vec::new();
+    let spans = app.spans.get(app.path()).unwrap_or(&empty_spans);
+    let empty_blame = Vec::new();
+    let blame = app.blame_lines().unwrap_or(&empty_blame);
     let blame_w: u16 = if app.blame_on { 30 } else { 0 };
     let focused = app.pane == Pane::Diff;
 
-    for (i, row) in rows.iter().enumerate().skip(app.diff_scroll) {
-        let y = body.y + (i - app.diff_scroll) as u16;
+    for (i, row) in app.diff_rows().iter().enumerate().skip(scroll) {
+        let y = body.y + (i - scroll) as u16;
         if y >= body.bottom() {
             break;
         }
@@ -234,25 +241,29 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
 /// The cursor is still an index into the unified rows — this only changes
 /// where a row is drawn, never what it is — so selecting, commenting and the
 /// anchors all work here without knowing about it.
-fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App, rows: &[crate::diffline::model::Row]) {
-    let pairs = crate::diffline::model::pair_rows(rows);
+fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
+    // The pairs are indices, so this is the one thing here worth building:
+    // a `Vec<Pair>` of three `Option<usize>` each, not a copy of the text.
+    let pairs = crate::diffline::model::pair_rows(app.diff_rows());
 
     // Which line the cursor is on, in this view's units.
+    let cursor = app.cursor;
     let at = pairs
         .iter()
-        .position(|p| {
-            p.left == Some(app.cursor)
-                || p.right == Some(app.cursor)
-                || p.header == Some(app.cursor)
-        })
+        .position(|p| p.left == Some(cursor) || p.right == Some(cursor) || p.header == Some(cursor))
         .unwrap_or(0);
     let height = body.height as usize;
     app.view_height = height;
     scroll_into_view(&mut app.diff_scroll, at, height, pairs.len());
+    let scroll = app.diff_scroll;
 
+    // Shared borrows from here, so nothing is copied.
+    let app = &*app;
+    let rows = app.diff_rows();
     let (lo, hi) = app.span();
     let visual = app.visual();
-    let spans = app.spans.get(app.path()).cloned().unwrap_or_default();
+    let empty_spans = Vec::new();
+    let spans = app.spans.get(app.path()).unwrap_or(&empty_spans);
     let focused = app.pane == Pane::Diff;
 
     // Half each, and a rule down the middle so the eye knows which side it is
@@ -261,8 +272,8 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App, rows: &[crate::diffli
     let mid = body.x + half;
     vline(buf, mid, body.y, body.height, theme::border_soft());
 
-    for (n, pair) in pairs.iter().enumerate().skip(app.diff_scroll) {
-        let y = body.y + (n - app.diff_scroll) as u16;
+    for (n, pair) in pairs.iter().enumerate().skip(scroll) {
+        let y = body.y + (n - scroll) as u16;
         if y >= body.bottom() {
             break;
         }

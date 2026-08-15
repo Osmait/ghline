@@ -127,7 +127,10 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
             .map(|f| f.path.as_str())
             .unwrap_or("");
         put_trunc(buf, pv.x, pv.y, pv.right(), path, base.fg(theme::dim()));
-        let rows = app.rows.get(path).cloned().unwrap_or_default();
+        // Borrowed: this shows four lines of a preview, and copying the
+        // whole file's rows to do it is the same mistake the diff pane had.
+        let empty = Vec::new();
+        let rows = app.rows.get(path).unwrap_or(&empty);
         let centre = hit.row.unwrap_or(0);
         let start = centre.saturating_sub(4);
         for (n, r) in rows.iter().enumerate().skip(start) {

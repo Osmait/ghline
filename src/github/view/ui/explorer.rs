@@ -297,7 +297,9 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     // byte range rather than by text, so a colour span survives the wrap.
     let gutter = 6u16;
     let width = body.width.saturating_sub(gutter + 2) as usize;
-    let spans = app.file_spans().cloned().unwrap_or_default();
+    // The one mutation, taken before the shared borrow below rather than
+    // paying for a copy of every colour span to get around it.
+    let sel_line_for_scroll = app.file_sel;
     let source: Vec<&str> = text.lines().collect();
 
     let mut rendered: Vec<(usize, usize, usize)> = Vec::new(); // line, from, to
@@ -314,15 +316,20 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     // wrapped line spans several of. Finding the first row of the selected
     // line is what keeps the two in step.
     let height = body.height as usize;
-    let sel_line = app.file_sel.min(source.len().saturating_sub(1));
+    let sel_line = sel_line_for_scroll.min(source.len().saturating_sub(1));
     let sel_row = rendered
         .iter()
         .position(|(n, _, _)| *n == sel_line + 1)
         .unwrap_or(0);
     scroll_into_view(&mut app.file_scroll, sel_row, height, rendered.len());
+    let scroll = app.file_scroll;
+
+    let app = &*app;
+    let empty = Vec::new();
+    let spans = app.file_spans().unwrap_or(&empty);
     let focused = app.pane == Pane::FileView;
 
-    for (row, i) in (app.file_scroll..rendered.len()).enumerate() {
+    for (row, i) in (scroll..rendered.len()).enumerate() {
         if row >= height {
             break;
         }
