@@ -475,16 +475,18 @@ impl App {
                 .unwrap_or_default()
         };
 
-        // A hard assertion, and the only kind of place that gets one: a
-        // comment is an instruction handed to an agent, and an anchor naming
-        // the wrong file or line 0 is an instruction to change the wrong
-        // code. Being wrong here is worse than stopping.
+        // A comment is an instruction handed to an agent, and an anchor
+        // naming the wrong file is an instruction to change the wrong code.
         //
-        // It cannot fire today — the anchors and the file are both taken
+        // This cannot fire today: the anchors and the file are both taken
         // from `self.path()` a line apart, so they agree by construction.
-        // That is the point of writing it down: the construction is what a
-        // later change would break, and this is what would notice.
-        assert!(
+        // What it guards is a later change to that construction — and a
+        // later change is made in development, where `debug_assert` fires
+        // and where the tests over this function run. Making it a hard
+        // assertion would only add the case where such a change reaches
+        // release untested by anything, in exchange for the risk of throwing
+        // somebody out of the alternate screen with an unsent queue in it.
+        debug_assert!(
             anchors.iter().all(|a| a.path == file && a.line > 0),
             "a note anchored somewhere other than the file it is about"
         );

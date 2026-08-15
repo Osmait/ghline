@@ -20,11 +20,14 @@ unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
 [lints.clippy]
-# Nothing may panic by accident — no `unwrap`, no `expect`, no bare `panic!`;
-# tests opt out locally. Deliberate assertions are the exception and are
-# spelt out as such: `debug_assert!` for invariants whose violation costs a
-# wrong cell, and a plain `assert!` only where being wrong would be worse
-# than stopping — a note handed to an agent against the wrong file.
+# Nothing panics: no `unwrap`, no `expect`, no bare `panic!`; tests opt out
+# locally. Invariants are written as `debug_assert!`, which is a deliberate
+# choice rather than the default one — a violated invariant here costs a
+# wrong cell, and stopping costs a terminal left in raw mode with a queue of
+# unsent comments in it. The one place that argued for a hard `assert!` was
+# a note handed to an agent against the wrong file, and it turned out it
+# could not fire from any input: what it guards is a later change, and a
+# later change is made where `debug_assert!` fires anyway.
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
