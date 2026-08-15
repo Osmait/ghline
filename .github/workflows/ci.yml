@@ -149,6 +149,78 @@ jobs:
       - name: Advisories, licences, sources
         run: cargo deny --locked check
 
+  # What fraction of the crate the six hundred tests actually execute. Not a
+  # target to raise — a floor to notice falling through. The number today is
+  # 72.7% of lines, and the interesting part of the report is never the total:
+  # it is that `github/source/gh.rs` has seven hundred uncovered lines in it
+  # while `tui/` sits above 97%.
+  #
+  # No upload to a third party. The summary is printed into the job, which is
+  # where anybody who wants it is already looking, and it keeps this workflow
+  # free of a token belonging to somebody else's service.
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: coverage
+
+      # Not in rust-toolchain.toml's components: it is ~20 MB that only this
+      # job has any use for, and that file is what everybody who clones the
+      # repository downloads.
+      - name: Install the instrumentation
+        run: rustup component add llvm-tools-preview
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      # The floor is set just under where the crate stands rather than at a
+      # round number, so it fails when coverage drops rather than when it is
+      # merely not improving. Raise it when the real number moves away.
+      - name: Coverage
+        run: |
+          cargo llvm-cov nextest --all-targets --locked \
+            --summary-only --fail-under-lines 70 \
+            | tee "$GITHUB_STEP_SUMMARY"
+
+  # Cargo.toml asks for `crossterm = "0.28"`, and the only version anybody
+  # ever builds is whatever the lockfile resolved — so the lower bound is a
+  # claim nothing checks. This is what checks it: resolve every direct
+  # dependency to the oldest version its requirement allows, and compile.
+  # A failure here means a version requirement is a version lower than the
+  # code needs, which is a bug for whoever depends on this crate rather than
+  # cloning it.
+  minimal-versions:
+    name: minimal versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      # `-Z direct-minimal-versions` is a nightly cargo flag; the crate is
+      # still compiled by the pinned toolchain. Nightly is here to resolve,
+      # not to build.
+      - name: Install nightly
+        run: rustup toolchain install nightly --profile minimal
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: minimal-versions
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-hack,cargo-minimal-versions
+
+      # `--direct` rather than the whole graph: the requirements this crate
+      # writes are the ones it is answerable for. What ratatui asks of lru is
+      # ratatui's business, and pinning it here would be reporting somebody
+      # else's bug as ours.
+      - name: Oldest allowed dependencies
+        run: cargo minimal-versions check --direct --all-targets
+
   # Two checks that read files and run nothing, so they need no token at all.
   lint:
     name: spelling · workflows

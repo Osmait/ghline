@@ -20,7 +20,13 @@ on:
 jobs:
   build:
     permissions:
+      # to create the release and upload the tarballs to it
       contents: write
+      # to sign the provenance attestation and record it. `id-token` is the
+      # runner proving to Sigstore which workflow, at which commit, is asking
+      # — which is the whole content of the claim being made.
+      id-token: write
+      attestations: write
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -84,6 +90,23 @@ jobs:
           fi
           # A checksum file naming a path would not verify after download.
           test "$(cut -d' ' -f3- < "$archive.sha256")" = "$archive"
+
+      # What the checksum next to it cannot say.
+      #
+      # `install.sh` downloads a tarball and a `.sha256` written by the same
+      # job, from the same page: it proves the download was not corrupted on
+      # the way, and nothing else — anyone who could replace one file could
+      # replace both. This records, signed and in a public log, which
+      # workflow at which commit produced this exact archive. Verify it with
+      #
+      #     gh attestation verify github-tui-<target>.tar.gz --repo Osmait/github-tui
+      #
+      # The attestation lives with GitHub rather than on the release, so
+      # there is no extra file for install.sh to fetch.
+      - name: Attest what built this
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: github-tui-${{ matrix.target }}.tar.gz
 
       # `--snapshot` renders one frame and exits, so it exercises the real
       # drawing path rather than just proving the file is executable. Only

@@ -70,6 +70,18 @@ To choose the location or pin a version:
 GITHUB_TUI_INSTALL_DIR=/usr/local/bin GITHUB_TUI_VERSION=v0.1.0 sh install.sh
 ```
 
+The checksum the installer verifies says the download arrived intact — it does
+not say who made it, because whoever could swap the tarball could swap the
+checksum beside it. That question has its own answer: every release archive is
+signed with a provenance attestation naming the workflow and the commit that
+produced it. To check one yourself, before or after installing:
+
+```sh
+gh attestation verify github-tui-aarch64-apple-darwin.tar.gz --repo Osmait/github-tui
+```
+
+Releases published before this was added have no attestation to check.
+
 You also need the [`gh` CLI](https://cli.github.com), signed in — that is how
 this reads GitHub. Without it the demo mode still runs.
 
@@ -707,10 +719,11 @@ with no echo.
 ## Tests
 
 ```sh
-cargo test          # 581 unit tests and 10 golden frames
+cargo test          # 586 unit tests and 18 golden frames
 cargo clippy        # the lint set configured in Cargo.toml
 cargo doc           # the rustdoc lints, which are denied
-make audit          # unused dependencies, advisories, licences, sources
+make cov            # what fraction of the crate those tests execute
+make audit          # dependencies, advisories, licences, sources, spelling
 ```
 
 The lint set in `Cargo.toml` forbids `unsafe`, and warns on `unwrap`, `expect`,
@@ -740,6 +753,16 @@ INSTA_UPDATE=always cargo test --test frames   # accept without cargo-insta
 
 A golden is only worth what the look at it was worth. Accepting a frame you
 have not read turns a failing test into a passing one and nothing else.
+
+`make cov` says how much of the crate all of that actually executes — 72.7% of
+lines today, which CI holds a floor under rather than a target over. The total
+is the least useful line of it. The report is per file, and read that way it
+says where the tests are and are not: `tui/` sits above 97% and the drawing
+code for both programs between 70% and 95%, while `github/source/gh.rs` — the
+JSON coming back from `gh`, parsed field by field — has seven hundred lines
+nothing has ever run, and `view/ui/confirm.rs` and `view/ui/dispatch.rs` have
+none at all. The two binaries and `tui/run.rs` are low for a different reason:
+they are the terminal and the event loop, and what tests them is running them.
 
 ## What a frame costs
 

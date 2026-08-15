@@ -10,7 +10,7 @@ BIN := github-tui
 
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall hooks build run diff demo test test-nvim bench lint audit fmt check clean
+.PHONY: help install uninstall hooks build run diff demo test test-nvim cov bench lint audit fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -51,6 +51,13 @@ demo: ## Run on the design's fixture, no network needed
 # nextest and `cargo nextest run --all-targets` if you want CI's output.
 test: ## The test suite
 	cargo test
+
+# Needs `cargo llvm-cov`, `cargo nextest` and the llvm-tools-preview
+# component — CI installs all three, which is why they are not in
+# rust-toolchain.toml. The total is the least interesting line of the report:
+# read the columns for the file you just touched.
+cov: ## What fraction of the crate the tests execute
+	cargo llvm-cov nextest --all-targets --locked --summary-only
 
 bench: ## What a frame, the lexer, the matcher and wrapping cost
 	cargo bench
