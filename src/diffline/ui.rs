@@ -1584,14 +1584,27 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
             s.fg(theme::bright()),
         );
         put_right(buf, m.right() - 2, y, a.status.label(), s.fg(dot));
-        put_trunc(
-            buf,
-            m.x + 7,
-            y + 1,
-            m.right() - 2,
-            &a.cwd,
-            s.fg(theme::dimmer()),
-        );
+        // Why it cannot be used, where its directory would go: the directory
+        // is what you read to tell agents apart, and the refusal is what you
+        // read to find out why nothing is happening.
+        match app.refusal(a) {
+            Some(why) => put_trunc(
+                buf,
+                m.x + 7,
+                y + 1,
+                m.right() - 2,
+                &why,
+                s.fg(theme::dimmer()),
+            ),
+            None => put_trunc(
+                buf,
+                m.x + 7,
+                y + 1,
+                m.right() - 2,
+                &a.cwd,
+                s.fg(theme::dimmer()),
+            ),
+        };
         y += 2;
     }
 

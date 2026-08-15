@@ -396,6 +396,42 @@ impl App {
         self.agents.get(self.agent_idx)
     }
 
+    /// Why this agent cannot be sent to, if it cannot.
+    ///
+    /// Returned rather than filtered, so the row stays in the picker: "claude
+    /// is busy" is a more useful answer than a list that quietly leaves it
+    /// out and leaves you wondering where it went.
+    pub fn refusal(&self, a: &Agent) -> Option<String> {
+        if a.focused {
+            // The one running this. Handing a review to yourself does
+            // nothing, and it is a surprisingly easy mistake to make when
+            // diffline was started from inside it.
+            return Some("this window — it is the one showing you the diff".into());
+        }
+        if !crate::mux::current().is_free(a) {
+            return Some(format!(
+                "{} — interrupting would lose its context",
+                a.status
+            ));
+        }
+        None
+    }
+
+    /// The first agent worth sending to, if there is one.
+    ///
+    /// Preferring one in this repository: an agent working somewhere else has
+    /// none of the files the review is about.
+    pub fn first_usable_agent(&self) -> Option<usize> {
+        let here = |a: &Agent| self.repo.starts_with(&a.cwd) || a.cwd.starts_with(&self.repo);
+        let free: Vec<usize> = (0..self.agents.len())
+            .filter(|i| self.refusal(&self.agents[*i]).is_none())
+            .collect();
+        free.iter()
+            .copied()
+            .find(|i| here(&self.agents[*i]))
+            .or_else(|| free.first().copied())
+    }
+
     pub fn blame_lines(&self) -> Option<&Vec<String>> {
         self.blame.get(self.path())
     }

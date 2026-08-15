@@ -529,8 +529,10 @@ impl App {
         // Asked of the multiplexer, not of the status: a backend that cannot
         // see what its agents are doing must not have every send refused on
         // its behalf.
-        if !crate::mux::current().is_free(&agent) {
-            self.flash(format!("{} is {}", agent.kind, agent.status));
+        if let Some(why) = self.refusal(&agent) {
+            // Say what to do, not only what went wrong: with every agent busy
+            // the way out is to start one, and that is two keys away.
+            self.flash(format!("{}: {why} · ␣a to pick another", agent.kind));
             return;
         }
 
@@ -775,6 +777,17 @@ impl App {
         // agent is free right now.
         self.agents_state = Load::Idle;
         self.modal = Some(Modal::Agents);
+        // Land on something worth choosing rather than on whatever herdr
+        // listed first, which is often busy or is this very window.
+        if self.new_kind.is_none()
+            && self
+                .agents
+                .get(self.agent_idx)
+                .is_some_and(|a| self.refusal(a).is_some())
+            && let Some(i) = self.first_usable_agent()
+        {
+            self.agent_idx = i;
+        }
         self.sel = match &self.new_kind {
             // land on the entry that is already the target, whichever half of
             // the list it is in
@@ -1349,6 +1362,80 @@ mod tests {
         // and the very next key is a plain key again
         press(&mut a, KeyCode::Char('l'));
         assert!(a.hscroll > 0);
+    }
+
+    fn agent_at(
+        kind: &str,
+        status: crate::mux::AgentStatus,
+        focused: bool,
+        cwd: &str,
+    ) -> crate::mux::Agent {
+        crate::mux::Agent {
+            kind: kind.into(),
+            pane: format!("w:{kind}"),
+            cwd: cwd.into(),
+            status,
+            title: String::new(),
+            focused,
+        }
+    }
+
+    #[test]
+    fn the_agent_showing_you_the_diff_is_not_a_target() {
+        // Started from inside herdr, diffline is running in one of the very
+        // panes it lists. Handing a review to yourself does nothing, and it
+        // is an easy mistake when that agent is at the top of the list.
+        use crate::mux::AgentStatus;
+        let mut a = app();
+        let me = agent_at("claude", AgentStatus::Idle, true, "/tmp/r");
+        assert!(
+            a.refusal(&me).is_some(),
+            "an idle agent is still no target when it is this window"
+        );
+        a.agents = vec![me];
+        assert_eq!(a.first_usable_agent(), None);
+    }
+
+    #[test]
+    fn a_busy_agent_is_refused_with_a_reason_and_a_way_out() {
+        use crate::mux::AgentStatus;
+        let a = app();
+        let busy = agent_at("pi", AgentStatus::Working, false, "/tmp/r");
+        let why = a.refusal(&busy).unwrap_or_default();
+        assert!(why.contains("context"), "{why}");
+        assert!(
+            a.refusal(&agent_at("pi", AgentStatus::Idle, false, "/tmp/r"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn the_first_usable_agent_prefers_one_in_this_repository() {
+        // An agent working somewhere else has none of the files the review is
+        // about.
+        use crate::mux::AgentStatus;
+        let mut a = app();
+        a.agents = vec![
+            agent_at("pi", AgentStatus::Idle, false, "/somewhere/else"),
+            agent_at("codex", AgentStatus::Idle, false, "/tmp/r"),
+        ];
+        assert_eq!(a.first_usable_agent(), Some(1), "the one that is here");
+    }
+
+    #[test]
+    fn a_busy_first_agent_does_not_become_the_default_target() {
+        // `agent_idx` starts at 0, which is whatever the multiplexer listed
+        // first — often this very window, or something busy elsewhere.
+        use crate::mux::AgentStatus;
+        let mut a = app();
+        a.agents = vec![
+            agent_at("claude", AgentStatus::Working, true, "/tmp/r"),
+            agent_at("codex", AgentStatus::Idle, false, "/tmp/r"),
+        ];
+        a.agent_idx = 0;
+        press(&mut a, KeyCode::Char(' '));
+        press(&mut a, KeyCode::Char('a'));
+        assert_eq!(a.agent_idx, 1, "the picker landed on one worth choosing");
     }
 
     #[test]
