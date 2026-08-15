@@ -622,12 +622,12 @@ impl Map {
 
 /// `<config>/keys`, beside the config and the themes directory.
 pub fn path() -> Option<std::path::PathBuf> {
-    Some(crate::shared::config::path()?.with_file_name("keys"))
+    crate::shared::settings::path_beside("keys")
 }
 
 /// The reader's keymap, or the shipped one if they have not written a file.
 pub fn load() -> Map {
-    match path().and_then(|p| std::fs::read_to_string(p).ok()) {
+    match crate::shared::settings::read_beside("keys") {
         Some(text) => Map::with(&text),
         None => Map::new(),
     }

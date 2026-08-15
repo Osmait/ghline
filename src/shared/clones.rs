@@ -9,6 +9,87 @@
 //! `Osmait/sbql` in a folder called `sbql-experiment` is still that repository,
 //! and a folder called `sbql` that is a clone of someone else's fork is not.
 
+/// Where checkouts are, and what is in them.
+///
+/// A trait because the state layer reaches for two of these — which branch a
+/// checkout is on, and where a new one would go — and it was reaching for the
+/// filesystem to get them. That is how the dispatch picker ended up reading
+/// `.git/HEAD` once per frame it was open: nobody meant it, it is what
+/// "ask the disk wherever the value is wanted" adds up to.
+pub trait Checkouts: Send + Sync + 'static {
+    /// Every repository found under the roots, by `owner/name`.
+    fn scan(&self) -> Index;
+
+    /// Which branch a checkout is on, or `None` on a detached head.
+    fn head_branch(&self, repo_root: &str) -> Option<String>;
+
+    /// Where to look.
+    fn roots(&self) -> Vec<PathBuf>;
+
+    /// The first root that exists — where a new clone would go.
+    fn clone_dir(&self) -> Option<PathBuf> {
+        self.roots().into_iter().find(|r| r.is_dir())
+    }
+}
+
+/// The real one: the reader's disk.
+pub struct Disk;
+
+impl Checkouts for Disk {
+    fn scan(&self) -> Index {
+        scan()
+    }
+
+    fn head_branch(&self, repo_root: &str) -> Option<String> {
+        head_branch(repo_root)
+    }
+
+    fn roots(&self) -> Vec<PathBuf> {
+        roots()
+    }
+}
+
+/// One that was told what it would find, for tests and for anything that must
+/// not depend on whose machine it is running on.
+#[derive(Default)]
+pub struct Told {
+    pub index: Index,
+    pub branches: HashMap<String, String>,
+    pub roots: Vec<PathBuf>,
+}
+
+impl Checkouts for Told {
+    fn scan(&self) -> Index {
+        self.index.clone()
+    }
+
+    fn head_branch(&self, repo_root: &str) -> Option<String> {
+        self.branches.get(repo_root).cloned()
+    }
+
+    fn roots(&self) -> Vec<PathBuf> {
+        self.roots.clone()
+    }
+
+    /// Whatever it was told, without asking whether it is there: a test that
+    /// needed the directory to exist would be a test about the machine.
+    fn clone_dir(&self) -> Option<PathBuf> {
+        self.roots.first().cloned()
+    }
+}
+
+static CHOSEN: std::sync::OnceLock<Box<dyn Checkouts>> = std::sync::OnceLock::new();
+
+/// The one in use — the disk, unless something said otherwise first.
+pub fn current() -> &'static dyn Checkouts {
+    CHOSEN.get_or_init(|| Box::new(Disk)).as_ref()
+}
+
+/// Uses `what` instead of the disk. Takes only if nothing has asked yet.
+pub fn use_checkouts(what: Box<dyn Checkouts>) -> bool {
+    CHOSEN.set(what).is_ok()
+}
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 

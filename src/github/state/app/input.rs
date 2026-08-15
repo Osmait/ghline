@@ -354,7 +354,7 @@ impl App {
                 return;
             }
             self.wants_edit = false;
-            match crate::shared::clones::clone_dir() {
+            match crate::shared::clones::current().clone_dir() {
                 Some(dest) => {
                     self.prompt = Some(Prompt::Clone {
                         repo,
@@ -377,7 +377,7 @@ impl App {
 
         // Said before the editor takes the screen, so it is on the status bar
         // when they come back rather than lost behind it.
-        if let Some(branch) = crate::shared::clones::head_branch(&root) {
+        if let Some(branch) = crate::shared::clones::current().head_branch(&root) {
             self.flash_warn(format!("editing the copy on {branch}"));
         }
         self.edit_request = Some((full, self.file_sel + 1));

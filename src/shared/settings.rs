@@ -151,6 +151,22 @@ impl Store for Memory {
     }
 }
 
+/// Reads a file that sits beside the settings — the keymap, a theme.
+///
+/// Here because "a file under the config directory" is one responsibility
+/// and this module has it. The alternative was every module that owns such a
+/// file also owning a `std::fs` call, which is how the state layer ended up
+/// reading from disk.
+pub fn read_beside(name: &str) -> Option<String> {
+    let p = current().path()?.with_file_name(name);
+    std::fs::read_to_string(p).ok()
+}
+
+/// Where a file beside the settings would go.
+pub fn path_beside(name: &str) -> Option<PathBuf> {
+    Some(current().path()?.with_file_name(name))
+}
+
 static CHOSEN: OnceLock<Box<dyn Store>> = OnceLock::new();
 
 /// The store in use. The file, unless something said otherwise first.

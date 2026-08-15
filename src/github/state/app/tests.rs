@@ -1563,10 +1563,14 @@ mod dispatch {
     fn a_cloned_repository_also_offers_working_in_the_checkout() {
         let mut app = with(vec![]);
         let repo = app.item_repo_key();
-        // a real checkout, so its HEAD can be read
+        // A checkout the worker already told us about, branch and all. It
+        // used to be this repository's own directory, so that a real
+        // `.git/HEAD` could be read during the test.
+        let root = std::path::PathBuf::from("/tmp/a-checkout");
         app.clones_state = Load::Ready;
-        app.clones
-            .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        app.clones.insert(repo, root.clone());
+        app.head_branches
+            .insert(root.to_string_lossy().into_owned(), "main".into());
 
         let dests = app.dispatch_dests();
         let in_place: Vec<&Dest> = dests
@@ -1605,6 +1609,10 @@ mod dispatch {
         app.clones_state = Load::Ready;
         app.clones
             .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        // The branch as the worker reported it, rather than as this test's own
+        // `.git/HEAD` happens to read.
+        app.head_branches
+            .insert(env!("CARGO_MANIFEST_DIR").to_string(), "main".into());
 
         let dests = app.dispatch_dests();
         let i = dests
@@ -1637,6 +1645,10 @@ mod dispatch {
         app.clones_state = Load::Ready;
         app.clones
             .insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        // The branch as the worker reported it, rather than as this test's own
+        // `.git/HEAD` happens to read.
+        app.head_branches
+            .insert(env!("CARGO_MANIFEST_DIR").to_string(), "main".into());
 
         let dests = app.dispatch_dests();
         let first_worktree = dests
@@ -2091,7 +2103,10 @@ mod editing {
 
         let mut index = crate::shared::clones::Index::new();
         index.insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-        app.apply(Response::Scanned { index });
+        app.apply(Response::Scanned {
+            index,
+            branches: Default::default(),
+        });
 
         assert!(
             app.edit_request.is_some(),
@@ -2111,6 +2126,7 @@ mod editing {
 
         app.apply(Response::Scanned {
             index: crate::shared::clones::Index::new(),
+            branches: Default::default(),
         });
         assert!(
             matches!(

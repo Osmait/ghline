@@ -399,6 +399,11 @@ pub struct App {
     /// agent that already exists.
     pub pending_fresh: Option<Fresh>,
     /// The dispatch picker, open over an issue or pull request.
+    /// Which branch each checkout is on, as the worker found them.
+    ///
+    /// Kept rather than read when wanted: reading it when wanted meant the
+    /// dispatch picker read `.git/HEAD` off the disk once per frame.
+    pub head_branches: std::collections::HashMap<String, String>,
     pub dispatch_open: bool,
     /// A specific instruction typed into the picker, or empty for the
     /// template on its own.
@@ -526,6 +531,7 @@ impl App {
             clones: crate::shared::clones::Index::new(),
             clones_state: Load::Idle,
             pending_fresh: None,
+            head_branches: std::collections::HashMap::new(),
             dispatch_open: false,
             dispatch_note: String::new(),
             dispatch_sel: 0,

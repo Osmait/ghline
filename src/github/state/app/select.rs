@@ -276,7 +276,7 @@ impl App {
             // Working in the checkout comes last: it is the one that can
             // collide with whatever the reader has open, so it should be
             // chosen rather than landed on.
-            if let Some(branch) = crate::shared::clones::head_branch(&root) {
+            if let Some(branch) = self.head_branches.get(&root).cloned() {
                 for kind in &kinds {
                     out.push(Dest::Fresh {
                         kind: kind.clone(),

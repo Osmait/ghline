@@ -206,7 +206,7 @@ pub fn custom() -> &'static [Custom] {
 
 /// Where a theme file goes: `<config>/themes/<name>.theme`.
 pub fn dir() -> Option<std::path::PathBuf> {
-    Some(crate::shared::config::path()?.with_file_name("themes"))
+    crate::shared::settings::path_beside("themes")
 }
 
 fn load_custom() -> Vec<Custom> {

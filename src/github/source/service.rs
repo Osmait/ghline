@@ -127,6 +127,11 @@ pub enum Response {
     },
     Scanned {
         index: crate::shared::clones::Index,
+        /// The branch each checkout is on, gathered here because this thread
+        /// is already walking those directories. It used to be read from the
+        /// reducer, which meant the dispatch picker read `.git/HEAD` off the
+        /// disk once per frame it was open.
+        branches: std::collections::HashMap<String, String>,
     },
     Cloned {
         repo: String,
@@ -305,9 +310,18 @@ fn handle(req: Request) -> Response {
             Response::FileText { result, repo, path }
         }
 
-        Request::Scan => Response::Scanned {
-            index: crate::shared::clones::scan(),
-        },
+        Request::Scan => {
+            let index = crate::shared::clones::current().scan();
+            let branches = index
+                .values()
+                .filter_map(|root| {
+                    let root = root.to_string_lossy().into_owned();
+                    let branch = crate::shared::clones::current().head_branch(&root)?;
+                    Some((root, branch))
+                })
+                .collect();
+            Response::Scanned { index, branches }
+        }
 
         Request::Agents => Response::Agents {
             result: crate::shared::mux::current().agents(),

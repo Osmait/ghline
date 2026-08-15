@@ -394,8 +394,9 @@ impl App {
                 }
             },
 
-            Response::Scanned { index } => {
+            Response::Scanned { index, branches } => {
                 self.clones = index;
+                self.head_branches = branches;
                 self.clones_state = Load::Ready;
                 // somebody pressed `E` while this was still on its way
                 if self.wants_edit {
