@@ -114,13 +114,20 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
             s.fg(theme::cyan()),
         );
         let mx = put_right(buf, list.right() - 1, y, &h.meta, s.fg(theme::dimmer()));
-        put_trunc(
+        // Which letters the query matched, worked out here rather than kept
+        // on the hit: `hits()` throws the positions away, and one `score` per
+        // visible row is forty of them a frame against a matcher that ranks
+        // five hundred in fifty microseconds.
+        let positions = crate::shared::fuzzy::score(&app.query, &h.label)
+            .map(|(_, p)| p)
+            .unwrap_or_default();
+        crate::tui::matched(
             buf,
-            list.x + 4,
-            y,
-            mx.saturating_sub(1),
+            (list.x + 4, y, mx.saturating_sub(1)),
             &h.label,
+            &positions,
             s.fg(if sel { theme::bright() } else { theme::fg() }),
+            theme::yellow(),
         );
     }
 

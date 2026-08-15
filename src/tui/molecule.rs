@@ -11,7 +11,7 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 
 use super::atom::{clear, hline, put, put_right, put_trunc, skel_bar};
 use super::geom::pct;
@@ -155,6 +155,39 @@ pub fn agent_status(s: AgentStatus) -> (&'static str, Color) {
         AgentStatus::Blocked => ("◼", theme::red()),
         AgentStatus::Done => ("●", theme::green()),
         AgentStatus::Unknown => ("·", theme::dimmer()),
+    }
+}
+
+/// Writes `text`, brightening the characters the query matched.
+///
+/// `at` is the x, y and right edge to write between, and `positions` are
+/// indices into `text` as `fuzzy::score` hands them back.
+///
+/// Shared because only one of the two programs was doing it. diffline's
+/// finder ranks with the same matcher and has had the positions all along; it
+/// simply had no code to draw them, and writing that code a second time was
+/// the only thing standing in the way.
+pub fn matched(
+    buf: &mut Buffer,
+    at: (u16, u16, u16),
+    text: &str,
+    positions: &[usize],
+    base: Style,
+    accent: Color,
+) {
+    let (x, y, max) = at;
+    if positions.is_empty() {
+        put_trunc(buf, x, y, max, text, base);
+        return;
+    }
+    let hit = base.fg(accent).add_modifier(Modifier::BOLD);
+    let mut cx = x;
+    for (i, c) in text.chars().enumerate() {
+        let style = if positions.contains(&i) { hit } else { base };
+        cx = put(buf, cx, y, max, &c.to_string(), style);
+        if cx >= max {
+            break;
+        }
     }
 }
 
@@ -356,5 +389,45 @@ mod tests {
             theme::panel(),
         );
         // it did not panic, which is the assertion
+    }
+    /// A golden frame cannot see this: it compares symbols, and a highlight
+    /// is a style. So the assertion is about the cells' colours.
+    #[test]
+    fn matched_brightens_the_letters_the_query_hit() {
+        let mut buf = buffer(20, 1);
+        let base = Style::default().bg(theme::bg()).fg(theme::fg());
+        matched(
+            &mut buf,
+            (0, 0, 20),
+            "sidebar",
+            &[0, 1, 2],
+            base,
+            theme::cyan(),
+        );
+        assert_eq!(row(&buf, 0), "sidebar");
+        let fg = |x: u16| buf[(x, 0)].style().fg;
+        assert_eq!(fg(0), Some(theme::cyan()), "s is a hit");
+        assert_eq!(fg(2), Some(theme::cyan()), "d is a hit");
+        assert_eq!(fg(3), Some(theme::fg()), "e is not");
+    }
+
+    #[test]
+    fn matched_with_nothing_to_mark_is_plain_text() {
+        let mut buf = buffer(20, 1);
+        let base = Style::default().bg(theme::bg()).fg(theme::fg());
+        matched(&mut buf, (0, 0, 20), "sidebar", &[], base, theme::cyan());
+        assert_eq!(row(&buf, 0), "sidebar");
+        for x in 0..7 {
+            assert_eq!(buf[(x, 0)].style().fg, Some(theme::fg()), "at {x}");
+        }
+    }
+
+    /// The right edge is the pane's, not the text's.
+    #[test]
+    fn matched_stops_at_the_edge_it_was_given() {
+        let mut buf = buffer(20, 1);
+        let base = Style::default().bg(theme::bg()).fg(theme::fg());
+        matched(&mut buf, (0, 0, 4), "sidebar", &[0, 6], base, theme::cyan());
+        assert_eq!(row(&buf, 0), "side");
     }
 }

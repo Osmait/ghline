@@ -147,12 +147,13 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             } else {
                 Vec::new()
             };
-            put_matched(
+            crate::tui::matched(
                 buf,
                 (list.x + 4, y, inner_right),
                 &hit.label,
                 &positions,
                 s.fg(fg),
+                theme::cyan(),
             );
             put_trunc(
                 buf,
@@ -188,29 +189,4 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         "↑↓ or ^n/^p · enter opens · esc",
         base.fg(theme::dimmer()),
     );
-}
-
-/// Writes `text`, brightening the characters the query matched. `at` is the
-/// x, y and right edge to write between.
-fn put_matched(
-    buf: &mut Buffer,
-    at: (u16, u16, u16),
-    text: &str,
-    positions: &[usize],
-    base: Style,
-) {
-    let (x, y, max) = at;
-    if positions.is_empty() {
-        put_trunc(buf, x, y, max, text, base);
-        return;
-    }
-    let hit = base.fg(theme::cyan()).add_modifier(Modifier::BOLD);
-    let mut cx = x;
-    for (i, c) in text.chars().enumerate() {
-        let style = if positions.contains(&i) { hit } else { base };
-        cx = put(buf, cx, y, max, &c.to_string(), style);
-        if cx >= max {
-            break;
-        }
-    }
 }

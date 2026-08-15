@@ -68,5 +68,7 @@ pub use atom::{
     wrap,
 };
 pub use geom::{centered, centered_over, pct, scroll_into_view};
-pub use molecule::{Empty, Query, agent_status, empty, frame, modal_head, query_line, rule};
+pub use molecule::{
+    Empty, Query, agent_status, empty, frame, matched, modal_head, query_line, rule,
+};
 pub use organism::{AgentRow, Body, Dialog, RowSlot, Section, agent_row, rows};
