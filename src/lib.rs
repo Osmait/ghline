@@ -19,6 +19,7 @@ pub mod fuzzy;
 pub mod herdr;
 pub mod icons;
 pub mod syntax;
+pub mod text;
 pub mod theme;
 
 // --- diffline ---

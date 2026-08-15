@@ -56,6 +56,18 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Styl
         return cx;
     }
     for g in unicode_segmentation(text) {
+        // A backstop, not the fix: text is expanded where it is read, in
+        // `crate::text`. But this is the one place every string in either
+        // program passes through on its way to a cell, and a control
+        // character reaching one moves the terminal's cursor somewhere the
+        // layout did not account for — which is how a diff line ends up
+        // painted over the pane beside it.
+        if g.chars()
+            .next()
+            .is_some_and(|c| (c as u32) < 0x20 || c == '\x7f')
+        {
+            continue;
+        }
         let w = g.width() as u16;
         if w == 0 {
             continue;

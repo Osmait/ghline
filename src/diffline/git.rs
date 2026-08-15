@@ -144,7 +144,9 @@ pub fn parse_unified(text: &str) -> Vec<Row> {
                 kind: Kind::Header,
                 old: None,
                 new: None,
-                text: line.to_string(),
+                // `@@ … @@` carries trailing context copied out of the file,
+                // so it is as capable of holding a tab as any other line.
+                text: crate::text::expand_tabs(line).into_owned(),
             });
             continue;
         }
@@ -186,7 +188,10 @@ pub fn parse_unified(text: &str) -> Vec<Row> {
             kind,
             old: o,
             new: n,
-            text: text.to_string(),
+            // Expanded here rather than at the point of drawing, so that the
+            // colour spans and the comment anchors are offsets into the same
+            // string the pane shows.
+            text: crate::text::expand_tabs(text).into_owned(),
         });
     }
     out
@@ -263,6 +268,27 @@ fn parse_blame(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_row_reaches_the_renderer_holding_a_tab() {
+        // A tab is measured as one column by the code that lays the pane out
+        // and drawn as up to four by the terminal, so a row carrying one is
+        // painted past the edge of its pane and over the one beside it.
+        let rows =
+            parse_unified("@@ -1,2 +1,3 @@ fn main() {\n \tcontext();\n-\told();\n+\t\tnew();\n");
+        assert!(!rows.is_empty(), "the fixture should parse");
+        for r in &rows {
+            assert!(
+                !r.text.contains('\t'),
+                "{:?} still holds a tab: {:?}",
+                r.kind,
+                r.text
+            );
+        }
+        // and the expansion is the indentation, not a blanket four spaces
+        let added = rows.iter().find(|r| r.kind == Kind::Added);
+        assert_eq!(added.map(|r| r.text.as_str()), Some("        new();"));
+    }
 
     const DIFF: &str = "\
 diff --git a/src/a.rs b/src/a.rs

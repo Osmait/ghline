@@ -668,7 +668,7 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
                 f.1.push(h);
             }
             hunk = Some(Hunk {
-                hdr: line.to_string(),
+                hdr: crate::text::expand_tabs(line).into_owned(),
                 lines: Vec::new(),
             });
             continue;
@@ -677,7 +677,12 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
         // inside a hunk the first character is the sign
         let mut chars = line.chars();
         match chars.next() {
-            Some(sign @ ('+' | '-' | ' ')) => h.lines.push((sign, chars.as_str().to_string())),
+            // Tabs expanded on the way in: a cell holds one column and a tab
+            // does not, so a line carrying one would be measured short here
+            // and then drawn wide by the terminal, past the edge of the pane.
+            Some(sign @ ('+' | '-' | ' ')) => h
+                .lines
+                .push((sign, crate::text::expand_tabs(chars.as_str()).into_owned())),
             None => h.lines.push((' ', String::new())),
             // `\ No newline at end of file` and friends are ignored
             _ => {}
@@ -1134,7 +1139,8 @@ pub fn file_content(repo: &str, path: &str) -> Res<String> {
     if raw.contains('\0') {
         return Ok(format!("(binary file, {} bytes)", raw.len()));
     }
-    Ok(raw)
+    // Source files are the one thing here that routinely holds tabs.
+    Ok(crate::text::expand_tabs(&raw).into_owned())
 }
 
 #[cfg(test)]
