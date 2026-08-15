@@ -1,0 +1,48 @@
+---
+source: tests/diffline_frames.rs
+expression: "frame(\" ?\")?"
+---
+ DIFFLINE  ⎇ working tree   working tree   branch…main                                                                         +19  −4  │  2 files  │  1 queued 
+─────────────────────────────────────┌────────────────────────────────────────────────────────────────────────────────────┐────────────────── ● 1 queued · ␣c ──
+ CHANGES                      2 │ DIF│ KEYMAP                                                         no config directory │                  blame off │ ctx ±3 
+────────────────────────────────│────├────────────────────────────────────────────────────────────────────────────────────┤─────────────────────────────────────
+ src/layout/                    │▌   │ <leader>a     pick the target agent        <leader>b     inline blame              │                                     
+▌ M solver.rs          +12 −4 ● │   1│ G             last line                    <esc>         cancel the selection      │                                     
+ src/ui/                        │   1│ ]c            next change                  [c            previous change           │                                     
+  A sidebar.rs            +7 −0 │   1│ <leader>d     back to the code             :             the command list          │                                     
+                                │    │ <leader>-     collapse context             <leader>+     expand context            │                                     
+                                │    │ <leader>=     expand context               zb            cursor line to the bottom │                                     
+                                │   1│ zz            cursor line to the middle    zt            cursor line to the top    │                                     
+                                │    │ <leader>x     delete the note under the c… <leader>g     blast radius              │                                     
+                                │    │ <cr>          into the pane / accept       ]f            next file                 │                                     
+                                │    │ [f            previous file                ^             first word of the line    │                                     
+                                │    │ <C-d>         half a screen down           <C-u>         half a screen up          │                                     
+                                │    │ <leader>?     this help                    }             next hunk                 │                                     
+                                │    │ {             previous hunk                <down>        line down                 │                                     
+                                │    │ gj            line down                    j             line down                 │                                     
+                                │    │ $             end of the line              0             start of the line         │                                     
+                                │    │ <up>          line up                      gk            line up                   │                                     
+                                │    │ k             line up                      <leader>n     note on the selection     │                                     
+                                │    │ o             to the other end of the sel… <C-f>         a screen down             │                                     
+                                │    │ <pagedown>    a screen down                <C-b>         a screen up               │                                     
+                                │    │ <pageup>      a screen up                  <tab>         next pane                 │                                     
+                                │    │ <s-tab>       previous pane                <leader>c     show or hide the review que…                                    
+                                │    │ <leader>q     quit                         <C-l>         repaint the screen        │                                     
+                                │    │ <leader>r     refresh                      ]s            next scope                │                                     
+                                │    │ [s            previous scope               L             bottom of the screen      │                                     
+                                │    │ M             middle of the screen         H             top of the screen         │                                     
+                                │    │ <left>        scroll the line left         h             scroll the line left      │                                     
+                                │    │ <right>       scroll the line right        l             scroll the line right     │                                     
+                                │    │ /             search                       n             next match                │                                     
+                                │    │ N             previous match               <leader>s     send the queue            │                                     
+                                │    │ <leader>v     split or unified view        <leader>t     pick a theme              │                                     
+                                │    │ gg            first line                   <leader>e     show or hide the file tree│                                     
+                                │    │ <C-e>         scroll down, cursor stays    <C-y>         scroll up, cursor stays   │                                     
+                                │    │ V             visual line mode             v             visual line mode          │                                     
+                                │    │ b             back a word                  e             to the end of a word      │                                     
+                                │    │ w             forward a word                                                       │                                     
+                                │    │                                                                                    │                                     
+                                │    │                                                                                    │                                     
+                                │    └────────────────────────────────────────────────────────────────────────────────────┘                                     
+                                │                                                                                                                               
+ SEARCH  src/layout/solver.rs  1/7                                                        j/k move · }/]c hunk/change · ␣ leader · : commands · ␣? help   ready

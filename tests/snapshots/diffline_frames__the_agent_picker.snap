@@ -1,0 +1,48 @@
+---
+source: tests/diffline_frames.rs
+expression: "frame(\" a\")?"
+---
+ DIFFLINE  ⎇ working tree   working tree   branch…main                                                                         +19  −4  │  2 files  │  1 queued 
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ● 1 queued · ␣c ──
+ CHANGES                      2 │ DIFF  src/layout/solver.rs                                                                                 blame off │ ctx ±3 
+────────────────────────────────│───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ src/layout/                    │▌             @@ -186,6 +186,10 @@ impl Solver {                                                                               
+▌ M solver.rs          +12 −4 ● │   186   186       fn split(&mut self, area: Rect) -> (Rect, Rect) {                                                           
+ src/ui/                        │   187   187           let cols = area.width;                                                                                  
+  A sidebar.rs            +7 −0 │   188       -         let sidebar = cols / 4;                                                                                 
+                                │         188 +         // never let the sidebar collapse into a negative width                                                 
+                                │         189 +         let sidebar = (cols / 4).clamp(MIN_SIDEBAR, MAX_SIDEBAR);                                               
+                                │   189   190           let content = cols.saturating_sub(sidebar);                                                             
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │         ┌──────────────────────────────────────────────────────────────────────────┐                                          
+                                │         │ AGENTS ON THIS MACHINE                                         via herdr │                                          
+                                │         ├──────────────────────────────────────────────────────────────────────────┤                                          
+                                │         │▌ ● ✳ claude                                                         idle │                                          
+                                │         │      /demo/tuikit                                                        │                                          
+                                │         │  ● ◆ codex                                                       working │                                          
+                                │         │      working — interrupting would lose its context                       │                                          
+                                │         ├── start a new one here ──────────────────────────────────────────────────┤                                          
+                                │         │  + ✳ claude                                                              │                                          
+                                │         │  + ◆ codex                                                               │                                          
+                                │         │  + ◇ opencode                                                            │                                          
+                                │         │  + π pi                                                                  │                                          
+                                │         │                                                                          │                                          
+                                │         │                                                                          │                                          
+                                │         └──────────────────────────────────────────────────────────────────────────┘                                          
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+ SEARCH  src/layout/solver.rs  1/7                                                        j/k move · }/]c hunk/change · ␣ leader · : commands · ␣? help   ready

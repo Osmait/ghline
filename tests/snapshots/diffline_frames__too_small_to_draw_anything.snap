@@ -1,0 +1,5 @@
+---
+source: tests/diffline_frames.rs
+expression: "snapshot::frame(\"\", 40, 8)?"
+---
+terminal too small

@@ -4,50 +4,13 @@
 //! Printing to stdout *is* this module's job, so the lint against it is off.
 #![allow(clippy::print_stdout, reason = "this mode's output is stdout")]
 
-use crate::shared::key::{Key, Press};
+use crate::shared::key::parse_keys;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 
 use crate::github::app::{App, Source};
 use crate::github::ui;
-
-/// A plain press, which is all a snapshot ever needs — no snapshot has ever
-/// wanted a chord, and one that did would say so in its spec.
-fn key(key: Key) -> Press {
-    Press::new(key)
-}
-
-/// Turns `"jj<enter>k"` into the equivalent key sequence.
-pub fn parse_keys(spec: &str) -> Vec<Press> {
-    let mut out = Vec::new();
-    let mut rest = spec;
-    while !rest.is_empty() {
-        if let Some(end) = rest.strip_prefix('<').and_then(|r| r.find('>')) {
-            let name = &rest[1..end + 1];
-            let code = match name {
-                "enter" => Some(Key::Enter),
-                "esc" => Some(Key::Esc),
-                "tab" => Some(Key::Tab),
-                "bs" => Some(Key::Backspace),
-                "down" => Some(Key::Down),
-                "up" => Some(Key::Up),
-                "left" => Some(Key::Left),
-                "right" => Some(Key::Right),
-                _ => None,
-            };
-            if let Some(c) = code {
-                out.push(key(c));
-                rest = &rest[end + 2..];
-                continue;
-            }
-        }
-        let Some(c) = rest.chars().next() else { break };
-        out.push(key(Key::Char(c)));
-        rest = &rest[c.len_utf8()..];
-    }
-    out
-}
 
 fn ansi(c: Color, fg: bool) -> String {
     let lead = if fg { 38 } else { 48 };

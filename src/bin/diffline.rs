@@ -217,7 +217,7 @@ fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
     use ratatui::backend::TestBackend;
 
     settle(app);
-    for key in github_tui::github::snapshot::parse_keys(keys) {
+    for key in github_tui::shared::key::parse_keys(keys) {
         app.on_key(key);
         settle(app);
     }

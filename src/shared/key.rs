@@ -110,6 +110,45 @@ pub struct Mouse {
     pub what: Motion,
 }
 
+/// Turns a written key sequence — `"jj<enter>k"` — into presses.
+///
+/// Here rather than with either program's snapshot code because it is about
+/// keys and nothing else, and both programs write their headless renders in
+/// this notation. It used to live in `github::snapshot`, which meant
+/// diffline's binary reached across into github-tui to press a key.
+///
+/// Anything in angle brackets that is not a name below is taken literally,
+/// character by character: an unknown `<foo>` is `<`, `f`, `o`, `o`, `>`.
+pub fn parse_keys(spec: &str) -> Vec<Press> {
+    let mut out = Vec::new();
+    let mut rest = spec;
+    while !rest.is_empty() {
+        if let Some(end) = rest.strip_prefix('<').and_then(|r| r.find('>')) {
+            let name = &rest[1..end + 1];
+            let code = match name {
+                "enter" => Some(Key::Enter),
+                "esc" => Some(Key::Esc),
+                "tab" => Some(Key::Tab),
+                "bs" => Some(Key::Backspace),
+                "down" => Some(Key::Down),
+                "up" => Some(Key::Up),
+                "left" => Some(Key::Left),
+                "right" => Some(Key::Right),
+                _ => None,
+            };
+            if let Some(c) = code {
+                out.push(Press::new(c));
+                rest = &rest[end + 2..];
+                continue;
+            }
+        }
+        let Some(c) = rest.chars().next() else { break };
+        out.push(Press::new(Key::Char(c)));
+        rest = &rest[c.len_utf8()..];
+    }
+    out
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,

@@ -1,0 +1,48 @@
+---
+source: tests/diffline_frames.rs
+expression: "frame(\"/\")?"
+---
+ DIFFLINE  ⎇ working tree   working tree   branch…main                                                                         +19  −4  │  2 files  │  1 queued 
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ● 1 queued · ␣c ──
+ CHANGES                      2 │ DIFF  src/layout/solver.rs                                                                                 blame off │ ctx ±3 
+────────────────────────────────│───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ src/layout/                    │▌             @@ -186,6 +186,10 @@ impl Solver {                                                                               
+▌ M solver.rs       ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐                    
+ src/ui/            │  FILES   HUNKS   SYMBOLS   LIVE GREP                                                                         ⇥ scope │                    
+  A sidebar.rs      ├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤                    
+                    │ ❯ fuzzy find…                                                                                              2 results │                    
+                    ├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤                    
+                    │▌ M src/layout/solver.rs                     +12 −4 │src/layout/solver.rs                                             │                    
+                    │  A src/ui/sidebar.rs                         +7 −0 │                                                                 │                    
+                    │                                                    │       @@ -186,6 +186,10 @@ impl Solver {                        │                    
+                    │                                                    │  186       fn split(&mut self, area: Rect) -> (Rect, Rect) {    │                    
+                    │                                                    │  187           let cols = area.width;                           │                    
+                    │                                                    │  188  -        let sidebar = cols / 4;                          │                    
+                    │                                                    │  188  +        // never let the sidebar collapse into a negativ…│                    
+                    │                                                    │  189  +        let sidebar = (cols / 4).clamp(MIN_SIDEBAR, MAX_…│                    
+                    │                                                    │  190           let content = cols.saturating_sub(sidebar);      │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │                                                    │                                                                 │                    
+                    │ ↑↓ move · ↵ jump · ⇥ scope · esc close                                                                               │                    
+                    └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘                    
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+                                │                                                                                                                               
+ SEARCH  src/layout/solver.rs  1/7                                                        j/k move · }/]c hunk/change · ␣ leader · : commands · ␣? help   ready

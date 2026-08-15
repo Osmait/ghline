@@ -12,6 +12,7 @@ mod diff;
 mod header;
 mod parts;
 mod queue;
+pub mod snapshot;
 mod status;
 mod tree;
 
