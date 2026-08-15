@@ -12,6 +12,7 @@ use ratatui::style::{Modifier, Style};
 use unicode_width::UnicodeWidthStr;
 
 use super::app::{App, FinderTab, Modal, Pane};
+use super::hit::{Region, Target};
 use super::model::{Kind, State};
 use crate::theme;
 use crate::tui::{
@@ -60,6 +61,10 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         height: area.height - 2,
     };
 
+    // Cleared first: they describe *this* frame, and a stale rectangle is a
+    // click landing on what used to be there.
+    app.hits.clear();
+
     header_bar(buf, header, app);
     hline(buf, 0, 1, area.width, theme::border());
 
@@ -88,34 +93,31 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         };
         tree(buf, r, app);
         vline(buf, tree_w, body.y, body.height, theme::border());
+        app.hits.push(Region::plain(Target::Pane(Pane::Tree), r));
     }
     if queue_w > 0 {
         let x = area.width - queue_w;
         vline(buf, x - 1, body.y, body.height, theme::border());
-        queue(
-            buf,
-            Rect {
-                x,
-                width: queue_w,
-                ..body
-            },
-            app,
-        );
+        let r = Rect {
+            x,
+            width: queue_w,
+            ..body
+        };
+        queue(buf, r, app);
+        app.hits.push(Region::plain(Target::Pane(Pane::Queue), r));
     }
     let mid_x = tree_w + u16::from(tree_w > 0);
     let mid_w = area
         .width
         .saturating_sub(mid_x)
         .saturating_sub(queue_w + u16::from(queue_w > 0));
-    diff(
-        buf,
-        Rect {
-            x: mid_x,
-            width: mid_w,
-            ..body
-        },
-        app,
-    );
+    let mid = Rect {
+        x: mid_x,
+        width: mid_w,
+        ..body
+    };
+    diff(buf, mid, app);
+    app.hits.push(Region::plain(Target::Pane(Pane::Diff), mid));
 
     // Drawn last of the body, over the diff's top edge: while the queue is
     // away this is the only thing saying how much is in it.
@@ -165,7 +167,7 @@ fn count_style(base: Style, n: u32, added: bool) -> Style {
 ///
 /// Only while the queue itself is hidden. It names its own key, because a
 /// pane you cannot see is a pane you have to be told how to open.
-fn queue_tab(buf: &mut Buffer, area: Rect, app: &App) {
+fn queue_tab(buf: &mut Buffer, area: Rect, app: &mut App) {
     let n = app.comments.len();
     let label = if n == 0 {
         " no comments · ␣c ".to_string()
@@ -183,12 +185,22 @@ fn queue_tab(buf: &mut Buffer, area: Rect, app: &App) {
     } else {
         theme::yellow()
     });
-    put(buf, area.width - w - 2, 1, area.width, &label, style);
+    let x = area.width - w - 2;
+    put(buf, x, 1, area.width, &label, style);
+    app.hits.push(Region::plain(
+        Target::QueueTab,
+        Rect {
+            x,
+            y: 1,
+            width: w,
+            height: 1,
+        },
+    ));
 }
 
 // ------------------------------------------------------------------ header
 
-fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
+fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel());
     let base = Style::default().bg(theme::panel());
 
@@ -216,13 +228,23 @@ fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
 
     // The scopes, as tabs. The one in force is inverted.
     x += 2;
-    for s in &app.scopes {
+    for (i, s) in app.scopes.iter().enumerate() {
         let on = *s == app.scope;
         let style = if on {
             base.bg(theme::fg()).fg(theme::panel())
         } else {
             base.fg(theme::dim())
         };
+        let w = s.to_string().width() as u16 + 2;
+        app.hits.push(Region::plain(
+            Target::Scope(i),
+            Rect {
+                x,
+                y: 0,
+                width: w,
+                height: 1,
+            },
+        ));
         x = put(buf, x, 0, area.right(), &format!(" {s} "), style);
         x += 1;
     }
@@ -298,6 +320,9 @@ fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 
     scroll_into_view(&mut app.tree_scroll, app.file_idx, rows, app.files.len());
+    // Directory separators take rows of their own, so a row is not an index
+    // here: the loop below records where each file actually landed.
+    let mut placed: Vec<(u16, usize)> = Vec::new();
     let focused = app.pane == Pane::Tree;
     let mut last_dir = String::new();
 
@@ -327,6 +352,7 @@ fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
         }
 
+        placed.push((y, i));
         let sel = i == app.file_idx;
         let bg = if sel {
             theme::sel()
@@ -393,6 +419,22 @@ fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             base.fg(if sel { theme::bright() } else { theme::fg() }),
         );
         y += 1;
+    }
+
+    // One region per file row, so a click reads through the separators.
+    for (y, i) in placed {
+        app.hits.push(Region::rows(
+            Target::Pane(Pane::Tree),
+            Rect {
+                x: area.x,
+                y,
+                width: area.width,
+                height: 1,
+            },
+            1,
+            i,
+            i + 1,
+        ));
     }
 }
 
@@ -486,6 +528,13 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     // this is the only place it is known.
     app.view_height = height;
     scroll_into_view(&mut app.diff_scroll, app.cursor, height, rows.len());
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::Diff),
+        body,
+        1,
+        app.diff_scroll,
+        rows.len(),
+    ));
 
     let (lo, hi) = app.span();
     let visual = app.visual();
@@ -1657,7 +1706,7 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
 
 /// The theme picker. Small on purpose — it sits over the diff, and the diff
 /// is what you are actually judging the colours against.
-fn themes(buf: &mut Buffer, area: Rect, app: &App) {
+fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let all = crate::theme::Theme::all();
     let m = centered(area, 60, (all.len() as u16 * 2 + 5).min(area.height - 2));
     frame(buf, m, theme::cyan());
@@ -1678,6 +1727,19 @@ fn themes(buf: &mut Buffer, area: Rect, app: &App) {
         base.fg(theme::dimmer()),
     );
     rule(buf, m, m.y + 2, theme::border());
+    app.hits.push(Region::plain(Target::Modal, m));
+    app.hits.push(Region::rows(
+        Target::Modal,
+        Rect {
+            x: m.x + 1,
+            y: m.y + 3,
+            width: m.width - 2,
+            height: m.bottom().saturating_sub(m.y + 3),
+        },
+        2,
+        0,
+        all.len(),
+    ));
 
     for (i, t) in all.iter().enumerate() {
         let y = m.y + 3 + i as u16 * 2;
@@ -2131,6 +2193,68 @@ mod layout_tests {
             seen.iter().any(|(_, c)| *c == theme::dimmer()),
             "a zero should stay quiet rather than shout its colour: {seen:?}"
         );
+    }
+
+    #[test]
+    fn a_frame_records_what_a_click_could_land_on() {
+        use super::super::hit::Target;
+        let mut a = app();
+        let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+
+        let targets: Vec<Target> = a.hits.iter().map(|r| r.target).collect();
+        assert!(
+            targets
+                .iter()
+                .any(|t| matches!(t, Target::Pane(Pane::Tree))),
+            "{targets:?}"
+        );
+        assert!(
+            targets
+                .iter()
+                .any(|t| matches!(t, Target::Pane(Pane::Diff))),
+            "{targets:?}"
+        );
+
+        // The diff's rows carry a length, or a click could not tell which
+        // line it hit.
+        let rows = a
+            .hits
+            .iter()
+            .find(|r| matches!(r.target, Target::Pane(Pane::Diff)) && r.len > 0)
+            .expect("the diff should offer clickable rows");
+        assert_eq!(rows.len, a.diff_rows().len());
+    }
+
+    #[test]
+    fn the_regions_are_this_frame_and_not_the_last_one() {
+        // Stale geometry is a click landing on what used to be there.
+        let mut a = app();
+        let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let first = a.hits.len();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        assert_eq!(a.hits.len(), first, "they accumulated instead of clearing");
+    }
+
+    #[test]
+    fn clicking_a_diff_row_puts_the_cursor_on_it_but_not_on_a_header() {
+        let mut a = app();
+        let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+
+        let header = a
+            .diff_rows()
+            .iter()
+            .position(|r| !r.kind.is_code())
+            .expect("the fixture opens on a hunk header");
+        let code = super::super::app::first_code(a.diff_rows(), 0);
+
+        a.cursor = code;
+        a.click_row(header);
+        assert_eq!(a.cursor, code, "a header is a coordinate, not a line");
+        a.click_row(code);
+        assert_eq!(a.cursor, code);
     }
 
     #[test]

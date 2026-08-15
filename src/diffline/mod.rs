@@ -9,9 +9,11 @@
 
 pub mod app;
 pub mod git;
+pub mod hit;
 pub mod input;
 pub mod keys;
 pub mod model;
+pub mod mouse;
 pub mod service;
 pub mod ui;
 pub mod vcs;

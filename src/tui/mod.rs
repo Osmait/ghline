@@ -11,6 +11,8 @@
 //! `frame` and `rule` were written a second time in diffline and drifted, one
 //! copy picking up a `saturating_sub` that the other never got.
 
+pub mod hit;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};

@@ -231,6 +231,10 @@ pub struct App {
     /// and the `z` commands are about the window, so they have to know how
     /// big it is, and only the render does.
     pub view_height: usize,
+    /// Where the last frame put things. Rebuilt every frame and consulted
+    /// newest-first, which is what makes a modal shadow the panes under it
+    /// without anything having to say so.
+    pub hits: Vec<super::hit::Region>,
 }
 
 impl App {
@@ -284,6 +288,7 @@ impl App {
             count: None,
             last_search: String::new(),
             view_height: 20,
+            hits: Vec::new(),
         }
     }
 

@@ -8,7 +8,9 @@
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -98,7 +100,8 @@ fn main() -> io::Result<()> {
         return headless(&mut app, &keys, w, h);
     }
 
-    let mut term = TerminalGuard::enter()?;
+    let mouse = !args.iter().any(|a| a == "--no-mouse");
+    let mut term = TerminalGuard::enter(mouse)?;
     let res = run(&mut term, &mut app);
     drop(term);
 
@@ -112,6 +115,7 @@ fn usage() {
     println!("diffline — review a diff, and hand notes to a coding agent");
     println!();
     println!("  diffline [path]     the repository to read, default the current directory");
+    println!("  --no-mouse          leave the terminal's own click-to-select alone");
     println!("  --version           print the version and exit");
     println!();
     println!("  [ ]   working tree · this branch · the last commit");
@@ -127,11 +131,17 @@ struct TerminalGuard {
 }
 
 impl TerminalGuard {
-    fn enter() -> io::Result<Self> {
+    fn enter(mouse: bool) -> io::Result<Self> {
         enable_raw_mode()?;
         if let Err(e) = execute!(io::stdout(), EnterAlternateScreen) {
             let _ = disable_raw_mode();
             return Err(e);
+        }
+        // Capturing the mouse takes the terminal's own click-to-select with
+        // it, so anyone who copies text out of here more than they click
+        // needs a way to say no.
+        if mouse {
+            let _ = execute!(io::stdout(), EnableMouseCapture);
         }
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -156,6 +166,7 @@ impl Drop for TerminalGuard {
 /// nobody to return an error to.
 fn restore() {
     let _ = disable_raw_mode();
+    let _ = execute!(io::stdout(), DisableMouseCapture);
     let _ = execute!(io::stdout(), LeaveAlternateScreen);
 }
 
@@ -181,11 +192,15 @@ fn run(term: &mut TerminalGuard, app: &mut App) -> io::Result<()> {
             })
             .max(Duration::from_millis(16));
 
-        if event::poll(timeout)?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            app.on_key(key);
+        if event::poll(timeout)? {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
+                // Motion arrives whether or not anything is pressed and there
+                // is nothing here that follows a pointer, so it is dropped
+                // before it can cost a frame.
+                Event::Mouse(m) if m.kind != MouseEventKind::Moved => app.on_mouse(m),
+                _ => {}
+            }
         }
 
         while let Some(res) = app.poll() {

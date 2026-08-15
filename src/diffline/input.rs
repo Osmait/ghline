@@ -63,6 +63,29 @@ impl App {
         self.pane = panes[j];
     }
 
+    /// Shows or hides the review queue. The mouse's way in, since the tab
+    /// that says how many are queued is also the thing you click to open it.
+    pub fn toggle_queue_pane(&mut self) {
+        self.toggle_pane(Pane::Queue);
+    }
+
+    /// Takes whatever a modal has highlighted, as `enter` would.
+    pub fn accept_modal(&mut self) {
+        if let Some(m) = self.modal {
+            self.accept(m);
+        }
+    }
+
+    /// Puts the cursor on a row a click landed on, if it is one that can hold
+    /// one — a hunk header is a coordinate, not a line.
+    pub fn click_row(&mut self, i: usize) {
+        let rows = self.diff_rows();
+        if rows.get(i).is_some_and(|r| r.kind.is_code()) {
+            self.cursor = i;
+            self.anchor = None;
+        }
+    }
+
     /// Opens or closes a side pane.
     ///
     /// Opening moves focus into it, because that is what asking for it meant.
