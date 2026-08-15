@@ -9,6 +9,7 @@ use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
 use crate::theme;
+use crate::tui::diff::{Pair, Side, pair};
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
 const FILES_W: u16 = 38;
@@ -358,7 +359,7 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, rows: &[DiffRow
         let y = area.y + row as u16;
         let i = scroll + row;
         if split {
-            draw_split_row(buf, area, y, &pairs[i]);
+            draw_split_row(buf, area, y, &pairs[i], rows);
         } else {
             draw_unified_row(buf, area, y, &rows[i]);
         }
@@ -401,7 +402,12 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, r: &DiffRow) {
     );
 }
 
-fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
+/// One side-by-side line.
+///
+/// Reads its cells out of `rows` by index rather than being handed copies of
+/// them: the fold works in indices now, and cloning two strings per row per
+/// frame to hand them here was paying for the convenience twice.
+fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, rows: &[DiffRow]) {
     let half = area.width / 2;
     let left = Rect {
         x: area.x,
@@ -416,127 +422,72 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &SplitPair) {
         height: 1,
     };
 
-    if let Some(hdr) = &p.hdr {
+    if let Some(hdr) = p.header.and_then(|i| rows.get(i)) {
         fill(buf, left, theme::tab_active_bg());
         fill(buf, right, theme::tab_active_bg());
         let s = Style::default()
             .bg(theme::tab_active_bg())
             .fg(theme::purple());
-        put_trunc(buf, area.x + 2, y, area.right(), hdr, s);
+        put_trunc(buf, area.x + 2, y, area.right(), &hdr.text, s);
         return;
     }
 
-    let side = |rect: Rect, cell: &Option<Cell>, buf: &mut Buffer| {
-        let (bg, fg, num, text) = match cell {
-            Some(c) => (
-                row_bg(c.kind),
-                row_fg(c.kind),
-                c.num.clone(),
-                c.text.clone(),
-            ),
+    // Each side shows its own file's number: a context line below an
+    // insertion is line 5 on the left and 6 on the right.
+    let side = |rect: Rect, at: Option<usize>, old: bool, buf: &mut Buffer| {
+        let Some(r) = at.and_then(|i| rows.get(i)) else {
             // the gap of an unbalanced pair gets a duller grey
-            None => (
-                theme::diff_void_bg(),
-                theme::dimmer(),
-                String::new(),
-                String::new(),
-            ),
+            fill(buf, rect, theme::diff_void_bg());
+            return;
         };
+        let bg = row_bg(r.kind);
         fill(buf, rect, bg);
         let base = Style::default().bg(bg);
-        put_right(buf, rect.x + 5, y, &num, base.fg(theme::gutter()));
-        put_trunc(buf, rect.x + 6, y, rect.right(), &text, base.fg(fg));
+        let num = if old { &r.lo } else { &r.ln };
+        put_right(buf, rect.x + 5, y, num, base.fg(theme::gutter()));
+        put_trunc(
+            buf,
+            rect.x + 6,
+            y,
+            rect.right(),
+            &r.text,
+            base.fg(row_fg(r.kind)),
+        );
     };
 
-    side(left, &p.left, buf);
-    side(right, &p.right, buf);
+    side(left, p.left, true, buf);
+    side(right, p.right, false, buf);
     // separator between the two halves
+    let sep_bg = p
+        .right
+        .and_then(|i| rows.get(i))
+        .map_or(DiffKind::Ctx, |r| r.kind);
     put(
         buf,
         right.x,
         y,
         right.x + 1,
         "│",
-        Style::default()
-            .bg(row_bg(p.right.as_ref().map_or(DiffKind::Ctx, |c| c.kind)))
-            .fg(theme::border_soft()),
+        Style::default().bg(row_bg(sep_bg)).fg(theme::border_soft()),
     );
 }
 
-struct Cell {
-    kind: DiffKind,
-    num: String,
-    text: String,
-}
-
-struct SplitPair {
-    hdr: Option<String>,
-    left: Option<Cell>,
-    right: Option<Cell>,
-}
-
-/// Pairs deletions with additions for split mode, exactly like the design's
-/// `splitRows()`.
-fn split_rows(rows: &[DiffRow]) -> Vec<SplitPair> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < rows.len() {
-        let r = &rows[i];
-        match r.kind {
-            DiffKind::Hdr => {
-                out.push(SplitPair {
-                    hdr: Some(r.text.clone()),
-                    left: None,
-                    right: None,
-                });
-                i += 1;
-            }
-            DiffKind::Ctx => {
-                out.push(SplitPair {
-                    hdr: None,
-                    left: Some(Cell {
-                        kind: r.kind,
-                        num: r.lo.clone(),
-                        text: r.text.clone(),
-                    }),
-                    right: Some(Cell {
-                        kind: r.kind,
-                        num: r.ln.clone(),
-                        text: r.text.clone(),
-                    }),
-                });
-                i += 1;
-            }
-            _ => {
-                let start = i;
-                while i < rows.len() && rows[i].kind == DiffKind::Del {
-                    i += 1;
-                }
-                let dels = &rows[start..i];
-                let astart = i;
-                while i < rows.len() && rows[i].kind == DiffKind::Add {
-                    i += 1;
-                }
-                let adds = &rows[astart..i];
-                for k in 0..dels.len().max(adds.len()) {
-                    out.push(SplitPair {
-                        hdr: None,
-                        left: dels.get(k).map(|d| Cell {
-                            kind: d.kind,
-                            num: d.lo.clone(),
-                            text: d.text.clone(),
-                        }),
-                        right: adds.get(k).map(|a| Cell {
-                            kind: a.kind,
-                            num: a.ln.clone(),
-                            text: a.text.clone(),
-                        }),
-                    });
-                }
-            }
-        }
-    }
-    out
+/// Folds the rows into side-by-side lines.
+///
+/// The fold itself is `tui::diff`, shared with the other program — it was
+/// written out here and there, the same algorithm twice. This is only the
+/// seam: what our kinds are called on the way in.
+fn split_rows(rows: &[DiffRow]) -> Vec<Pair> {
+    let sides: Vec<Side> = rows
+        .iter()
+        .map(|r| match r.kind {
+            DiffKind::Hdr => Side::Header,
+            DiffKind::Ctx => Side::Context,
+            DiffKind::Del => Side::Deleted,
+            DiffKind::Add => Side::Added,
+        })
+        .collect();
+    pair(&sides)
 }
 
 #[cfg(test)]
@@ -556,90 +507,70 @@ mod tests {
     }
 
     #[test]
-    fn context_shows_on_both_sides() {
-        let pairs = split_rows(&rows(&[(DiffKind::Ctx, "same")]));
-        assert_eq!(pairs.len(), 1);
-        assert!(pairs[0].left.is_some() && pairs[0].right.is_some());
-    }
-
-    #[test]
-    fn a_header_spans_the_whole_row() {
-        let pairs = split_rows(&rows(&[(DiffKind::Hdr, "@@ -1 +1 @@")]));
-        assert_eq!(pairs.len(), 1);
-        assert!(pairs[0].hdr.is_some());
-        assert!(pairs[0].left.is_none() && pairs[0].right.is_none());
-    }
-
-    #[test]
-    fn equal_runs_pair_up_line_by_line() {
+    fn our_kinds_arrive_at_the_fold_as_the_right_sides() {
+        // The fold is `tui::diff`, tested there. This is the seam: that a
+        // deletion goes left, an addition right, and a header alone.
         let pairs = split_rows(&rows(&[
-            (DiffKind::Del, "-a"),
-            (DiffKind::Del, "-b"),
-            (DiffKind::Add, "+a"),
-            (DiffKind::Add, "+b"),
+            (DiffKind::Hdr, "@@ -1 +1 @@"),
+            (DiffKind::Del, "-gone"),
+            (DiffKind::Add, "+new"),
+            (DiffKind::Ctx, " same"),
         ]));
-        assert_eq!(pairs.len(), 2);
-        assert!(pairs.iter().all(|p| p.left.is_some() && p.right.is_some()));
+        assert_eq!(pairs.len(), 3, "header, edit, context");
+        assert_eq!(pairs[0].header, Some(0));
+        assert_eq!((pairs[1].left, pairs[1].right), (Some(1), Some(2)));
+        assert_eq!((pairs[2].left, pairs[2].right), (Some(3), Some(3)));
+    }
+
+    fn rendered(rows: &[DiffRow], split: bool, w: u16, h: u16) -> Vec<String> {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        let area = Rect::new(0, 0, w, h);
+        let mut buf = Buffer::empty(area);
+        let pairs = if split { split_rows(rows) } else { Vec::new() };
+        for row in 0..h.min(if split { pairs.len() } else { rows.len() } as u16) {
+            if split {
+                draw_split_row(&mut buf, area, row, &pairs[row as usize], rows);
+            } else {
+                draw_unified_row(&mut buf, area, row, &rows[row as usize]);
+            }
+        }
+        (0..h)
+            .map(|y| {
+                (0..w)
+                    .filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string()))
+                    .collect::<String>()
+            })
+            .collect()
     }
 
     #[test]
-    fn a_longer_side_leaves_gaps_on_the_other() {
-        // three additions against one deletion
-        let pairs = split_rows(&rows(&[
-            (DiffKind::Del, "-a"),
-            (DiffKind::Add, "+a"),
-            (DiffKind::Add, "+b"),
-            (DiffKind::Add, "+c"),
-        ]));
-        assert_eq!(pairs.len(), 3);
-        assert!(pairs[0].left.is_some());
-        assert!(pairs[1].left.is_none(), "the left side runs out");
-        assert!(pairs[2].left.is_none());
-        assert!(pairs.iter().all(|p| p.right.is_some()));
-    }
+    fn each_side_of_a_split_shows_its_own_file_number() {
+        // A context line below an insertion is line 5 on the left and 6 on
+        // the right. This is what the fold moving to indices had to preserve:
+        // it used to be handed two pre-made cells with a number each.
+        let mut src = rows(&[(DiffKind::Add, "+added"), (DiffKind::Ctx, " same")]);
+        src[1].lo = "5".into();
+        src[1].ln = "6".into();
 
-    #[test]
-    fn additions_with_no_deletions_are_all_on_the_right() {
-        let pairs = split_rows(&rows(&[(DiffKind::Add, "+new")]));
-        assert_eq!(pairs.len(), 1);
-        assert!(pairs[0].left.is_none());
-        assert!(pairs[0].right.is_some());
-    }
-
-    #[test]
-    fn deletions_with_no_additions_are_all_on_the_left() {
-        let pairs = split_rows(&rows(&[(DiffKind::Del, "-gone")]));
-        assert_eq!(pairs.len(), 1);
-        assert!(pairs[0].left.is_some());
-        assert!(pairs[0].right.is_none());
-    }
-
-    #[test]
-    fn nothing_in_nothing_out() {
-        assert!(split_rows(&[]).is_empty());
-    }
-
-    #[test]
-    fn every_change_survives_the_pairing() {
-        // whatever the shape, no line may be dropped
-        let src = rows(&[
-            (DiffKind::Hdr, "@@"),
-            (DiffKind::Ctx, " a"),
-            (DiffKind::Del, "-b"),
-            (DiffKind::Add, "+c"),
-            (DiffKind::Add, "+d"),
-            (DiffKind::Ctx, " e"),
-        ]);
-        let pairs = split_rows(&src);
-        let dels = pairs
+        let out = rendered(&src, true, 60, 2);
+        let ctx = out
             .iter()
-            .filter(|p| p.left.as_ref().is_some_and(|c| c.kind == DiffKind::Del))
-            .count();
-        let adds = pairs
-            .iter()
-            .filter(|p| p.right.as_ref().is_some_and(|c| c.kind == DiffKind::Add))
-            .count();
-        assert_eq!(dels, 1);
-        assert_eq!(adds, 2);
+            .find(|l| l.matches("same").count() == 2)
+            .unwrap_or_else(|| panic!("context should be on both sides:\n{out:#?}"));
+        // split on the separator rather than on a byte count: `│` is three
+        // bytes, and slicing a string in the middle of one is a panic
+        let (l, r) = ctx.split_once('│').expect("the halves are divided");
+        assert!(l.contains('5'), "left carries the old number: {ctx:?}");
+        assert!(r.contains('6'), "right carries the new one: {ctx:?}");
+    }
+
+    #[test]
+    fn the_blank_half_of_an_uneven_edit_is_painted_rather_than_left_bare() {
+        // Nothing was there, and the duller ground is how that is said.
+        let src = rows(&[(DiffKind::Add, "+only")]);
+        let out = rendered(&src, true, 60, 1);
+        assert_eq!(out[0].matches("only").count(), 1, "one side only");
+        assert!(out[0].contains('│'), "and the separator still divides them");
     }
 }

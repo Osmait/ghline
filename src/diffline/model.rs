@@ -286,67 +286,22 @@ impl Comment {
     }
 }
 
-/// One line of a side-by-side view: what is on the left, what is on the
-/// right, or a header that spans both.
-///
-/// The fields are indices into the row list rather than rows, so that
-/// everything anchored to a row index — the cursor, the selection, the
-/// comment badges — keeps working without knowing this view exists.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub struct Pair {
-    pub left: Option<usize>,
-    pub right: Option<usize>,
-    pub header: Option<usize>,
-}
-
-/// Folds a unified diff into side-by-side lines.
-///
-/// A run of deletions followed by a run of additions is the shape of an edit,
-/// so the two runs are zipped: the first line removed sits beside the first
-/// line added. When the runs are uneven the surplus gets a blank opposite it,
-/// which is the honest answer — nothing was there.
-pub fn pair_rows(rows: &[Row]) -> Vec<Pair> {
-    let mut out = Vec::with_capacity(rows.len());
-    let mut i = 0;
-    while i < rows.len() {
-        match rows[i].kind {
-            Kind::Header => {
-                out.push(Pair {
-                    header: Some(i),
-                    ..Pair::default()
-                });
-                i += 1;
-            }
-            Kind::Context => {
-                out.push(Pair {
-                    left: Some(i),
-                    right: Some(i),
-                    ..Pair::default()
-                });
-                i += 1;
-            }
-            Kind::Deleted | Kind::Added => {
-                let del_from = i;
-                while i < rows.len() && rows[i].kind == Kind::Deleted {
-                    i += 1;
-                }
-                let add_from = i;
-                while i < rows.len() && rows[i].kind == Kind::Added {
-                    i += 1;
-                }
-                let dels = del_from..add_from;
-                let adds = add_from..i;
-                for k in 0..dels.len().max(adds.len()) {
-                    out.push(Pair {
-                        left: dels.clone().nth(k),
-                        right: adds.clone().nth(k),
-                        ..Pair::default()
-                    });
-                }
-            }
+impl Kind {
+    /// Which side of a diff this row belongs to, for the shared folding.
+    pub fn side(self) -> crate::tui::diff::Side {
+        match self {
+            Self::Header => crate::tui::diff::Side::Header,
+            Self::Context => crate::tui::diff::Side::Context,
+            Self::Deleted => crate::tui::diff::Side::Deleted,
+            Self::Added => crate::tui::diff::Side::Added,
         }
     }
-    out
+}
+
+/// Folds these rows into side-by-side lines.
+pub fn pair_rows(rows: &[Row]) -> Vec<crate::tui::diff::Pair> {
+    let sides: Vec<_> = rows.iter().map(|r| r.kind.side()).collect();
+    crate::tui::diff::pair(&sides)
 }
 
 #[cfg(test)]
@@ -488,114 +443,36 @@ mod tests {
 
     // --- pairing ---
 
-    fn rows_of(spec: &[Kind]) -> Vec<Row> {
-        let (mut o, mut n) = (0, 0);
-        spec.iter()
-            .map(|k| {
-                let (old, new) = match k {
-                    Kind::Header => (None, None),
-                    Kind::Deleted => {
-                        o += 1;
-                        (Some(o), None)
-                    }
-                    Kind::Added => {
-                        n += 1;
-                        (None, Some(n))
-                    }
-                    Kind::Context => {
-                        o += 1;
-                        n += 1;
-                        (Some(o), Some(n))
-                    }
-                };
-                Row {
-                    kind: *k,
-                    old,
-                    new,
-                    text: format!("{k:?}"),
-                }
-            })
-            .collect()
+    #[test]
+    fn every_kind_maps_to_the_side_it_belongs_on() {
+        // The folding itself is `tui::diff`, tested there against sides. This
+        // is the seam: that our kinds arrive at it as the right sides.
+        use crate::tui::diff::Side;
+        assert_eq!(Kind::Header.side(), Side::Header);
+        assert_eq!(Kind::Context.side(), Side::Context);
+        assert_eq!(Kind::Deleted.side(), Side::Deleted);
+        assert_eq!(Kind::Added.side(), Side::Added);
     }
 
     #[test]
-    fn an_edit_puts_what_went_beside_what_came() {
-        // two lines removed and two added is one edit, not four events
-        let rows = rows_of(&[Kind::Deleted, Kind::Deleted, Kind::Added, Kind::Added]);
+    fn pairing_real_rows_reads_the_kinds_off_them() {
+        let rows = vec![
+            Row {
+                kind: Kind::Deleted,
+                old: Some(1),
+                new: None,
+                text: "old".into(),
+            },
+            Row {
+                kind: Kind::Added,
+                old: None,
+                new: Some(1),
+                text: "new".into(),
+            },
+        ];
         let pairs = pair_rows(&rows);
-        assert_eq!(pairs.len(), 2);
-        assert_eq!(
-            pairs[0],
-            Pair {
-                left: Some(0),
-                right: Some(2),
-                header: None
-            }
-        );
-        assert_eq!(
-            pairs[1],
-            Pair {
-                left: Some(1),
-                right: Some(3),
-                header: None
-            }
-        );
-    }
-
-    #[test]
-    fn an_uneven_edit_leaves_the_short_side_blank() {
-        // one removed, three added: the two extra lines came from nowhere,
-        // and saying so is the point of the empty half
-        let rows = rows_of(&[Kind::Deleted, Kind::Added, Kind::Added, Kind::Added]);
-        let pairs = pair_rows(&rows);
-        assert_eq!(pairs.len(), 3);
-        assert_eq!(pairs[0].left, Some(0));
-        assert_eq!(pairs[1].left, None);
-        assert_eq!(pairs[2].left, None);
-        assert_eq!(
-            pairs.iter().filter_map(|p| p.right).collect::<Vec<_>>(),
-            vec![1, 2, 3]
-        );
-    }
-
-    #[test]
-    fn context_stands_on_both_sides_and_a_header_on_neither() {
-        let rows = rows_of(&[Kind::Header, Kind::Context]);
-        let pairs = pair_rows(&rows);
-        assert_eq!(pairs[0].header, Some(0));
-        assert_eq!((pairs[0].left, pairs[0].right), (None, None));
-        assert_eq!((pairs[1].left, pairs[1].right), (Some(1), Some(1)));
-    }
-
-    #[test]
-    fn every_row_appears_exactly_once() {
-        // The cursor is a row index. A row that the split view never draws is
-        // a row you can select and not see; one drawn twice is a line you can
-        // comment on from two places and queue twice.
-        let rows = rows_of(&[
-            Kind::Header,
-            Kind::Context,
-            Kind::Deleted,
-            Kind::Added,
-            Kind::Added,
-            Kind::Context,
-            Kind::Deleted,
-        ]);
-        let mut seen = vec![0usize; rows.len()];
-        for p in pair_rows(&rows) {
-            for i in [p.left, p.right, p.header].into_iter().flatten() {
-                seen[i] += 1;
-            }
-        }
-        // context counts twice on purpose: it is the same line on both sides
-        for (i, r) in rows.iter().enumerate() {
-            let want = if r.kind == Kind::Context { 2 } else { 1 };
-            assert_eq!(
-                seen[i], want,
-                "row {i} ({:?}) appeared {} times",
-                r.kind, seen[i]
-            );
-        }
+        assert_eq!(pairs.len(), 1, "one edit, not two events");
+        assert_eq!((pairs[0].left, pairs[0].right), (Some(0), Some(1)));
     }
 
     // --- comments ---

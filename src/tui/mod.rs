@@ -11,6 +11,7 @@
 //! `frame` and `rule` were written a second time in diffline and drifted, one
 //! copy picking up a `saturating_sub` that the other never got.
 
+pub mod diff;
 pub mod hit;
 
 use ratatui::buffer::Buffer;
