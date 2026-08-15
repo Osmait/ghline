@@ -8,7 +8,7 @@ use unicode_width::UnicodeWidthStr;
 use super::parts::{count_style, put_right_parts};
 use crate::diffline::app::App;
 use crate::diffline::hit::{Region, Target};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, put, put_trunc};
 
 pub(super) fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {

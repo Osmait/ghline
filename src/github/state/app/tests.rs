@@ -5,7 +5,7 @@ use super::input::strip_ws_only;
 use super::*;
 use crate::github::actions::Prompt;
 use crate::github::data::Status;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+use crate::shared::key::{Key, Press};
 
 fn demo() -> App {
     App::new(Source::Demo)
@@ -20,17 +20,12 @@ fn demo_with_sidebar() -> App {
     app
 }
 
-fn press(app: &mut App, code: KeyCode) {
-    app.on_key(KeyEvent {
-        code,
-        modifiers: KeyModifiers::NONE,
-        kind: KeyEventKind::Press,
-        state: KeyEventState::NONE,
-    });
+fn press(app: &mut App, key: Key) {
+    app.on_key(Press::new(key));
 }
 
 fn ch(app: &mut App, c: char) {
-    press(app, KeyCode::Char(c));
+    press(app, Key::Char(c));
 }
 
 // --- panes and focus ---
@@ -41,12 +36,12 @@ fn each_view_exposes_its_own_panes() {
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::List]);
 
     // a PR has a checks pane; an issue does not
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body, Pane::Checks]);
 
     let mut app = demo_with_sidebar();
     ch(&mut app, '1'); // issues tab
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body]);
 }
 
@@ -65,15 +60,15 @@ fn h_and_l_stop_at_the_edges() {
 #[test]
 fn tab_cycles_all_the_way_around() {
     let mut app = demo_with_sidebar();
-    press(&mut app, KeyCode::Enter); // PR detail: three panes
+    press(&mut app, Key::Enter); // PR detail: three panes
     app.pane = Pane::Repos;
-    press(&mut app, KeyCode::Tab);
+    press(&mut app, Key::Tab);
     assert_eq!(app.pane, Pane::Body);
-    press(&mut app, KeyCode::Tab);
+    press(&mut app, Key::Tab);
     assert_eq!(app.pane, Pane::Checks);
-    press(&mut app, KeyCode::Tab);
+    press(&mut app, Key::Tab);
     assert_eq!(app.pane, Pane::Repos, "tab wraps around");
-    press(&mut app, KeyCode::BackTab);
+    press(&mut app, Key::BackTab);
     assert_eq!(app.pane, Pane::Checks, "shift-tab wraps the other way");
 }
 
@@ -82,25 +77,25 @@ fn enter_and_esc_walk_the_same_path_in_reverse() {
     let mut app = demo_with_sidebar();
     app.pane = Pane::Repos;
 
-    press(&mut app, KeyCode::Enter); // repos -> list
+    press(&mut app, Key::Enter); // repos -> list
     assert!(app.view == View::List && app.pane == Pane::List);
-    press(&mut app, KeyCode::Enter); // list -> detail, landing on the body
+    press(&mut app, Key::Enter); // list -> detail, landing on the body
     assert!(app.view == View::Detail && app.pane == Pane::Body);
     ch(&mut app, 'l'); // body -> checks
-    press(&mut app, KeyCode::Enter); // checks -> logs
+    press(&mut app, Key::Enter); // checks -> logs
     assert!(app.view == View::Logs && app.pane == Pane::Tree);
-    press(&mut app, KeyCode::Enter); // tree -> log output
+    press(&mut app, Key::Enter); // tree -> log output
     assert_eq!(app.pane, Pane::Log);
 
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(app.view == View::Logs && app.pane == Pane::Tree);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(app.view == View::Detail && app.pane == Pane::Checks);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(app.view == View::List && app.pane == Pane::List);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert_eq!(app.pane, Pane::Repos);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert_eq!(app.pane, Pane::Repos, "there is nothing left to go back to");
 }
 
@@ -108,7 +103,7 @@ fn enter_and_esc_walk_the_same_path_in_reverse() {
 fn the_focused_pane_is_always_one_the_view_has() {
     let mut app = demo();
     // land on the checks pane, then jump to the issues tab, which has none
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     ch(&mut app, 'l');
     assert_eq!(app.pane, Pane::Checks);
     ch(&mut app, '1');
@@ -392,11 +387,11 @@ fn a_slash_filter_updates_as_you_type_and_esc_keeps_it() {
     assert_eq!(app.filter, "clamp");
     assert_eq!(app.visible().len(), 1);
 
-    press(&mut app, KeyCode::Backspace);
+    press(&mut app, Key::Backspace);
     assert_eq!(app.filter, "clam");
 
     // esc closes the prompt but leaves the filter applied, as in the design
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(app.cmd.is_none());
     assert_eq!(app.filter, "clam");
 }
@@ -408,7 +403,7 @@ fn unknown_commands_are_ignored_without_leaving_the_prompt_open() {
     for c in "nonsense".chars() {
         ch(&mut app, c);
     }
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     assert!(app.cmd.is_none());
     assert!(app.cmd_text.is_empty());
     assert_eq!(app.view, View::List);
@@ -422,7 +417,7 @@ fn commands_reach_every_view() {
         for c in cmd.chars() {
             ch(&mut app, c);
         }
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, Key::Enter);
         assert_eq!(app.view, view, "`:{cmd}` should switch view");
     }
 }
@@ -486,13 +481,13 @@ fn a_pending_body_draws_a_skeleton_but_a_loaded_one_does_not() {
     // the demo fixture already carries a body, so a pending state must not
     // paint over content that is already there
     let mut loaded = demo();
-    press(&mut loaded, KeyCode::Enter);
+    press(&mut loaded, Key::Enter);
     loaded.hold_loading(0);
     let with_body = blocks_on_screen(&mut loaded);
 
     // with the body emptied, the same pending state should show its shape
     let mut empty = demo();
-    press(&mut empty, KeyCode::Enter);
+    press(&mut empty, Key::Enter);
     let key = (empty.repo_key(), empty.tab);
     if let Some(items) = empty.lists.get_mut(&key) {
         for it in items {
@@ -513,8 +508,8 @@ fn a_pending_body_draws_a_skeleton_but_a_loaded_one_does_not() {
 
 #[test]
 fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
-    let _g = crate::shared::theme::tests::LOCK.lock();
-    use crate::shared::theme::{Theme, current, set};
+    let _g = crate::tui::theme::tests::LOCK.lock();
+    use crate::tui::theme::{Theme, current, set};
 
     set(Theme::Design);
     let mut app = demo();
@@ -525,7 +520,7 @@ fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
     ch(&mut app, 'j');
     assert_eq!(current(), Theme::Mocha, "moving applies it straight away");
 
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(!app.themes_open);
     assert_eq!(current(), Theme::Design, "leaving puts back what was on");
     set(Theme::Design);
@@ -533,14 +528,14 @@ fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
 
 #[test]
 fn enter_keeps_the_previewed_theme() {
-    let _g = crate::shared::theme::tests::LOCK.lock();
-    use crate::shared::theme::{Theme, current, set};
+    let _g = crate::tui::theme::tests::LOCK.lock();
+    use crate::tui::theme::{Theme, current, set};
 
     set(Theme::Design);
     let mut app = demo();
     ch(&mut app, 't');
     ch(&mut app, 'j');
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     assert!(!app.themes_open);
     assert_eq!(current(), Theme::Mocha);
     set(Theme::Design);
@@ -548,8 +543,8 @@ fn enter_keeps_the_previewed_theme() {
 
 #[test]
 fn the_picker_does_not_run_off_either_end() {
-    let _g = crate::shared::theme::tests::LOCK.lock();
-    use crate::shared::theme::{Theme, set};
+    let _g = crate::tui::theme::tests::LOCK.lock();
+    use crate::tui::theme::{Theme, set};
 
     set(Theme::Design);
     let mut app = demo();
@@ -562,7 +557,7 @@ fn the_picker_does_not_run_off_either_end() {
         ch(&mut app, 'k');
     }
     assert_eq!(app.theme_sel, 0);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     set(Theme::Design);
 }
 
@@ -575,8 +570,8 @@ fn the_repository_pane_starts_hidden() {
 
 #[test]
 fn the_picker_swallows_the_keys_beneath_it() {
-    let _g = crate::shared::theme::tests::LOCK.lock();
-    use crate::shared::theme::{Theme, set};
+    let _g = crate::tui::theme::tests::LOCK.lock();
+    use crate::tui::theme::{Theme, set};
 
     set(Theme::Design);
     let mut app = demo();
@@ -584,7 +579,7 @@ fn the_picker_swallows_the_keys_beneath_it() {
     ch(&mut app, 't');
     ch(&mut app, 'j'); // moves the theme, not the list
     assert_eq!(app.item, before);
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     set(Theme::Design);
 }
 
@@ -649,9 +644,9 @@ fn the_logs_and_diff_views_never_show_it() {
     use ratatui::backend::TestBackend;
 
     let mut app = demo();
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     ch(&mut app, 'l');
-    press(&mut app, KeyCode::Enter); // logs
+    press(&mut app, Key::Enter); // logs
     let mut term = Terminal::new(TestBackend::new(150, 40)).unwrap();
     term.draw(|f| crate::github::ui::draw(f, &mut app)).unwrap();
     assert!(!app.sidebar_shown);
@@ -664,7 +659,7 @@ fn p_opens_the_finder_on_repositories() {
     let mut app = demo();
     ch(&mut app, 'p');
     assert!(app.finder_open);
-    assert_eq!(app.finder_source, crate::github::finder::Source::Repos);
+    assert_eq!(app.finder_source, crate::github::data::Source::Repos);
     assert_eq!(
         app.finder_len(),
         app.repos().len(),
@@ -706,7 +701,7 @@ fn enter_on_a_repository_goes_there() {
     for c in target.chars().take(4) {
         ch(&mut app, c);
     }
-    press(&mut app, KeyCode::Enter);
+    press(&mut app, Key::Enter);
     assert!(!app.finder_open);
     assert_eq!(app.repo_name(), target);
     assert_eq!(app.view, View::List);
@@ -717,15 +712,15 @@ fn tab_walks_the_sources_and_keeps_the_query() {
     let mut app = demo();
     ch(&mut app, 'p');
     ch(&mut app, 'x');
-    press(&mut app, KeyCode::Tab);
-    assert_eq!(app.finder_source, crate::github::finder::Source::Issues);
+    press(&mut app, Key::Tab);
+    assert_eq!(app.finder_source, crate::github::data::Source::Issues);
     assert_eq!(app.finder_query, "x", "the same words, somewhere else");
     for _ in 0..3 {
-        press(&mut app, KeyCode::Tab);
+        press(&mut app, Key::Tab);
     }
     assert_eq!(
         app.finder_source,
-        crate::github::finder::Source::Repos,
+        crate::github::data::Source::Repos,
         "it wraps"
     );
 }
@@ -735,9 +730,9 @@ fn the_selection_wraps_and_never_leaves_the_list() {
     let mut app = demo();
     ch(&mut app, 'p');
     let len = app.finder_len();
-    press(&mut app, KeyCode::Up);
+    press(&mut app, Key::Up);
     assert_eq!(app.finder_sel, len - 1, "up from the top lands at the end");
-    press(&mut app, KeyCode::Down);
+    press(&mut app, Key::Down);
     assert_eq!(app.finder_sel, 0);
 }
 
@@ -749,7 +744,7 @@ fn the_finder_swallows_the_keys_beneath_it() {
     ch(&mut app, 'j'); // a letter of the query, not a movement
     assert_eq!(app.item, before);
     assert_eq!(app.finder_query, "j");
-    press(&mut app, KeyCode::Esc);
+    press(&mut app, Key::Esc);
     assert!(!app.finder_open);
 }
 
@@ -759,7 +754,7 @@ fn a_commit_search_waits_for_something_to_search_for() {
     // query must not be sent at all
     let mut app = App::new(Source::Live);
     app.open_finder();
-    app.finder_source = crate::github::finder::Source::Commits;
+    app.finder_source = crate::github::data::Source::Commits;
     app.finder_sent = "\u{0}".into();
     app.finder_tick();
     assert!(
@@ -790,7 +785,7 @@ fn brackets_step_through_the_repositories_and_wrap() {
 #[test]
 fn stepping_to_another_repository_resets_the_view() {
     let mut app = demo();
-    press(&mut app, KeyCode::Enter); // into a detail
+    press(&mut app, Key::Enter); // into a detail
     app.item = 2;
     ch(&mut app, ']');
     assert_eq!(app.view, View::List);
@@ -806,7 +801,7 @@ fn stepping_to_another_repository_resets_the_view() {
 mod mouse {
     use super::*;
     use crate::github::app::hit::{Region, Target};
-    use crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+    use crate::shared::key::{Button, Motion, Mouse};
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
     use std::time::{Duration, Instant};
@@ -836,17 +831,12 @@ mod mouse {
             .unwrap_or_else(|| panic!("the last frame drew no {target:?}"))
     }
 
-    fn event(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
-        MouseEvent {
-            kind,
-            column: col,
-            row,
-            modifiers: KeyModifiers::NONE,
-        }
+    fn event(what: Motion, col: u16, row: u16) -> Mouse {
+        Mouse { col, row, what }
     }
 
     fn click_at(app: &mut App, col: u16, row: u16) {
-        app.on_mouse(event(MouseEventKind::Down(MouseButton::Left), col, row));
+        app.on_mouse(event(Motion::Down(Button::Left), col, row));
     }
 
     /// Clicks the nth row of a target, wherever the renderer put it.
@@ -856,12 +846,12 @@ mod mouse {
     }
 
     fn wheel(app: &mut App, col: u16, row: u16, down: bool) {
-        let kind = if down {
-            MouseEventKind::ScrollDown
+        let what = if down {
+            Motion::ScrollDown
         } else {
-            MouseEventKind::ScrollUp
+            Motion::ScrollUp
         };
-        app.on_mouse(event(kind, col, row));
+        app.on_mouse(event(what, col, row));
     }
 
     // --- focus and selection ---
@@ -949,7 +939,7 @@ mod mouse {
         let (col, row) = (r.area.x + 1, r.area.y);
 
         let now = Instant::now();
-        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        let down = |c, rw| event(Motion::Down(Button::Left), c, rw);
         app.on_mouse_at(down(col, row), now);
         assert_eq!(app.view, View::List, "one click only selects");
 
@@ -965,7 +955,7 @@ mod mouse {
         let (col, row) = (r.area.x + 1, r.area.y);
 
         let now = Instant::now();
-        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        let down = |c, rw| event(Motion::Down(Button::Left), c, rw);
         app.on_mouse_at(down(col, row), now);
         app.on_mouse_at(down(col, row), now + Duration::from_secs(2));
         assert_eq!(app.view, View::List);
@@ -980,7 +970,7 @@ mod mouse {
         }
         let r = region(&app, Target::Pane(Pane::List));
         let now = Instant::now();
-        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        let down = |c, rw| event(Motion::Down(Button::Left), c, rw);
 
         app.on_mouse_at(down(r.area.x + 1, r.area.y), now);
         app.on_mouse_at(
@@ -998,7 +988,7 @@ mod mouse {
         let r = region(&app, Target::Pane(Pane::List));
         let (col, row) = (r.area.x + 1, r.area.y);
         let now = Instant::now();
-        let down = |c, rw| event(MouseEventKind::Down(MouseButton::Left), c, rw);
+        let down = |c, rw| event(Motion::Down(Button::Left), c, rw);
 
         app.on_mouse_at(down(col, row), now);
         app.on_mouse_at(down(col, row), now + Duration::from_millis(100));
@@ -1124,12 +1114,12 @@ mod mouse {
         click_row(&mut app, Target::Themes, 1);
         assert_eq!(app.theme_sel, 1);
         assert_eq!(
-            crate::shared::theme::current(),
-            crate::shared::theme::Theme::all()[1]
+            crate::tui::theme::current(),
+            crate::tui::theme::Theme::all()[1]
         );
 
         // put it back: the theme is process-wide state
-        crate::shared::theme::set(app.theme_before);
+        crate::tui::theme::set(app.theme_before);
     }
 
     // --- what the mouse must not do ---
@@ -1873,9 +1863,9 @@ mod explorer {
         app.pane = Pane::FileTree;
         app.fs_sel = 1; // src
 
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, Key::Enter);
         assert!(app.fs_open.contains("src"));
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, Key::Enter);
         assert!(!app.fs_open.contains("src"), "the same key closes it");
     }
 
@@ -1885,7 +1875,7 @@ mod explorer {
         app.pane = Pane::FileTree;
         app.fs_sel = 0; // README.md
 
-        press(&mut app, KeyCode::Enter);
+        press(&mut app, Key::Enter);
         assert_eq!(app.pane, Pane::FileView);
         assert!(app.fs_open.is_empty(), "and opened no directory");
     }
@@ -2147,14 +2137,14 @@ mod editing {
         app.file_text.insert(key.clone(), "a\nb\nc\n".into());
         app.file_state.insert(key, Load::Ready);
 
-        press(&mut app, KeyCode::Char('j'));
+        press(&mut app, Key::Char('j'));
         assert_eq!(app.file_sel, 1);
         for _ in 0..10 {
-            press(&mut app, KeyCode::Char('j'));
+            press(&mut app, Key::Char('j'));
         }
         assert_eq!(app.file_sel, 2, "three lines, so index two is the last");
         for _ in 0..10 {
-            press(&mut app, KeyCode::Char('k'));
+            press(&mut app, Key::Char('k'));
         }
         assert_eq!(app.file_sel, 0);
     }
@@ -2270,12 +2260,7 @@ mod residue {
         // `^l` therefore only raises a flag; the loop does the work.
         let mut app = demo();
         assert!(!app.wants_redraw);
-        app.on_key(KeyEvent {
-            code: KeyCode::Char('l'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        });
+        app.on_key(Press::ctrl(Key::Char('l')));
         assert!(app.wants_redraw);
     }
 
@@ -2283,7 +2268,7 @@ mod residue {
     fn a_plain_l_still_moves_right_rather_than_repainting() {
         let mut app = demo_with_sidebar();
         app.pane = Pane::Repos;
-        press(&mut app, KeyCode::Char('l'));
+        press(&mut app, Key::Char('l'));
         assert!(!app.wants_redraw);
         assert_ne!(app.pane, Pane::Repos, "the pane key is untouched");
     }
@@ -2342,7 +2327,7 @@ mod note {
 
     fn typed(app: &mut App, text: &str) {
         for c in text.chars() {
-            press(app, KeyCode::Char(c));
+            press(app, Key::Char(c));
         }
     }
 
@@ -2370,10 +2355,10 @@ mod note {
         let mut other = app.agents[0].clone();
         other.pane = "wB:p1".into();
         app.agents.push(other);
-        press(&mut app, KeyCode::Down);
+        press(&mut app, Key::Down);
         assert!(app.dispatch_sel > 0);
         assert!(app.dispatch_note.is_empty());
-        press(&mut app, KeyCode::Up);
+        press(&mut app, Key::Up);
         assert_eq!(app.dispatch_sel, 0);
     }
 
@@ -2381,7 +2366,7 @@ mod note {
     fn backspace_takes_a_character_back() {
         let mut app = open_picker();
         typed(&mut app, "abc");
-        press(&mut app, KeyCode::Backspace);
+        press(&mut app, Key::Backspace);
         assert_eq!(app.dispatch_note, "ab");
     }
 
@@ -2438,7 +2423,7 @@ mod note {
     #[test]
     fn escape_still_closes_the_picker_rather_than_typing() {
         let mut app = open_picker();
-        press(&mut app, KeyCode::Esc);
+        press(&mut app, Key::Esc);
         assert!(!app.dispatch_open);
     }
 }

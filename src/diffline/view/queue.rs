@@ -6,7 +6,7 @@ use ratatui::style::Style;
 
 use crate::diffline::app::{App, Pane};
 use crate::diffline::model::State;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{Section, fill, hline, put, put_right, put_trunc};
 
 pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {

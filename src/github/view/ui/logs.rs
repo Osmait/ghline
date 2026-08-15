@@ -8,7 +8,7 @@ use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, NodeKind, Pane};
 use crate::github::data::LogKind;
 use crate::github::data::Status;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{
     Section, fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap,
 };

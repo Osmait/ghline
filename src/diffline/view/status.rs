@@ -6,7 +6,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
 use crate::diffline::app::{App, Modal};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, put, put_right, put_trunc};
 
 pub(super) fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {

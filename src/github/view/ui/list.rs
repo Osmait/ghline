@@ -8,7 +8,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
 use crate::github::data::{Detail, Item, Kind, Status, TABS};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.

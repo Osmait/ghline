@@ -6,7 +6,7 @@ use ratatui::style::Style;
 
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {

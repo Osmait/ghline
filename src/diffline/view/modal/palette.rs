@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 
 use crate::diffline::app::App;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{Dialog, put_right, put_trunc};
 
 pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &App) {

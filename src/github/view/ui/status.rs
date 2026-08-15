@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use crate::github::actions::FlashKind;
 use crate::github::app::{App, Cmd, Pane, View};
 use crate::github::data::Kind;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{bold, fill, hline, put, put_right};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {

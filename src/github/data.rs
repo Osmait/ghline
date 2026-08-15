@@ -898,3 +898,50 @@ impl TreeEntry {
         out
     }
 }
+
+// --- what the finder looks through ---
+//
+// Here rather than with the finder because the worker takes one in a
+// request: which kind of thing a search is for is a fact about GitHub,
+// not about the modal that happens to ask.
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Source {
+    Repos,
+    Issues,
+    Prs,
+    Commits,
+}
+
+impl Source {
+    pub const ALL: [Self; 4] = [Self::Repos, Self::Issues, Self::Prs, Self::Commits];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Repos => "repos",
+            Self::Issues => "issues",
+            Self::Prs => "pull requests",
+            Self::Commits => "commits",
+        }
+    }
+
+    /// Repositories are filtered here; the rest are searched on GitHub.
+    pub fn is_local(self) -> bool {
+        self == Self::Repos
+    }
+
+    /// GitHub refuses a commit search with no text — qualifiers alone are not
+    /// allowed — so that source has nothing to show until something is typed.
+    pub fn needs_query(self) -> bool {
+        self == Self::Commits
+    }
+
+    pub fn placeholder(self) -> &'static str {
+        match self {
+            Self::Repos => "filter repositories",
+            Self::Issues => "search issues in your repositories",
+            Self::Prs => "search pull requests in your repositories",
+            Self::Commits => "type to search commits — GitHub needs the text",
+        }
+    }
+}

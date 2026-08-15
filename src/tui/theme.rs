@@ -321,18 +321,17 @@ fn parse_hex(raw: &str) -> Option<Color> {
     }
 }
 
-/// Writes the current palette out as a theme file to start from.
+/// The current palette, written out as a theme file to start from.
 ///
 /// Starting from a full file rather than an empty one is the difference
 /// between choosing colours and guessing role names: every role is there,
 /// commented, already holding a value that works.
-pub fn write_template(name: &str) -> std::io::Result<std::path::PathBuf> {
-    use std::io::Write;
-    let dir = dir()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no config directory"))?;
-    std::fs::create_dir_all(&dir)?;
-    let path = dir.join(format!("{name}.theme"));
-
+///
+/// The text and where it goes; putting it there is the worker's job.
+pub fn template(name: &str) -> (std::path::PathBuf, String) {
+    let path = dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("themes"))
+        .join(format!("{name}.theme"));
     let p = *p();
     let mut out = String::new();
     out.push_str(&format!("# {name} — a theme for github-tui and diffline\n"));
@@ -350,10 +349,7 @@ pub fn write_template(name: &str) -> std::io::Result<std::path::PathBuf> {
             width = width
         ));
     }
-
-    let mut f = std::fs::File::create(&path)?;
-    f.write_all(out.as_bytes())?;
-    Ok(path)
+    (path, out)
 }
 
 fn role_of(p: &Palette, role: &str) -> Color {

@@ -69,9 +69,18 @@ pub enum Response {
 /// The writes the interface can ask for.
 #[derive(Debug)]
 pub enum Write {
-    Theme(crate::shared::theme::Theme),
-    ThemeTemplate(String),
-    KeymapTemplate,
+    /// Remember which theme was chosen.
+    Theme(crate::tui::theme::Theme),
+    /// Put `text` at `path`, making the directory if it is not there.
+    ///
+    /// Text and path rather than a name of something to generate: what goes
+    /// in a keymap template is a fact about the keymap, and the keymap is
+    /// state. This layer knows how to write a file and nothing about what is
+    /// worth writing.
+    File {
+        path: std::path::PathBuf,
+        text: String,
+    },
 }
 
 /// The worker thread is not coming back.
@@ -107,14 +116,6 @@ impl Service {
         self.tx.send(req).is_ok()
     }
 
-    /// The next answer, if one has arrived.
-    ///
-    /// `Disconnected` is not the same as `Empty` and must not be flattened
-    /// into it: the send side already refuses to leave a request in the air,
-    /// but a worker that dies *after* taking one would otherwise leave that
-    /// one loading for ever — `poll` returning `None` looks exactly like an
-    /// answer that has not come yet.
-    /// A service whose worker is already gone, for testing what happens then.
     #[cfg(test)]
     pub fn dead() -> Self {
         let (tx, _) = channel::<Request>();
@@ -185,11 +186,7 @@ fn handle(req: Request) -> Response {
             Write::Theme(t) => {
                 crate::shared::config::save_theme(t).map(|()| format!("theme → {}", t.name()))
             }
-            Write::ThemeTemplate(name) => crate::shared::theme::write_template(&name)
-                .map(|p| format!("wrote {}", p.display())),
-            Write::KeymapTemplate => {
-                crate::diffline::keys::write_template().map(|p| format!("wrote {}", p.display()))
-            }
+            Write::File { path, text } => write_file(&path, &text),
         }),
 
         // `None` for the branch: the review is of what is in this checkout, so
@@ -232,6 +229,24 @@ fn highlight_rows(path: &str, rows: &[Row]) -> Vec<Vec<crate::shared::syntax::Sp
 /// Reports a failure the way the status bar wants to read it.
 pub fn brief(e: &Error) -> String {
     e.brief()
+}
+
+/// The next answer, if one has arrived.
+///
+/// `Disconnected` is not the same as `Empty` and must not be flattened
+/// into it: the send side already refuses to leave a request in the air,
+/// but a worker that dies *after* taking one would otherwise leave that
+/// one loading for ever — `poll` returning `None` looks exactly like an
+/// answer that has not come yet.
+/// A service whose worker is already gone, for testing what happens then.
+/// Puts `text` at `path`, making the directory on the way if it is not there.
+fn write_file(path: &std::path::Path, text: &str) -> std::io::Result<String> {
+    use std::io::Write as _;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::File::create(path)?.write_all(text.as_bytes())?;
+    Ok(format!("wrote {}", path.display()))
 }
 
 #[cfg(test)]

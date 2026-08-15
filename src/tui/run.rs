@@ -26,8 +26,7 @@ use std::io;
 use std::time::Duration;
 
 use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, MouseEvent,
-    MouseEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -37,12 +36,67 @@ use ratatui::Frame;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
+use crate::shared::key::{Button, Key, Motion, Mouse, Press};
+
 /// The floor on how long the loop may wait.
 ///
 /// Not a frame rate: nothing here animates on its own. It is the longest a
 /// keystroke may sit unread, and sixteen milliseconds is under what anybody
 /// notices while being long enough that an idle program is not spinning.
 const FLOOR: Duration = Duration::from_millis(16);
+
+/// Turns a terminal's idea of a keystroke into this program's.
+///
+/// The only place either program needs to know how crossterm spells a key.
+fn press(ev: crossterm::event::KeyEvent) -> Press {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let key = match ev.code {
+        KeyCode::Char(c) => Key::Char(c),
+        KeyCode::Enter => Key::Enter,
+        KeyCode::Esc => Key::Esc,
+        KeyCode::Tab => Key::Tab,
+        KeyCode::BackTab => Key::BackTab,
+        KeyCode::Backspace => Key::Backspace,
+        KeyCode::Delete => Key::Delete,
+        KeyCode::Up => Key::Up,
+        KeyCode::Down => Key::Down,
+        KeyCode::Left => Key::Left,
+        KeyCode::Right => Key::Right,
+        KeyCode::Home => Key::Home,
+        KeyCode::End => Key::End,
+        KeyCode::PageUp => Key::PageUp,
+        KeyCode::PageDown => Key::PageDown,
+        _ => Key::Other,
+    };
+    Press {
+        key,
+        ctrl: ev.modifiers.contains(KeyModifiers::CONTROL),
+        alt: ev.modifiers.contains(KeyModifiers::ALT),
+    }
+}
+
+/// The same for the mouse.
+fn mouse(ev: crossterm::event::MouseEvent) -> Mouse {
+    use crossterm::event::MouseButton;
+    let button = |b| match b {
+        MouseButton::Left => Button::Left,
+        MouseButton::Right => Button::Right,
+        MouseButton::Middle => Button::Middle,
+    };
+    let what = match ev.kind {
+        MouseEventKind::Down(b) => Motion::Down(button(b)),
+        MouseEventKind::Up(b) => Motion::Up(button(b)),
+        MouseEventKind::Drag(b) => Motion::Drag(button(b)),
+        MouseEventKind::ScrollUp => Motion::ScrollUp,
+        MouseEventKind::ScrollDown => Motion::ScrollDown,
+        _ => Motion::Moved,
+    };
+    Mouse {
+        col: ev.column,
+        row: ev.row,
+        what,
+    }
+}
 
 /// Something the runtime can run.
 pub trait Program {
@@ -52,9 +106,9 @@ pub trait Program {
 
     fn draw(&mut self, f: &mut Frame<'_>);
 
-    fn on_key(&mut self, key: KeyEvent);
+    fn on_key(&mut self, press: Press);
 
-    fn on_mouse(&mut self, _mouse: MouseEvent) {}
+    fn on_mouse(&mut self, _mouse: Mouse) {}
 
     /// Take whatever the worker has answered since the last pass.
     fn drain(&mut self) {}
@@ -178,11 +232,11 @@ pub fn run(term: &mut Terminal_, program: &mut impl Program) -> io::Result<()> {
         let timeout = program.next_wake().max(FLOOR);
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => program.on_key(key),
+                Event::Key(key) if key.kind == KeyEventKind::Press => program.on_key(press(key)),
                 // Motion arrives for every cell the pointer crosses whether
                 // or not anything is pressed, and nothing here follows a
                 // pointer. Dropped before it can cost a frame.
-                Event::Mouse(m) if m.kind != MouseEventKind::Moved => program.on_mouse(m),
+                Event::Mouse(m) if m.kind != MouseEventKind::Moved => program.on_mouse(mouse(m)),
                 _ => {}
             }
         }
@@ -226,7 +280,7 @@ mod tests {
 
     impl Program for Nothing {
         fn draw(&mut self, _f: &mut Frame<'_>) {}
-        fn on_key(&mut self, _key: KeyEvent) {}
+        fn on_key(&mut self, _press: Press) {}
         fn should_quit(&self) -> bool {
             true
         }
@@ -253,7 +307,7 @@ mod tests {
 
     impl Program for Impatient {
         fn draw(&mut self, _f: &mut Frame<'_>) {}
-        fn on_key(&mut self, _key: KeyEvent) {}
+        fn on_key(&mut self, _press: Press) {}
         fn next_wake(&self) -> Duration {
             Duration::ZERO
         }

@@ -12,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
 use crate::shared::mux::AgentStatus;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 /// A colour per state, borrowed from the CI vocabulary because it means the

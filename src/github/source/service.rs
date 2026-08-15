@@ -8,8 +8,8 @@ use std::thread;
 
 use crate::github::data::Kind;
 use crate::github::data::MergeMethod;
+use crate::github::data::Source as FinderSource;
 use crate::github::data::{Account, Comment, FileChange, Hunk, Item, Job, RawLog, Repo, Review};
-use crate::github::finder::Source as FinderSource;
 use crate::github::gh;
 use crate::shared::error::Error;
 

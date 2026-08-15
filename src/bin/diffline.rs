@@ -150,11 +150,11 @@ impl Program for Diffline<'_> {
         ui::draw(f, self.app);
     }
 
-    fn on_key(&mut self, key: crossterm::event::KeyEvent) {
-        self.app.on_key(key);
+    fn on_key(&mut self, press: github_tui::shared::key::Press) {
+        self.app.on_key(press);
     }
 
-    fn on_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+    fn on_mouse(&mut self, mouse: github_tui::shared::key::Mouse) {
         self.app.on_mouse(mouse);
     }
 

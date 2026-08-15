@@ -7,8 +7,8 @@ use ratatui::style::Style;
 use crate::github::app::App;
 use crate::github::app::hit::{Region, Target};
 use crate::github::data::HELP;
-use crate::shared::theme;
 use crate::tui::Dialog;
+use crate::tui::theme;
 use crate::tui::{centered, frame, rule, scrim};
 use crate::tui::{fill, put, put_right, put_trunc};
 
@@ -126,7 +126,7 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
 /// The theme picker. It previews live, so the point of the modal is to be
 /// small enough that the interface behind it is what you are judging.
 pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
-    use crate::shared::theme::Theme;
+    use crate::tui::theme::Theme;
 
     let all = Theme::all();
     let body = Dialog::new("THEME")

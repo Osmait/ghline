@@ -11,8 +11,8 @@ use ratatui::style::{Modifier, Style};
 
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Dest};
-use crate::shared::theme;
 use crate::tui::scrim;
+use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc, scroll_into_view};
 

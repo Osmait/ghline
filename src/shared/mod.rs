@@ -14,11 +14,11 @@ pub mod error;
 pub mod fuzzy;
 pub mod herdr;
 pub mod icons;
+pub mod key;
 pub mod mux;
 pub mod nav;
 pub mod syntax;
 pub mod text;
-pub mod theme;
 
 #[cfg(test)]
 #[allow(

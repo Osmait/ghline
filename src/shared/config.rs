@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::PathBuf;
 
-use crate::shared::theme::Theme;
+use crate::tui::theme::Theme;
 
 const DIR: &str = "github-tui";
 const FILE: &str = "config";
@@ -101,7 +101,7 @@ const THEME: &str = "theme";
 /// Applies the saved theme, if there is one. Called once at startup.
 pub fn apply_theme() {
     if let Some(t) = load().get(THEME).and_then(|k| Theme::from_key(k)) {
-        crate::shared::theme::set(t);
+        crate::tui::theme::set(t);
     }
 }
 

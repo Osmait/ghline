@@ -1,7 +1,7 @@
 //! The reducer: pane focus, movement, and the key map. Every state change a
 //! keystroke can cause starts here.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::shared::key::{Key, Press};
 
 use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::github::data::{Kind, TABS};
@@ -58,24 +58,24 @@ impl App {
     }
 
     /// The finder owns every key while it is up: the letters are the query.
-    fn finder_key(&mut self, ev: KeyEvent) {
-        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
+    fn finder_key(&mut self, press: Press) {
+        let ctrl = press.ctrl;
         let len = self.finder_len();
-        match ev.code {
-            KeyCode::Esc => self.finder_open = false,
-            KeyCode::Enter => self.finder_accept(),
-            KeyCode::Tab => self.finder_source_by(Dir::Next),
-            KeyCode::BackTab => self.finder_source_by(Dir::Prev),
-            KeyCode::Down => self.finder_move(1, len),
-            KeyCode::Up => self.finder_move(-1, len),
-            KeyCode::Char('n') if ctrl => self.finder_move(1, len),
-            KeyCode::Char('p') if ctrl => self.finder_move(-1, len),
-            KeyCode::Backspace => {
+        match press.key {
+            Key::Esc => self.finder_open = false,
+            Key::Enter => self.finder_accept(),
+            Key::Tab => self.finder_source_by(Dir::Next),
+            Key::BackTab => self.finder_source_by(Dir::Prev),
+            Key::Down => self.finder_move(1, len),
+            Key::Up => self.finder_move(-1, len),
+            Key::Char('n') if ctrl => self.finder_move(1, len),
+            Key::Char('p') if ctrl => self.finder_move(-1, len),
+            Key::Backspace => {
                 self.finder_query.pop();
                 self.finder_sel = 0;
                 self.finder_scroll = 0;
             }
-            KeyCode::Char(c) if !ctrl => {
+            Key::Char(c) if !ctrl => {
                 self.finder_query.push(c);
                 self.finder_sel = 0;
                 self.finder_scroll = 0;
@@ -92,7 +92,7 @@ impl App {
     }
 
     fn finder_source_by(&mut self, d: Dir) {
-        let all = crate::github::finder::Source::ALL;
+        let all = crate::github::data::Source::ALL;
         let i = all
             .iter()
             .position(|s| *s == self.finder_source)
@@ -305,23 +305,23 @@ impl App {
     /// The picker owns every key while it is up, because the letters are the
     /// instruction. Moving therefore lives on the arrows and on `^n`/`^p`,
     /// exactly as it does in the finder.
-    fn dispatch_key(&mut self, ev: KeyEvent) {
-        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
+    fn dispatch_key(&mut self, press: Press) {
+        let ctrl = press.ctrl;
         let len = self.dispatch_dests().len();
         let last = len.saturating_sub(1);
-        match ev.code {
-            KeyCode::Esc => self.dispatch_open = false,
-            KeyCode::Enter => self.dispatch_accept(),
-            KeyCode::Down => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
-            KeyCode::Up => self.dispatch_sel = self.dispatch_sel.saturating_sub(1),
-            KeyCode::Char('n') if ctrl => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
-            KeyCode::Char('p') if ctrl => {
+        match press.key {
+            Key::Esc => self.dispatch_open = false,
+            Key::Enter => self.dispatch_accept(),
+            Key::Down => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
+            Key::Up => self.dispatch_sel = self.dispatch_sel.saturating_sub(1),
+            Key::Char('n') if ctrl => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
+            Key::Char('p') if ctrl => {
                 self.dispatch_sel = self.dispatch_sel.saturating_sub(1);
             }
-            KeyCode::Backspace => {
+            Key::Backspace => {
                 self.dispatch_note.pop();
             }
-            KeyCode::Char(c) if !ctrl => self.dispatch_note.push(c),
+            Key::Char(c) if !ctrl => self.dispatch_note.push(c),
             _ => {}
         }
     }
@@ -385,9 +385,9 @@ impl App {
 
     /// Opens the theme picker, remembering what to go back to.
     pub fn open_themes(&mut self) {
-        let current = crate::shared::theme::current();
+        let current = crate::tui::theme::current();
         self.theme_before = current;
-        self.theme_sel = crate::shared::theme::Theme::all()
+        self.theme_sel = crate::tui::theme::Theme::all()
             .iter()
             .position(|t| *t == current)
             .unwrap_or(0);
@@ -397,8 +397,8 @@ impl App {
     /// Applies the highlighted theme straight away: the point of the picker is
     /// to see the interface in it, not to read its name.
     pub(super) fn preview_theme(&mut self) {
-        if let Some(t) = crate::shared::theme::Theme::all().get(self.theme_sel) {
-            crate::shared::theme::set(*t);
+        if let Some(t) = crate::tui::theme::Theme::all().get(self.theme_sel) {
+            crate::tui::theme::set(*t);
         }
     }
 
@@ -408,7 +408,7 @@ impl App {
     /// the next start is a smaller problem than refusing the one you asked
     /// for — but it says so, because silently forgetting looks like a bug.
     pub fn accept_theme(&mut self) {
-        let theme = crate::shared::theme::current();
+        let theme = crate::tui::theme::current();
         match crate::shared::config::save_theme(theme) {
             Ok(()) => self.flash_ok(format!("theme: {}", theme.name())),
             Err(e) => self.flash_warn(format!("theme: {} · not saved: {e}", theme.name())),
@@ -638,7 +638,7 @@ impl App {
         }
 
         if self.themes_open {
-            crate::shared::theme::set(self.theme_before);
+            crate::tui::theme::set(self.theme_before);
             self.themes_open = false;
             return;
         }
@@ -715,61 +715,54 @@ impl App {
         self.item_scroll = 0;
     }
 
-    pub fn on_key(&mut self, ev: KeyEvent) {
+    pub fn on_key(&mut self, press: Press) {
         // `^l` means redraw everywhere else; it means it here too. Ahead of the
         // pane keys, since plain `l` already moves right.
-        if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('l') {
+        if press.ctrl && press.key == Key::Char('l') {
             self.wants_redraw = true;
             return;
         }
-        if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('b') {
+        if press.ctrl && press.key == Key::Char('b') {
             self.toggle_sidebar();
             return;
         }
-        if ev.modifiers.contains(KeyModifiers::CONTROL)
-            && ev.code == KeyCode::Char('p')
-            && !self.finder_open
-        {
+        if press.ctrl && press.key == Key::Char('p') && !self.finder_open {
             self.open_finder();
             return;
         }
 
         // half a page up/down in the focused pane, vim style
-        if ev.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(self.pane, Pane::Body | Pane::Log)
-        {
+        if press.ctrl && matches!(self.pane, Pane::Body | Pane::Log) {
             let half = (self.detail_height / 2).max(1) as i64;
-            match ev.code {
-                KeyCode::Char('d') => return self.move_by(half),
-                KeyCode::Char('u') => return self.move_by(-half),
+            match press.key {
+                Key::Char('d') => return self.move_by(half),
+                Key::Char('u') => return self.move_by(-half),
                 _ => {}
             }
         }
 
         // Actually quitting the program (the design lives in a browser).
-        if ev.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(ev.code, KeyCode::Char('c' | 'd'))
-        {
+        if press.ctrl && matches!(press.key, Key::Char('c' | 'd')) {
             self.should_quit = true;
             return;
         }
 
         // A pending confirmation swallows every key.
         if let Some(prompt) = self.prompt.clone() {
-            match ev.code {
-                KeyCode::Enter | KeyCode::Char('y') => self.confirm(),
-                KeyCode::Esc | KeyCode::Char('n' | 'q') => self.cancel_prompt(),
-                KeyCode::Char('j') | KeyCode::Down => {
+            match press.key {
+                Key::Enter | Key::Char('y') => self.confirm(),
+                Key::Esc | Key::Char('n' | 'q') => self.cancel_prompt(),
+                Key::Char('j') | Key::Down => {
                     if let Prompt::Merge(m) = prompt {
                         self.prompt = Some(Prompt::Merge((m + 1).min(2)));
                     }
                 }
-                KeyCode::Char('k') | KeyCode::Up => {
+                Key::Char('k') | Key::Up => {
                     if let Prompt::Merge(m) = prompt {
                         self.prompt = Some(Prompt::Merge(m.saturating_sub(1)));
                     }
                 }
-                KeyCode::Char(c @ '1'..='3') => {
+                Key::Char(c @ '1'..='3') => {
                     if matches!(prompt, Prompt::Merge(_)) {
                         self.prompt = Some(Prompt::Merge(c as usize - '1' as usize));
                     }
@@ -780,12 +773,12 @@ impl App {
         }
 
         if let Some(mode) = self.cmd {
-            match ev.code {
-                KeyCode::Esc => {
+            match press.key {
+                Key::Esc => {
                     self.cmd = None;
                     self.cmd_text.clear();
                 }
-                KeyCode::Enter => {
+                Key::Enter => {
                     if mode == Cmd::Colon {
                         let t = self.cmd_text.clone();
                         self.run_cmd(&t);
@@ -793,11 +786,11 @@ impl App {
                         self.cmd = None;
                     }
                 }
-                KeyCode::Backspace => {
+                Key::Backspace => {
                     self.cmd_text.pop();
                     self.sync_filter(mode);
                 }
-                KeyCode::Char(c) => {
+                Key::Char(c) => {
                     self.cmd_text.push(c);
                     self.sync_filter(mode);
                 }
@@ -807,34 +800,34 @@ impl App {
         }
 
         if self.finder_open {
-            self.finder_key(ev);
+            self.finder_key(press);
             return;
         }
 
         if self.dispatch_open {
-            self.dispatch_key(ev);
+            self.dispatch_key(press);
             return;
         }
 
         if self.themes_open {
-            let last = crate::shared::theme::Theme::all().len() - 1;
-            match ev.code {
-                KeyCode::Char('j') | KeyCode::Down => {
+            let last = crate::tui::theme::Theme::all().len() - 1;
+            match press.key {
+                Key::Char('j') | Key::Down => {
                     self.theme_sel = (self.theme_sel + 1).min(last);
                     self.preview_theme();
                 }
-                KeyCode::Char('k') | KeyCode::Up => {
+                Key::Char('k') | Key::Up => {
                     self.theme_sel = self.theme_sel.saturating_sub(1);
                     self.preview_theme();
                 }
-                KeyCode::Enter => {
+                Key::Enter => {
                     self.themes_open = false;
                     self.accept_theme();
                 }
-                KeyCode::Esc | KeyCode::Char('q' | 't') => {
+                Key::Esc | Key::Char('q' | 't') => {
                     // the picker previews as you move, so leaving it puts back
                     // whatever was on when it opened
-                    crate::shared::theme::set(self.theme_before);
+                    crate::tui::theme::set(self.theme_before);
                     self.themes_open = false;
                 }
                 _ => {}
@@ -843,13 +836,13 @@ impl App {
         }
 
         if self.accounts_open {
-            match ev.code {
-                KeyCode::Char('j') | KeyCode::Down => {
+            match press.key {
+                Key::Char('j') | Key::Down => {
                     self.acc_sel = (self.acc_sel + 1).min(self.accounts.len() - 1);
                 }
-                KeyCode::Char('k') | KeyCode::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
-                KeyCode::Enter => self.pick_account(self.acc_sel),
-                KeyCode::Esc | KeyCode::Char('q' | 'a') => {
+                Key::Char('k') | Key::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
+                Key::Enter => self.pick_account(self.acc_sel),
+                Key::Esc | Key::Char('q' | 'a') => {
                     self.accounts_open = false;
                 }
                 _ => {}
@@ -858,40 +851,40 @@ impl App {
         }
 
         if self.help_open {
-            match ev.code {
-                KeyCode::Esc | KeyCode::Char('q') => self.help_open = false,
-                KeyCode::Char('?') => self.help_open = false,
+            match press.key {
+                Key::Esc | Key::Char('q') => self.help_open = false,
+                Key::Char('?') => self.help_open = false,
                 _ => {}
             }
             return;
         }
 
-        match ev.code {
-            KeyCode::Char('j') | KeyCode::Down => self.move_by(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_by(-1),
-            KeyCode::Char('h') | KeyCode::Left => self.focus_by(Dir::Prev, false),
-            KeyCode::Char('l') | KeyCode::Right => self.focus_by(Dir::Next, false),
-            KeyCode::Tab => self.focus_by(Dir::Next, true),
-            KeyCode::BackTab => self.focus_by(Dir::Prev, true),
-            KeyCode::Char('g') => self.goto(Place::Top),
-            KeyCode::Char('G') => self.goto(Place::Bottom),
-            KeyCode::Enter => self.enter(),
-            KeyCode::Esc | KeyCode::Char('q') => self.back(),
-            KeyCode::Char('a') => {
+        match press.key {
+            Key::Char('j') | Key::Down => self.move_by(1),
+            Key::Char('k') | Key::Up => self.move_by(-1),
+            Key::Char('h') | Key::Left => self.focus_by(Dir::Prev, false),
+            Key::Char('l') | Key::Right => self.focus_by(Dir::Next, false),
+            Key::Tab => self.focus_by(Dir::Next, true),
+            Key::BackTab => self.focus_by(Dir::Prev, true),
+            Key::Char('g') => self.goto(Place::Top),
+            Key::Char('G') => self.goto(Place::Bottom),
+            Key::Enter => self.enter(),
+            Key::Esc | Key::Char('q') => self.back(),
+            Key::Char('a') => {
                 self.accounts_open = true;
                 self.acc_sel = self.acc;
             }
-            KeyCode::Char('b') => self.toggle_sidebar(),
-            KeyCode::Char('p') => self.open_finder(),
-            KeyCode::Char('[') => self.step_repo(Dir::Prev),
-            KeyCode::Char(']') => self.step_repo(Dir::Next),
-            KeyCode::Char('t') => self.open_themes(),
-            KeyCode::Char('?') => self.help_open = true,
-            KeyCode::Char(':') => {
+            Key::Char('b') => self.toggle_sidebar(),
+            Key::Char('p') => self.open_finder(),
+            Key::Char('[') => self.step_repo(Dir::Prev),
+            Key::Char(']') => self.step_repo(Dir::Next),
+            Key::Char('t') => self.open_themes(),
+            Key::Char('?') => self.help_open = true,
+            Key::Char(':') => {
                 self.cmd = Some(Cmd::Colon);
                 self.cmd_text.clear();
             }
-            KeyCode::Char('/') => {
+            Key::Char('/') => {
                 self.cmd = Some(Cmd::Slash);
                 self.cmd_text = if self.view == View::Logs {
                     self.log_filter.clone()
@@ -899,26 +892,26 @@ impl App {
                     self.filter.clone()
                 };
             }
-            KeyCode::PageDown => self.page_by(1),
-            KeyCode::PageUp => self.page_by(-1),
-            KeyCode::Char('d') if self.actionable_pr() && self.view != View::Diff => {
+            Key::PageDown => self.page_by(1),
+            Key::PageUp => self.page_by(-1),
+            Key::Char('d') if self.actionable_pr() && self.view != View::Diff => {
                 self.open_diff(0);
             }
-            KeyCode::Char('s') if self.view == View::Diff => {
+            Key::Char('s') if self.view == View::Diff => {
                 self.split = !self.split;
                 self.diff_scroll = 0;
             }
-            KeyCode::Char('w') if self.view == View::Diff => {
+            Key::Char('w') if self.view == View::Diff => {
                 self.ws = !self.ws;
                 self.diff_scroll = 0;
             }
-            KeyCode::Char('f') => self.follow = !self.follow,
-            KeyCode::Char('r') => {
+            Key::Char('f') => self.follow = !self.follow,
+            Key::Char('r') => {
                 self.tick += 1;
                 self.extra_lines = 0;
                 self.refresh();
             }
-            KeyCode::Char(c @ '1'..='5') => {
+            Key::Char(c @ '1'..='5') => {
                 self.tab = c as usize - '1' as usize;
                 self.view = View::List;
                 self.item = 0;
@@ -928,16 +921,16 @@ impl App {
                 // leave the focus on something that is not drawn
                 self.pane = pane_for_tab(self.tab);
             }
-            KeyCode::Char('x') => self.open_dispatch(),
-            KeyCode::Char('E') => self.open_in_editor(),
-            KeyCode::Char('o') if self.pane == Pane::FileTree => {
+            Key::Char('x') => self.open_dispatch(),
+            Key::Char('E') => self.open_in_editor(),
+            Key::Char('o') if self.pane == Pane::FileTree => {
                 if let Some((true, path)) = self.fs_current().map(|e| (e.is_dir, e.path.clone()))
                     && !self.fs_open.remove(&path)
                 {
                     self.fs_open.insert(path);
                 }
             }
-            KeyCode::Char('o') if self.view == View::Logs => {
+            Key::Char('o') if self.view == View::Logs => {
                 let tree = self.flat_tree();
                 if let Some(node) = tree.get(self.tree_sel_idx(tree.len())) {
                     let ji = node.ji;
@@ -946,7 +939,7 @@ impl App {
                     }
                 }
             }
-            KeyCode::Char('e') if self.view == View::Logs => {
+            Key::Char('e') if self.view == View::Logs => {
                 if let Some(i) = self
                     .log_lines()
                     .iter()
@@ -957,12 +950,12 @@ impl App {
                 }
             }
             // --- actions on the selected pull request
-            KeyCode::Char('m') if self.actionable_pr() => self.ask_merge(),
-            KeyCode::Char('c') if self.actionable_pr() => self.ask_close(),
+            Key::Char('m') if self.actionable_pr() => self.ask_merge(),
+            Key::Char('c') if self.actionable_pr() => self.ask_close(),
             // `d` opens the diff (as it does in the design), so deleting a
             // branch, which is destructive, lives on the shifted key
-            KeyCode::Char('D') if self.actionable_pr() => self.ask_delete_branch(),
-            KeyCode::Char(k @ ('m' | 'c' | 'D')) => {
+            Key::Char('D') if self.actionable_pr() => self.ask_delete_branch(),
+            Key::Char(k @ ('m' | 'c' | 'D')) => {
                 let what = match k {
                     'm' => "merge",
                     'c' => "close",

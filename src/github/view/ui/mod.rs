@@ -21,7 +21,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 use crate::github::app::{App, View};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, hline, put, vline};
 
 // -------------------------------------------------------------------- layout

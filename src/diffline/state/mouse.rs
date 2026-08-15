@@ -5,18 +5,18 @@
 //! how wide the tree ended up and which rows survived the scroll, and a
 //! second copy of that arithmetic would drift the first time a pane changed.
 
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crate::shared::key::{Button, Motion, Mouse};
 
 use crate::diffline::app::{App, Pane};
 use crate::diffline::hit::Target;
 
 impl App {
-    pub fn on_mouse(&mut self, ev: MouseEvent) {
-        let (col, row) = (ev.column, ev.row);
-        match ev.kind {
-            MouseEventKind::Down(MouseButton::Left) => self.click(col, row),
-            MouseEventKind::ScrollDown => self.wheel(col, row, 3),
-            MouseEventKind::ScrollUp => self.wheel(col, row, -3),
+    pub fn on_mouse(&mut self, ev: Mouse) {
+        let (col, row) = (ev.col, ev.row);
+        match ev.what {
+            Motion::Down(Button::Left) => self.click(col, row),
+            Motion::ScrollDown => self.wheel(col, row, 3),
+            Motion::ScrollUp => self.wheel(col, row, -3),
             _ => {}
         }
     }
@@ -92,16 +92,10 @@ fn step(current: usize, d: i64, len: usize) -> usize {
 )]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyModifiers, MouseEventKind};
     use ratatui::layout::Rect;
 
-    fn ev(kind: MouseEventKind, col: u16, row: u16) -> MouseEvent {
-        MouseEvent {
-            kind,
-            column: col,
-            row,
-            modifiers: KeyModifiers::NONE,
-        }
+    fn ev(what: Motion, col: u16, row: u16) -> Mouse {
+        Mouse { col, row, what }
     }
 
     fn area() -> Rect {
@@ -126,7 +120,7 @@ mod tests {
             Target::Pane(Pane::Queue),
             area(),
         ));
-        a.on_mouse(ev(MouseEventKind::Down(MouseButton::Left), 5, 5));
+        a.on_mouse(ev(Motion::Down(Button::Left), 5, 5));
         assert_eq!(a.pane, Pane::Queue);
     }
 
@@ -158,7 +152,7 @@ mod tests {
         );
         a.service = None;
         let before = a.pane;
-        a.on_mouse(ev(MouseEventKind::Down(MouseButton::Left), 5, 5));
+        a.on_mouse(ev(Motion::Down(Button::Left), 5, 5));
         assert_eq!(a.pane, before, "there was no region there");
     }
 
@@ -175,7 +169,7 @@ mod tests {
             Target::Pane(Pane::Tree),
             area(),
         ));
-        a.on_mouse(ev(MouseEventKind::ScrollDown, 5, 5));
+        a.on_mouse(ev(Motion::ScrollDown, 5, 5));
         assert!(a.tree_scroll > 0, "the tree scrolled");
         assert_eq!(a.pane, Pane::Diff, "and the focus stayed put");
     }

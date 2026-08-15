@@ -11,7 +11,7 @@
 
 use std::time::{Duration, Instant};
 
-use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+use crate::shared::key::{Button, Motion, Mouse};
 
 use super::hit::{Region, Target};
 use super::{App, Pane};
@@ -26,17 +26,17 @@ const WHEEL: i64 = 3;
 const DOUBLE: Duration = Duration::from_millis(400);
 
 impl App {
-    pub fn on_mouse(&mut self, ev: MouseEvent) {
+    pub fn on_mouse(&mut self, ev: Mouse) {
         self.on_mouse_at(ev, Instant::now());
     }
 
     /// The clock is a parameter so that double-click timing can be tested
     /// without a test having to wait out a real four hundred milliseconds.
-    pub fn on_mouse_at(&mut self, ev: MouseEvent, now: Instant) {
-        match ev.kind {
-            MouseEventKind::Down(MouseButton::Left) => self.click(ev.column, ev.row, now),
-            MouseEventKind::ScrollUp => self.wheel(ev.column, ev.row, -WHEEL),
-            MouseEventKind::ScrollDown => self.wheel(ev.column, ev.row, WHEEL),
+    pub fn on_mouse_at(&mut self, ev: Mouse, now: Instant) {
+        match ev.what {
+            Motion::Down(Button::Left) => self.click(ev.col, ev.row, now),
+            Motion::ScrollUp => self.wheel(ev.col, ev.row, -WHEEL),
+            Motion::ScrollDown => self.wheel(ev.col, ev.row, WHEEL),
             _ => {}
         }
     }
@@ -167,8 +167,7 @@ impl App {
                 self.finder_sel = step_sel(self.finder_sel, d, self.finder_len());
             }
             Target::Themes => {
-                self.theme_sel =
-                    step_sel(self.theme_sel, d, crate::shared::theme::Theme::all().len());
+                self.theme_sel = step_sel(self.theme_sel, d, crate::tui::theme::Theme::all().len());
                 self.preview_theme();
             }
             Target::Accounts => {

@@ -8,8 +8,8 @@ use ratatui::style::{Color, Style};
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
 use crate::github::data::{DiffKind, DiffRow};
-use crate::shared::theme;
 use crate::tui::diff::{Pair, Side, pair};
+use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
 const FILES_W: u16 = 38;

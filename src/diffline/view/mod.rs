@@ -31,7 +31,7 @@ use ratatui::style::Style;
 
 use crate::diffline::app::{App, Modal, Pane};
 use crate::diffline::hit::{Region, Target};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{clear, hline, put, vline};
 
 /// The file tree's width, and the queue's. Both fixed: the diff is what the

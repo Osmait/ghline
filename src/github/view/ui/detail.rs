@@ -8,7 +8,7 @@ use super::markdown;
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
 use crate::github::data::{Kind, Status};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{Seg, bold, fill, hline, pct, put, put_right, put_trunc, skel_bar, vline, wrap};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {

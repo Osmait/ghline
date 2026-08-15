@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::KeyCode;
+use crate::shared::key::{Key, Press};
 
 use crate::diffline::app::Pending;
 use crate::shared::nav::Dir;
@@ -322,39 +322,40 @@ pub const ALL: &[Action] = &[
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Chord {
     pub prefix: Pending,
-    pub ctrl: bool,
-    pub code: KeyCode,
+    pub press: Press,
 }
 
 impl Chord {
-    pub fn plain(code: KeyCode) -> Self {
+    pub fn plain(key: Key) -> Self {
         Self {
             prefix: Pending::None,
-            ctrl: false,
-            code,
+            press: Press::new(key),
         }
     }
 
     /// How a config file would have to write this chord. Used by the help, so
     /// that what it prints is what you would type to change it.
     pub fn spec(self) -> String {
-        let key = match self.code {
-            KeyCode::Char(' ') => "<space>".to_string(),
-            KeyCode::Char(c) => c.to_string(),
-            KeyCode::Esc => "<esc>".into(),
-            KeyCode::Enter => "<cr>".into(),
-            KeyCode::Tab => "<tab>".into(),
-            KeyCode::BackTab => "<s-tab>".into(),
-            KeyCode::Backspace => "<bs>".into(),
-            KeyCode::Up => "<up>".into(),
-            KeyCode::Down => "<down>".into(),
-            KeyCode::Left => "<left>".into(),
-            KeyCode::Right => "<right>".into(),
-            KeyCode::PageUp => "<pageup>".into(),
-            KeyCode::PageDown => "<pagedown>".into(),
-            other => format!("{other:?}"),
+        let key = match self.press.key {
+            Key::Char(' ') => "<space>".to_string(),
+            Key::Char(c) => c.to_string(),
+            Key::Esc => "<esc>".into(),
+            Key::Enter => "<cr>".into(),
+            Key::Tab => "<tab>".into(),
+            Key::BackTab => "<s-tab>".into(),
+            Key::Backspace => "<bs>".into(),
+            Key::Delete => "<del>".into(),
+            Key::Up => "<up>".into(),
+            Key::Down => "<down>".into(),
+            Key::Left => "<left>".into(),
+            Key::Right => "<right>".into(),
+            Key::Home => "<home>".into(),
+            Key::End => "<end>".into(),
+            Key::PageUp => "<pageup>".into(),
+            Key::PageDown => "<pagedown>".into(),
+            Key::Other => "?".into(),
         };
-        let key = if self.ctrl {
+        let key = if self.press.ctrl {
             format!("<C-{}>", key.trim_matches(|c| c == '<' || c == '>'))
         } else {
             key
@@ -399,25 +400,28 @@ pub fn parse_chord(spec: &str) -> Option<Chord> {
             .or_else(|| inner.strip_prefix("c-"))
         {
             let mut ch = parse_chord(c)?;
-            ch.ctrl = true;
+            ch.press.ctrl = true;
             return Some(ch);
         }
-        let code = match inner.to_ascii_lowercase().as_str() {
-            "esc" => KeyCode::Esc,
-            "cr" | "enter" | "return" => KeyCode::Enter,
-            "tab" => KeyCode::Tab,
-            "s-tab" => KeyCode::BackTab,
-            "bs" | "backspace" => KeyCode::Backspace,
-            "space" => KeyCode::Char(' '),
-            "up" => KeyCode::Up,
-            "down" => KeyCode::Down,
-            "left" => KeyCode::Left,
-            "right" => KeyCode::Right,
-            "pageup" => KeyCode::PageUp,
-            "pagedown" => KeyCode::PageDown,
+        let key = match inner.to_ascii_lowercase().as_str() {
+            "esc" => Key::Esc,
+            "cr" | "enter" | "return" => Key::Enter,
+            "tab" => Key::Tab,
+            "s-tab" => Key::BackTab,
+            "bs" | "backspace" => Key::Backspace,
+            "del" | "delete" => Key::Delete,
+            "space" => Key::Char(' '),
+            "up" => Key::Up,
+            "down" => Key::Down,
+            "left" => Key::Left,
+            "right" => Key::Right,
+            "home" => Key::Home,
+            "end" => Key::End,
+            "pageup" => Key::PageUp,
+            "pagedown" => Key::PageDown,
             _ => return None,
         };
-        return Some(Chord::plain(code));
+        return Some(Chord::plain(key));
     }
 
     let mut chars = spec.chars();
@@ -438,7 +442,7 @@ pub fn parse_chord(spec: &str) -> Option<Chord> {
         return Some(c);
     }
 
-    Some(Chord::plain(KeyCode::Char(first)))
+    Some(Chord::plain(Key::Char(first)))
 }
 
 /// The keymap as it ships, written the way a config file would write it.
@@ -596,13 +600,13 @@ impl Map {
     /// True when this key opens an alphabet rather than doing something —
     /// which is to say something is bound behind it. Computed rather than
     /// fixed, so unbinding every `]x` stops `]` swallowing a keystroke.
-    pub fn is_prefix(&self, code: KeyCode) -> bool {
-        let want = match code {
-            KeyCode::Char(' ') => Pending::Leader,
-            KeyCode::Char('g') => Pending::G,
-            KeyCode::Char('z') => Pending::Z,
-            KeyCode::Char('[') => Pending::Bracket(Dir::Prev),
-            KeyCode::Char(']') => Pending::Bracket(Dir::Next),
+    pub fn is_prefix(&self, key: Key) -> bool {
+        let want = match key {
+            Key::Char(' ') => Pending::Leader,
+            Key::Char('g') => Pending::G,
+            Key::Char('z') => Pending::Z,
+            Key::Char('[') => Pending::Bracket(Dir::Prev),
+            Key::Char(']') => Pending::Bracket(Dir::Next),
             _ => return false,
         };
         self.binds.keys().any(|c| c.prefix == want)
@@ -629,15 +633,12 @@ pub fn load() -> Map {
     }
 }
 
-/// Writes the shipped keymap out as a file to start from.
-pub fn write_template() -> std::io::Result<std::path::PathBuf> {
-    use std::io::Write;
-    let path = path()
-        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "no config directory"))?;
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-
+/// The shipped keymap, written out as a file to start from.
+///
+/// The text, not the writing: what belongs in a keymap template is a fact
+/// about the keymap, and putting bytes on a disk is not something the state
+/// layer does. The caller hands both to the worker.
+pub fn template() -> String {
     let mut out = String::from("# diffline keys\n#\n");
     out.push_str("# Every binding as it ships. Change the key, or write\n");
     out.push_str("# `<key> = none` to take one away.\n#\n");
@@ -653,9 +654,7 @@ pub fn write_template() -> std::io::Result<std::path::PathBuf> {
             width = width
         ));
     }
-
-    std::fs::File::create(&path)?.write_all(out.as_bytes())?;
-    Ok(path)
+    out
 }
 
 #[cfg(test)]
@@ -744,10 +743,10 @@ mod tests {
     #[test]
     fn a_prefix_is_a_prefix_only_while_something_lives_behind_it() {
         let m = Map::new();
-        assert!(m.is_prefix(KeyCode::Char(']')));
+        assert!(m.is_prefix(Key::Char(']')));
         let m = Map::with("]c = none\n]f = none\n]s = none\n");
         assert!(
-            !m.is_prefix(KeyCode::Char(']')),
+            !m.is_prefix(Key::Char(']')),
             "with nothing behind it, ] must not swallow the next key"
         );
     }

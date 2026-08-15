@@ -4,7 +4,7 @@
 //! Printing to stdout *is* this module's job, so the lint against it is off.
 #![allow(clippy::print_stdout, reason = "this mode's output is stdout")]
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
+use crate::shared::key::{Key, Press};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
@@ -12,31 +12,28 @@ use ratatui::style::Color;
 use crate::github::app::{App, Source};
 use crate::github::ui;
 
-fn key(code: KeyCode) -> KeyEvent {
-    KeyEvent {
-        code,
-        modifiers: KeyModifiers::NONE,
-        kind: KeyEventKind::Press,
-        state: KeyEventState::NONE,
-    }
+/// A plain press, which is all a snapshot ever needs — no snapshot has ever
+/// wanted a chord, and one that did would say so in its spec.
+fn key(key: Key) -> Press {
+    Press::new(key)
 }
 
 /// Turns `"jj<enter>k"` into the equivalent key sequence.
-pub fn parse_keys(spec: &str) -> Vec<KeyEvent> {
+pub fn parse_keys(spec: &str) -> Vec<Press> {
     let mut out = Vec::new();
     let mut rest = spec;
     while !rest.is_empty() {
         if let Some(end) = rest.strip_prefix('<').and_then(|r| r.find('>')) {
             let name = &rest[1..end + 1];
             let code = match name {
-                "enter" => Some(KeyCode::Enter),
-                "esc" => Some(KeyCode::Esc),
-                "tab" => Some(KeyCode::Tab),
-                "bs" => Some(KeyCode::Backspace),
-                "down" => Some(KeyCode::Down),
-                "up" => Some(KeyCode::Up),
-                "left" => Some(KeyCode::Left),
-                "right" => Some(KeyCode::Right),
+                "enter" => Some(Key::Enter),
+                "esc" => Some(Key::Esc),
+                "tab" => Some(Key::Tab),
+                "bs" => Some(Key::Backspace),
+                "down" => Some(Key::Down),
+                "up" => Some(Key::Up),
+                "left" => Some(Key::Left),
+                "right" => Some(Key::Right),
                 _ => None,
             };
             if let Some(c) = code {
@@ -46,7 +43,7 @@ pub fn parse_keys(spec: &str) -> Vec<KeyEvent> {
             }
         }
         let Some(c) = rest.chars().next() else { break };
-        out.push(key(KeyCode::Char(c)));
+        out.push(key(Key::Char(c)));
         rest = &rest[c.len_utf8()..];
     }
     out
@@ -82,8 +79,8 @@ pub fn to_svg(buf: &ratatui::buffer::Buffer, width: u16, height: u16) -> String 
 
     // the ground and the default ink come from whichever theme is active, or
     // the export would always look like the design's
-    let ground = crate::shared::theme::bg();
-    let ink = crate::shared::theme::fg();
+    let ground = crate::tui::theme::bg();
+    let ink = crate::tui::theme::fg();
     let ground_hex = hex(ground, ground);
 
     let mut svg = format!(

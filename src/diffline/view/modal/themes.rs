@@ -5,13 +5,13 @@ use ratatui::layout::Rect;
 
 use crate::diffline::app::App;
 use crate::diffline::hit::{Region, Target};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{Dialog, put, put_trunc};
 
 /// The theme picker. Small on purpose — it sits over the diff, and the diff
 /// is what you are actually judging the colours against.
 pub(crate) fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
-    let all = crate::shared::theme::Theme::all();
+    let all = crate::tui::theme::Theme::all();
     let body = Dialog::new("THEME")
         .hint("⏎ keep · esc undo")
         .accent(theme::cyan())

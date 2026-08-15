@@ -6,7 +6,7 @@ use ratatui::style::{Color, Style};
 
 use crate::github::app::{App, View};
 use crate::github::data::TABS;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{bold, fill, put, put_right};
 
 pub struct Crumb {

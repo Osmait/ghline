@@ -8,8 +8,8 @@ use crate::github::actions::Prompt;
 use crate::github::app::App;
 use crate::github::data::MERGE_METHODS;
 use crate::github::data::ReviewState;
-use crate::shared::theme;
 use crate::tui::scrim;
+use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc};
 

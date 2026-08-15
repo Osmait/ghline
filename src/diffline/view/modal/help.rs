@@ -6,7 +6,7 @@ use ratatui::style::Style;
 
 use super::super::parts::KEY_W;
 use crate::diffline::app::App;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{centered_over as centered, frame, put, put_right, put_trunc, rule};
 
 /// The keymap, read off the keymap.

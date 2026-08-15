@@ -14,13 +14,12 @@
 pub mod diff;
 pub mod hit;
 pub mod run;
+pub mod theme;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use unicode_width::UnicodeWidthStr;
-
-use crate::shared::theme;
 
 pub fn fill(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
     for y in area.top()..area.bottom() {

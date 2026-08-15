@@ -12,7 +12,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::diffline::app::{App, Pane};
 use crate::diffline::hit::{Region, Target};
 use crate::diffline::model::Kind;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{fill, hline, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
 /// One line of code, coloured by the lexer where it has something to say.

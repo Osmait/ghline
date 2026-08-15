@@ -6,7 +6,7 @@ use ratatui::style::Style;
 
 use crate::diffline::app::{App, FinderTab};
 use crate::diffline::model::Kind;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{
     centered_over as centered, fill, frame, put, put_right, put_trunc, rule, scroll_into_view,
     vline,

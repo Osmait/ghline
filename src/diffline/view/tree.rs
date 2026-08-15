@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use super::parts::{count_style, put_right_parts};
 use crate::diffline::app::{App, Pane};
 use crate::diffline::hit::{Region, Target};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{Section, fill, put, put_trunc, scroll_into_view};
 
 pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {

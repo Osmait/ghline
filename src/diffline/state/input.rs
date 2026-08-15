@@ -1,6 +1,6 @@
 //! The keymap, and every state change a keystroke can cause.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::shared::key::{Key, Press};
 
 use crate::diffline::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
 use crate::diffline::keys::{self, Action};
@@ -737,8 +737,17 @@ impl App {
             "next scope" => self.step_scope(1),
             "prev scope" => self.step_scope(-1),
             "pick a theme" => self.open_themes(),
-            "write a keymap to start from" => self.ask_write(Write::KeymapTemplate),
-            "write a theme to start from" => self.ask_write(Write::ThemeTemplate("mine".into())),
+            "write a keymap to start from" => match crate::diffline::keys::path() {
+                Some(path) => self.ask_write(Write::File {
+                    path,
+                    text: crate::diffline::keys::template(),
+                }),
+                None => self.flash("no config directory"),
+            },
+            "write a theme to start from" => {
+                let (path, text) = crate::tui::theme::template("mine");
+                self.ask_write(Write::File { path, text });
+            }
             "split view" => {
                 self.split = !self.split;
                 self.hscroll = 0;
@@ -765,8 +774,8 @@ impl App {
 
     fn open_themes(&mut self) {
         self.modal = Some(Modal::Themes);
-        let now = crate::shared::theme::current();
-        self.sel = crate::shared::theme::Theme::all()
+        let now = crate::tui::theme::current();
+        self.sel = crate::tui::theme::Theme::all()
             .iter()
             .position(|t| *t == now)
             .unwrap_or(0);
@@ -802,28 +811,27 @@ impl App {
 
     // --- the keymap ---
 
-    pub fn on_key(&mut self, ev: KeyEvent) {
-        let ctrl = ev.modifiers.contains(KeyModifiers::CONTROL);
+    pub fn on_key(&mut self, press: Press) {
+        let ctrl = press.ctrl;
 
         // `^l` means repaint everywhere else; it means it here too, and ahead
         // of the pane keys since plain `l` moves right.
-        if ctrl && ev.code == KeyCode::Char('l') {
+        if ctrl && press.key == Key::Char('l') {
             self.wants_redraw = true;
             return;
         }
-        if ctrl && matches!(ev.code, KeyCode::Char('c')) {
+        if ctrl && press.key == Key::Char('c') {
             self.should_quit = true;
             return;
         }
         if let Some(m) = self.modal {
-            self.modal_key(m, ev, ctrl);
+            self.modal_key(m, press);
             return;
         }
         // --- what is this key bound to? ---
         let chord = keys::Chord {
             prefix: std::mem::take(&mut self.pending),
-            ctrl,
-            code: ev.code,
+            press,
         };
 
         // A digit is a count unless a count is what it would continue: `0`
@@ -831,7 +839,7 @@ impl App {
         // level — `g5` is not a thing.
         if chord.prefix == Pending::None
             && !ctrl
-            && let KeyCode::Char(c @ '0'..='9') = ev.code
+            && let Key::Char(c @ '0'..='9') = press.key
             && (c != '0' || self.count.is_some())
         {
             let d = c.to_digit(10).unwrap_or(0) as usize;
@@ -842,12 +850,12 @@ impl App {
         // A prefix opens an alphabet and keeps the count for whatever
         // finishes it: `5gg` is one command, and spending the count here
         // would leave the `gg` with nothing to act on.
-        if chord.prefix == Pending::None && !ctrl && self.keys.is_prefix(ev.code) {
-            self.pending = match ev.code {
-                KeyCode::Char(' ') => Pending::Leader,
-                KeyCode::Char('g') => Pending::G,
-                KeyCode::Char('z') => Pending::Z,
-                KeyCode::Char('[') => Pending::Bracket(Dir::Prev),
+        if chord.prefix == Pending::None && !ctrl && self.keys.is_prefix(press.key) {
+            self.pending = match press.key {
+                Key::Char(' ') => Pending::Leader,
+                Key::Char('g') => Pending::G,
+                Key::Char('z') => Pending::Z,
+                Key::Char('[') => Pending::Bracket(Dir::Prev),
                 _ => Pending::Bracket(Dir::Next),
             };
             return;
@@ -1002,8 +1010,9 @@ impl App {
 
     /// While a modal is up it owns the keyboard, because the letters are its
     /// content.
-    fn modal_key(&mut self, m: Modal, ev: KeyEvent, ctrl: bool) {
-        if ev.code == KeyCode::Esc {
+    fn modal_key(&mut self, m: Modal, press: Press) {
+        let ctrl = press.ctrl;
+        if press.key == Key::Esc {
             self.modal = None;
             self.query.clear();
             self.draft.clear();
@@ -1011,12 +1020,12 @@ impl App {
         }
 
         if m == Modal::Comment {
-            match ev.code {
-                KeyCode::Enter => self.save_comment(),
-                KeyCode::Backspace => {
+            match press.key {
+                Key::Enter => self.save_comment(),
+                Key::Backspace => {
                     self.draft.pop();
                 }
-                KeyCode::Char(c) if !ctrl => self.draft.push(c),
+                Key::Char(c) if !ctrl => self.draft.push(c),
                 _ => {}
             }
             return;
@@ -1028,7 +1037,7 @@ impl App {
 
         let len = match m {
             Modal::Agents => self.agent_choices().len(),
-            Modal::Themes => crate::shared::theme::Theme::all().len(),
+            Modal::Themes => crate::tui::theme::Theme::all().len(),
             Modal::Palette => self.palette_hits().len(),
             _ => self.hits().len(),
         };
@@ -1038,15 +1047,15 @@ impl App {
         // where the letters are free to be movement. Everywhere else they are
         // the search, and `j` has to stay a `j`.
         if m == Modal::Themes {
-            let all = crate::shared::theme::Theme::all();
-            match ev.code {
-                KeyCode::Char('j') | KeyCode::Down => {
+            let all = crate::tui::theme::Theme::all();
+            match press.key {
+                Key::Char('j') | Key::Down => {
                     self.sel = (self.sel + 1).min(all.len().saturating_sub(1));
                 }
-                KeyCode::Char('k') | KeyCode::Up => self.sel = self.sel.saturating_sub(1),
-                KeyCode::Enter => {
+                Key::Char('k') | Key::Up => self.sel = self.sel.saturating_sub(1),
+                Key::Enter => {
                     if let Some(t) = all.get(self.sel).copied() {
-                        crate::shared::theme::set(t);
+                        crate::tui::theme::set(t);
                         // Applied here and written on the worker: a theme you
                         // picked and liked should survive a crash, but not at
                         // the cost of a disk write between the key and the
@@ -1060,29 +1069,29 @@ impl App {
             // Live: moving through the list repaints in that theme, because
             // the only way to judge one is to see it on the diff behind it.
             if let Some(t) = all.get(self.sel).copied() {
-                crate::shared::theme::set(t);
+                crate::tui::theme::set(t);
             }
             return;
         }
 
         if m == Modal::Agents {
-            match ev.code {
-                KeyCode::Char('j') | KeyCode::Down => self.sel = (self.sel + 1).min(last),
-                KeyCode::Char('k') | KeyCode::Up => self.sel = self.sel.saturating_sub(1),
-                KeyCode::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
-                KeyCode::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
-                KeyCode::Enter => self.accept(m),
+            match press.key {
+                Key::Char('j') | Key::Down => self.sel = (self.sel + 1).min(last),
+                Key::Char('k') | Key::Up => self.sel = self.sel.saturating_sub(1),
+                Key::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
+                Key::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
+                Key::Enter => self.accept(m),
                 _ => {}
             }
             return;
         }
 
-        match ev.code {
-            KeyCode::Down => self.sel = (self.sel + 1).min(last),
-            KeyCode::Up => self.sel = self.sel.saturating_sub(1),
-            KeyCode::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
-            KeyCode::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
-            KeyCode::Tab if m == Modal::Finder => {
+        match press.key {
+            Key::Down => self.sel = (self.sel + 1).min(last),
+            Key::Up => self.sel = self.sel.saturating_sub(1),
+            Key::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
+            Key::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
+            Key::Tab if m == Modal::Finder => {
                 let i = FinderTab::ALL
                     .iter()
                     .position(|t| *t == self.finder_tab)
@@ -1090,12 +1099,12 @@ impl App {
                 self.finder_tab = FinderTab::ALL[(i + 1) % FinderTab::ALL.len()];
                 self.sel = 0;
             }
-            KeyCode::Enter => self.accept(m),
-            KeyCode::Backspace => {
+            Key::Enter => self.accept(m),
+            Key::Backspace => {
                 self.query.pop();
                 self.sel = 0;
             }
-            KeyCode::Char(c) if !ctrl => {
+            Key::Char(c) if !ctrl => {
                 self.query.push(c);
                 self.sel = 0;
                 // What `n` and `N` will repeat. Taken as it is typed rather
@@ -1204,11 +1213,11 @@ mod tests {
         // line that had been cut off.
         let mut a = app();
         a.pane = Pane::Diff;
-        press(&mut a, KeyCode::Char('l'));
+        press(&mut a, Key::Char('l'));
         assert_eq!(a.pane, Pane::Diff, "focus should not have moved");
         assert!(a.hscroll > 0, "the code should have scrolled");
 
-        press(&mut a, KeyCode::Char('0'));
+        press(&mut a, Key::Char('0'));
         assert_eq!(a.hscroll, 0, "0 returns to the start of the line");
     }
 
@@ -1219,7 +1228,7 @@ mod tests {
         let mut a = app();
         a.pane = Pane::Diff;
         a.hscroll = 0;
-        press(&mut a, KeyCode::Char('h'));
+        press(&mut a, Key::Char('h'));
         assert_eq!(a.pane, Pane::Tree);
     }
 
@@ -1228,7 +1237,7 @@ mod tests {
         let mut a = app();
         a.pane = Pane::Diff;
         for _ in 0..200 {
-            press(&mut a, KeyCode::Char('l'));
+            press(&mut a, Key::Char('l'));
         }
         assert_eq!(
             a.hscroll,
@@ -1238,13 +1247,13 @@ mod tests {
     }
 
     fn bracket(a: &mut App, open: char, c: char) {
-        press(a, KeyCode::Char(open));
-        press(a, KeyCode::Char(c));
+        press(a, Key::Char(open));
+        press(a, Key::Char(c));
     }
 
     fn leader(a: &mut App, c: char) {
-        press(a, KeyCode::Char(' '));
-        press(a, KeyCode::Char(c));
+        press(a, Key::Char(' '));
+        press(a, Key::Char(c));
     }
 
     #[test]
@@ -1254,7 +1263,7 @@ mod tests {
         leader(&mut a, 'n');
         assert_eq!(a.modal, Some(Modal::Comment));
         typed(&mut a, "why is this here?");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         assert_eq!(a.comments.len(), 1);
         let c = &a.comments[0];
@@ -1285,7 +1294,7 @@ mod tests {
         a.pane = Pane::Tree;
         leader(&mut a, 'n');
         typed(&mut a, "about the file");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert!(a.comments[0].anchors.is_empty());
     }
 
@@ -1345,9 +1354,9 @@ mod tests {
         a.queue_shown = false;
         a.pane = Pane::Diff;
         a.hscroll = 0;
-        press(&mut a, KeyCode::Char('h'));
+        press(&mut a, Key::Char('h'));
         assert_eq!(a.pane, Pane::Diff);
-        press(&mut a, KeyCode::Tab);
+        press(&mut a, Key::Tab);
         assert_eq!(a.pane, Pane::Diff);
     }
 
@@ -1355,12 +1364,12 @@ mod tests {
     fn a_leader_that_leads_nowhere_does_nothing_and_lets_go() {
         let mut a = app();
         a.pane = Pane::Diff;
-        press(&mut a, KeyCode::Char(' '));
-        press(&mut a, KeyCode::Char('z'));
+        press(&mut a, Key::Char(' '));
+        press(&mut a, Key::Char('z'));
         assert_eq!(a.pane, Pane::Diff);
         assert_eq!(a.pending, Pending::None, "the leader must not stay held");
         // and the very next key is a plain key again
-        press(&mut a, KeyCode::Char('l'));
+        press(&mut a, Key::Char('l'));
         assert!(a.hscroll > 0);
     }
 
@@ -1433,8 +1442,8 @@ mod tests {
             agent_at("codex", AgentStatus::Idle, false, "/tmp/r"),
         ];
         a.agent_idx = 0;
-        press(&mut a, KeyCode::Char(' '));
-        press(&mut a, KeyCode::Char('a'));
+        press(&mut a, Key::Char(' '));
+        press(&mut a, Key::Char('a'));
         assert_eq!(a.agent_idx, 1, "the picker landed on one worth choosing");
     }
 
@@ -1454,7 +1463,7 @@ mod tests {
         a.sel = 0;
         let kind = choices[0].0.clone();
         a.modal = Some(Modal::Agents);
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert_eq!(a.new_kind.as_deref(), Some(kind.as_str()));
     }
 
@@ -1467,11 +1476,11 @@ mod tests {
         let mut a = app();
         a.modal = Some(Modal::Agents);
         a.sel = 0;
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('j'));
         assert_eq!(a.sel, 1);
-        press(&mut a, KeyCode::Char('k'));
+        press(&mut a, Key::Char('k'));
         assert_eq!(a.sel, 0);
-        press(&mut a, KeyCode::Char('z'));
+        press(&mut a, Key::Char('z'));
         assert_eq!(a.sel, 0, "a letter with nothing to do must not move it");
         assert!(a.query.is_empty(), "there is no query here to type into");
     }
@@ -1490,7 +1499,7 @@ mod tests {
         a.new_kind = Some("pi".into());
         a.modal = Some(Modal::Agents);
         a.sel = 0;
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert_eq!(a.agent_idx, 0);
         assert!(
             a.new_kind.is_none(),
@@ -1507,24 +1516,13 @@ mod tests {
 
     use crate::diffline::app::Load;
     use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};
-    use crossterm::event::{KeyEventKind, KeyEventState};
-
-    fn key(code: KeyCode) -> KeyEvent {
-        KeyEvent {
-            code,
-            modifiers: KeyModifiers::NONE,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        }
-    }
-
-    fn press(app: &mut App, code: KeyCode) {
-        app.on_key(key(code));
+    fn press(app: &mut App, key: Key) {
+        app.on_key(Press::new(key));
     }
 
     fn typed(app: &mut App, text: &str) {
         for c in text.chars() {
-            press(app, KeyCode::Char(c));
+            press(app, Key::Char(c));
         }
     }
 
@@ -1594,7 +1592,7 @@ mod tests {
     #[test]
     fn the_cursor_never_lands_on_a_hunk_header() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('k'));
+        press(&mut a, Key::Char('k'));
         assert_eq!(a.cursor, 1, "it stopped rather than sitting on the @@ line");
         assert!(a.diff_rows()[a.cursor].kind.is_code());
     }
@@ -1603,7 +1601,7 @@ mod tests {
     fn the_cursor_stops_at_the_end() {
         let mut a = app();
         for _ in 0..20 {
-            press(&mut a, KeyCode::Char('j'));
+            press(&mut a, Key::Char('j'));
         }
         assert_eq!(a.cursor, a.diff_rows().len() - 1);
     }
@@ -1612,24 +1610,19 @@ mod tests {
     fn gg_takes_two_presses_and_g_then_j_is_a_j() {
         let mut a = app();
         a.cursor = 4;
-        press(&mut a, KeyCode::Char('g'));
+        press(&mut a, Key::Char('g'));
         assert_eq!(a.cursor, 4, "one g does nothing yet");
-        press(&mut a, KeyCode::Char('g'));
+        press(&mut a, Key::Char('g'));
         assert_eq!(a.cursor, 1, "the second one goes to the top");
 
         a.cursor = 3;
-        press(&mut a, KeyCode::Char('g'));
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('g'));
+        press(&mut a, Key::Char('j'));
         assert_eq!(a.cursor, 4, "the pending g did not swallow the j");
     }
 
     fn ctrl(a: &mut App, c: char) {
-        a.on_key(KeyEvent {
-            code: KeyCode::Char(c),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        });
+        a.on_key(Press::ctrl(Key::Char(c)));
     }
 
     #[test]
@@ -1639,11 +1632,11 @@ mod tests {
         a.pane = Pane::Diff;
 
         assert!(!a.split);
-        press(&mut a, KeyCode::Char('s'));
+        press(&mut a, Key::Char('s'));
         assert!(a.split, "s was bound to split");
 
         let before = a.cursor;
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('j'));
         assert_eq!(a.cursor, before, "j was taken away");
 
         ctrl(&mut a, 'n');
@@ -1660,7 +1653,7 @@ mod tests {
             crate::diffline::keys::Map::with("]c = none\n]f = none\n]s = none\n] = line-down\n");
         a.pane = Pane::Diff;
         let before = a.cursor;
-        press(&mut a, KeyCode::Char(']'));
+        press(&mut a, Key::Char(']'));
         assert_ne!(a.cursor, before, "] should have moved, not waited");
     }
 
@@ -1672,9 +1665,9 @@ mod tests {
         let mut a = app();
         typed(&mut a, "3");
         assert_eq!(a.count, Some(3), "the digit is held, not acted on");
-        press(&mut a, KeyCode::Char('g'));
+        press(&mut a, Key::Char('g'));
         assert_eq!(a.count, Some(3), "and it survives the prefix");
-        press(&mut a, KeyCode::Char('g'));
+        press(&mut a, Key::Char('g'));
 
         let code: Vec<usize> = (0..a.diff_rows().len())
             .filter(|i| a.diff_rows()[*i].kind.is_code())
@@ -1687,11 +1680,11 @@ mod tests {
         let mut a = app();
         a.cursor = 1;
         typed(&mut a, "2");
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('j'));
         let mut b = app();
         b.cursor = 1;
-        press(&mut b, KeyCode::Char('j'));
-        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, Key::Char('j'));
+        press(&mut b, Key::Char('j'));
         assert_eq!(a.cursor, b.cursor, "2j is j twice");
         assert_eq!(a.count, None, "and the count is spent");
     }
@@ -1703,7 +1696,7 @@ mod tests {
         let mut a = app();
         a.pane = Pane::Diff;
         a.hscroll = 12;
-        press(&mut a, KeyCode::Char('0'));
+        press(&mut a, Key::Char('0'));
         assert_eq!(a.hscroll, 0, "a bare 0 goes to the start of the line");
 
         a.hscroll = 12;
@@ -1719,7 +1712,7 @@ mod tests {
 
         // `}` goes to the next hunk; this fixture has one, so it lands at the
         // end rather than nowhere
-        press(&mut a, KeyCode::Char('}'));
+        press(&mut a, Key::Char('}'));
         assert!(a.diff_rows()[a.cursor].kind.is_code(), "never on a header");
 
         // `]c` walks changed lines, and a run of them counts once
@@ -1738,9 +1731,9 @@ mod tests {
         let mut a = app();
         a.view_height = 3;
         a.diff_scroll = 1;
-        press(&mut a, KeyCode::Char('L'));
+        press(&mut a, Key::Char('L'));
         let low = a.cursor;
-        press(&mut a, KeyCode::Char('H'));
+        press(&mut a, Key::Char('H'));
         assert!(a.cursor <= low, "H is above L");
         assert!(
             a.cursor >= a.diff_scroll,
@@ -1753,8 +1746,8 @@ mod tests {
         let mut a = app();
         a.view_height = 4;
         a.cursor = 4;
-        press(&mut a, KeyCode::Char('z'));
-        press(&mut a, KeyCode::Char('t'));
+        press(&mut a, Key::Char('z'));
+        press(&mut a, Key::Char('t'));
         assert_eq!(a.diff_scroll, 4, "the cursor line is now the top one");
         assert_eq!(a.cursor, 4, "and the cursor did not move");
     }
@@ -1778,13 +1771,13 @@ mod tests {
     #[test]
     fn n_repeats_what_slash_asked_for() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('/'));
+        press(&mut a, Key::Char('/'));
         typed(&mut a, "new");
-        press(&mut a, KeyCode::Esc);
+        press(&mut a, Key::Esc);
         assert_eq!(a.last_search, "new", "escaping still leaves a last search");
 
         a.cursor = 1;
-        press(&mut a, KeyCode::Char('n'));
+        press(&mut a, Key::Char('n'));
         assert!(
             a.diff_rows()[a.cursor].text.to_lowercase().contains("new"),
             "landed on {:?}",
@@ -1798,9 +1791,9 @@ mod tests {
         // the commands: everything that moves must extend a range too.
         let mut a = app();
         a.cursor = 1;
-        press(&mut a, KeyCode::Char('V'));
+        press(&mut a, Key::Char('V'));
         typed(&mut a, "2");
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('j'));
         let (lo, hi) = a.span();
         assert!(a.visual());
         assert!(hi > lo, "the range should have grown");
@@ -1811,10 +1804,10 @@ mod tests {
     fn o_swaps_the_ends_of_a_selection() {
         let mut a = app();
         a.cursor = 1;
-        press(&mut a, KeyCode::Char('V'));
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('V'));
+        press(&mut a, Key::Char('j'));
         let (lo, hi) = a.span();
-        press(&mut a, KeyCode::Char('o'));
+        press(&mut a, Key::Char('o'));
         assert_eq!(a.span(), (lo, hi), "the range is the same");
         assert_eq!(a.cursor, lo, "but the cursor is now at the other end");
     }
@@ -1833,18 +1826,18 @@ mod tests {
     #[test]
     fn v_opens_a_range_and_esc_closes_it() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('V'));
+        press(&mut a, Key::Char('V'));
         assert!(a.visual());
-        press(&mut a, KeyCode::Esc);
+        press(&mut a, Key::Esc);
         assert!(!a.visual());
     }
 
     #[test]
     fn a_range_grows_with_the_cursor() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('V'));
-        press(&mut a, KeyCode::Char('j'));
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('V'));
+        press(&mut a, Key::Char('j'));
+        press(&mut a, Key::Char('j'));
         assert_eq!(a.span(), (1, 3));
         assert_eq!(a.selected_anchors().len(), 3);
     }
@@ -1856,7 +1849,7 @@ mod tests {
         let mut a = app();
         leader(&mut a, 'n');
         typed(&mut a, "why here?");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         assert_eq!(a.comments.len(), 1);
         assert_eq!(a.comments[0].body, "why here?");
@@ -1866,12 +1859,12 @@ mod tests {
     #[test]
     fn a_comment_on_a_range_holds_every_line_of_it() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('V'));
-        press(&mut a, KeyCode::Char('j'));
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('V'));
+        press(&mut a, Key::Char('j'));
+        press(&mut a, Key::Char('j'));
         leader(&mut a, 'n');
         typed(&mut a, "this whole block");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         assert_eq!(a.comments[0].lines(), 3);
         assert!(!a.visual(), "and the range closed behind it");
@@ -1881,7 +1874,7 @@ mod tests {
     fn an_empty_note_is_not_a_comment() {
         let mut a = app();
         leader(&mut a, 'n');
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert!(a.comments.is_empty());
         assert!(a.modal.is_none());
     }
@@ -1891,7 +1884,7 @@ mod tests {
         let mut a = app();
         leader(&mut a, 'n');
         typed(&mut a, "never mind");
-        press(&mut a, KeyCode::Esc);
+        press(&mut a, Key::Esc);
         assert!(a.comments.is_empty());
         assert!(a.draft.is_empty());
     }
@@ -1899,11 +1892,11 @@ mod tests {
     #[test]
     fn x_removes_the_comment_the_cursor_is_inside() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('V'));
-        press(&mut a, KeyCode::Char('j'));
+        press(&mut a, Key::Char('V'));
+        press(&mut a, Key::Char('j'));
         leader(&mut a, 'n');
         typed(&mut a, "x");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert_eq!(a.comments.len(), 1);
 
         // the cursor is on the second line of a two-line comment
@@ -1918,7 +1911,7 @@ mod tests {
         let mut a = app();
         leader(&mut a, 'n');
         typed(&mut a, "keep me");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         a.refresh();
         assert_eq!(a.comments.len(), 1);
@@ -1953,11 +1946,11 @@ mod tests {
         let mut a = app();
         leader(&mut a, 'n');
         typed(&mut a, "first note");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         a.cursor = 3;
         leader(&mut a, 'n');
         typed(&mut a, "second note");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         let text = a.render_queue();
         assert!(text.contains("--- src/a.rs"), "grouped under its file");
@@ -1973,11 +1966,11 @@ mod tests {
         a.cursor = 4; // the later line first
         leader(&mut a, 'n');
         typed(&mut a, "later");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         a.cursor = 1;
         leader(&mut a, 'n');
         typed(&mut a, "earlier");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
 
         let text = a.render_queue();
         assert!(
@@ -1999,7 +1992,7 @@ mod tests {
         let mut a = app();
         leader(&mut a, 'n');
         typed(&mut a, "x");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         leader(&mut a, 's');
         assert!(!a.busy);
         assert!(a.toast.contains('a'), "{}", a.toast);
@@ -2018,7 +2011,7 @@ mod tests {
         }];
         leader(&mut a, 'n');
         typed(&mut a, "x");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         leader(&mut a, 's');
 
         assert!(!a.busy, "nothing was sent");
@@ -2031,7 +2024,7 @@ mod tests {
     #[test]
     fn a_modal_owns_the_keyboard_while_it_is_up() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('/'));
+        press(&mut a, Key::Char('/'));
         let before = a.cursor;
         typed(&mut a, "jjj");
         assert_eq!(a.cursor, before, "the letters were the query");
@@ -2041,9 +2034,9 @@ mod tests {
     #[test]
     fn tab_walks_the_finder_scopes_and_comes_back_round() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('/'));
+        press(&mut a, Key::Char('/'));
         for _ in 0..FinderTab::ALL.len() {
-            press(&mut a, KeyCode::Tab);
+            press(&mut a, Key::Tab);
         }
         assert_eq!(a.finder_tab, FinderTab::Files);
     }
@@ -2051,10 +2044,10 @@ mod tests {
     #[test]
     fn the_finder_lists_the_files_and_jumping_opens_one() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('/'));
+        press(&mut a, Key::Char('/'));
         typed(&mut a, "b.rs");
         assert!(!a.hits().is_empty());
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert_eq!(a.path(), "src/b.rs");
         assert!(a.modal.is_none());
     }
@@ -2063,9 +2056,9 @@ mod tests {
     fn the_palette_runs_what_it_offers() {
         let mut a = app();
         assert!(!a.blame_on);
-        press(&mut a, KeyCode::Char(':'));
+        press(&mut a, Key::Char(':'));
         typed(&mut a, "blame");
-        press(&mut a, KeyCode::Enter);
+        press(&mut a, Key::Enter);
         assert!(a.blame_on, "the command actually ran");
         assert!(a.modal.is_none());
     }
@@ -2074,9 +2067,9 @@ mod tests {
     fn escape_closes_whatever_is_up() {
         for k in ['/', ':'] {
             let mut a = app();
-            press(&mut a, KeyCode::Char(k));
+            press(&mut a, Key::Char(k));
             assert!(a.modal.is_some(), "{k} should open something");
-            press(&mut a, KeyCode::Esc);
+            press(&mut a, Key::Esc);
             assert!(a.modal.is_none(), "{k} should close on esc");
         }
         // and the ones that moved under the leader when the plain keys
@@ -2085,7 +2078,7 @@ mod tests {
             let mut a = app();
             leader(&mut a, k);
             assert!(a.modal.is_some(), "leader {k} should open something");
-            press(&mut a, KeyCode::Esc);
+            press(&mut a, Key::Esc);
             assert!(a.modal.is_none(), "leader {k} should close on esc");
         }
     }

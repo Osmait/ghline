@@ -12,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Load, Pane};
 use crate::shared::icons::{file as icon_file, folder};
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{
     Section, fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline,
 };

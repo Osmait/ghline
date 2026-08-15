@@ -10,10 +10,11 @@ use ratatui::style::{Modifier, Style};
 
 use crate::github::app::App;
 use crate::github::app::hit::{Region, Target};
-use crate::github::finder::{HitKind, Source};
+use crate::github::data::Source;
+use crate::github::finder::HitKind;
 use crate::shared::fuzzy;
-use crate::shared::theme;
 use crate::tui::scrim;
+use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc, scroll_into_view};
 

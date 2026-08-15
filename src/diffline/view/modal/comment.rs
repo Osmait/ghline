@@ -5,7 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 use crate::diffline::app::App;
-use crate::shared::theme;
+use crate::tui::theme;
 use crate::tui::{centered_over as centered, fill, frame, put, put_right, put_trunc, rule};
 
 pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &App) {

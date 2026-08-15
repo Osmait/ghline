@@ -4,8 +4,8 @@ use ratatui::buffer::Buffer;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
-use crate::shared::theme;
 use crate::tui::put;
+use crate::tui::theme;
 
 /// Right-aligns a run of pieces that are not all the same colour.
 ///

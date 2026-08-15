@@ -505,10 +505,10 @@ impl App {
                                 num: h.num,
                                 state: h.state,
                                 kind: match source {
-                                    crate::github::finder::Source::Commits => {
+                                    crate::github::data::Source::Commits => {
                                         crate::github::finder::HitKind::Commit
                                     }
-                                    crate::github::finder::Source::Prs => {
+                                    crate::github::data::Source::Prs => {
                                         crate::github::finder::HitKind::Pr
                                     }
                                     _ => crate::github::finder::HitKind::Issue,
