@@ -207,7 +207,7 @@ fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
         x,
         0,
         area.right() / 2,
-        &app.scope.label(),
+        &app.scope.to_string(),
         base.fg(theme::bright()),
     );
 
@@ -220,7 +220,7 @@ fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
         } else {
             base.fg(theme::dim())
         };
-        x = put(buf, x, 0, area.right(), &format!(" {} ", s.label()), style);
+        x = put(buf, x, 0, area.right(), &format!(" {s} "), style);
         x += 1;
     }
 
@@ -1077,8 +1077,8 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
             super::app::Pending::Leader => "␣",
             super::app::Pending::G => "g",
             super::app::Pending::Z => "z",
-            super::app::Pending::Bracket(d) if d < 0 => "[",
-            super::app::Pending::Bracket(_) => "]",
+            super::app::Pending::Bracket(super::app::Dir::Prev) => "[",
+            super::app::Pending::Bracket(super::app::Dir::Next) => "]",
             super::app::Pending::None => "",
         });
         p

@@ -24,16 +24,22 @@ pub enum Scope {
     Commit { sha: String },
 }
 
-impl Scope {
-    /// What the header calls it.
-    pub fn label(&self) -> String {
+/// What the header calls it.
+///
+/// `Display` rather than a `label()` of its own: it is the one obvious way to
+/// turn a thing into text, and writing it here means `{scope}` works in a
+/// format string, in a `format!`, and in anything generic over `Display`.
+impl fmt::Display for Scope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::WorkingTree => "working tree".into(),
-            Self::Branch { base } => format!("branch…{base}"),
-            Self::Commit { sha } => format!("commit {}", short(sha)),
+            Self::WorkingTree => f.write_str("working tree"),
+            Self::Branch { base } => write!(f, "branch…{base}"),
+            Self::Commit { sha } => write!(f, "commit {}", short(sha)),
         }
     }
+}
 
+impl Scope {
     /// The arguments that select this scope, after `git diff`.
     pub fn args(&self) -> Vec<String> {
         match self {
@@ -46,8 +52,16 @@ impl Scope {
     }
 }
 
+/// The first seven characters, not the first seven bytes.
+///
+/// A sha is hex today, so the two are the same — but this slices a `&str` a
+/// caller handed us, and a byte index that lands inside a character is a
+/// panic in a program that has none anywhere else.
 fn short(sha: &str) -> &str {
-    &sha[..sha.len().min(7)]
+    match sha.char_indices().nth(7) {
+        Some((i, _)) => &sha[..i],
+        None => sha,
+    }
 }
 
 /// How a file changed.
@@ -57,6 +71,29 @@ pub enum Status {
     Modified,
     Deleted,
     Renamed,
+}
+
+/// The word, for a place with room for one.
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
+}
+
+/// git's own letter, which is what it is read from.
+///
+/// Infallible, because git's alphabet is larger than the four this cares
+/// about — `C`opied and `T`ype-changed are modifications as far as a review
+/// is concerned — and a `Result` here would only be unwrapped at every site.
+impl From<&str> for Status {
+    fn from(raw: &str) -> Self {
+        match raw.chars().next() {
+            Some('A') => Self::Added,
+            Some('D') => Self::Deleted,
+            Some('R') => Self::Renamed,
+            _ => Self::Modified,
+        }
+    }
 }
 
 impl Status {
@@ -78,15 +115,6 @@ impl Status {
             Self::Modified => "modified",
             Self::Deleted => "deleted",
             Self::Renamed => "renamed",
-        }
-    }
-
-    pub fn parse(raw: &str) -> Self {
-        match raw.chars().next() {
-            Some('A') => Self::Added,
-            Some('D') => Self::Deleted,
-            Some('R') => Self::Renamed,
-            _ => Self::Modified,
         }
     }
 }
@@ -352,7 +380,7 @@ mod tests {
             sha: "c81d4a9f00".into(),
         };
         assert_eq!(s.args(), vec!["c81d4a9f00^!"]);
-        assert_eq!(s.label(), "commit c81d4a9", "shortened for the header");
+        assert_eq!(s.to_string(), "commit c81d4a9", "shortened for the header");
     }
 
     #[test]
@@ -365,7 +393,18 @@ mod tests {
     #[test]
     fn a_short_sha_is_not_shortened_past_itself() {
         let s = Scope::Commit { sha: "abc".into() };
-        assert_eq!(s.label(), "commit abc");
+        assert_eq!(s.to_string(), "commit abc");
+    }
+
+    #[test]
+    fn shortening_counts_characters_rather_than_bytes() {
+        // A sha is hex, so this never happens — but it slices a string a
+        // caller handed us, and a byte index landing inside a character is a
+        // panic in a program that has none anywhere else.
+        let s = Scope::Commit {
+            sha: "áéíóúñçü".into(),
+        };
+        assert_eq!(s.to_string(), "commit áéíóúñ\u{e7}");
     }
 
     // --- files ---
@@ -396,12 +435,12 @@ mod tests {
 
     #[test]
     fn git_status_letters_map_to_what_they_mean() {
-        assert_eq!(Status::parse("A"), Status::Added);
-        assert_eq!(Status::parse("D"), Status::Deleted);
-        assert_eq!(Status::parse("M"), Status::Modified);
+        assert_eq!(Status::from("A"), Status::Added);
+        assert_eq!(Status::from("D"), Status::Deleted);
+        assert_eq!(Status::from("M"), Status::Modified);
         // git writes a similarity score after a rename: R096
-        assert_eq!(Status::parse("R096"), Status::Renamed);
-        assert_eq!(Status::parse(""), Status::Modified, "the safe assumption");
+        assert_eq!(Status::from("R096"), Status::Renamed);
+        assert_eq!(Status::from(""), Status::Modified, "the safe assumption");
     }
 
     // --- anchors, which is the part that has to hold ---

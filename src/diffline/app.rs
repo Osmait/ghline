@@ -2,28 +2,70 @@
 
 use std::collections::HashMap;
 
+use std::sync::Arc;
+
+use crate::error::Error;
+
 use super::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
 use super::service::{Request, Response, Service};
 use crate::data::Agent;
 
 /// Load state of one piece of data.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug, Default)]
 pub enum Load {
+    #[default]
     Idle,
     Loading,
     Ready,
-    Failed(String),
+    /// What went wrong, kept whole.
+    ///
+    /// The error rather than a sentence about it: `Error` knows whether it is
+    /// worth retrying and what caused it, and flattening it to a `String` at
+    /// this boundary threw both away — `is_transient` was unreachable from
+    /// here and `source` was never walked anywhere in the program.
+    ///
+    /// `Arc` because the state is cloned to be rendered and `io::Error` is
+    /// not `Clone`; sharing it is right anyway, since there is one failure and
+    /// several places that describe it.
+    Failed(Arc<Error>),
 }
 
 impl Load {
     pub fn is_loading(&self) -> bool {
         *self == Self::Loading
     }
-    pub fn error(&self) -> Option<&str> {
+
+    /// The failure, for anything that wants more than a sentence.
+    pub fn failure(&self) -> Option<&Error> {
         match self {
             Self::Failed(e) => Some(e),
             _ => None,
         }
+    }
+
+    /// One line for the status bar or an empty pane.
+    pub fn error(&self) -> Option<String> {
+        self.failure().map(Error::brief)
+    }
+
+    /// Whether trying again might work. A network blip is worth a retry; a
+    /// missing `git` is not, and offering one would be a lie.
+    pub fn is_transient(&self) -> bool {
+        self.failure().is_some_and(Error::is_transient)
+    }
+}
+
+impl PartialEq for Load {
+    /// Two failures are the same state for the interface's purposes: it is
+    /// asking "am I loading, ready, or broken", not which error it was.
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Idle, Self::Idle)
+                | (Self::Loading, Self::Loading)
+                | (Self::Ready, Self::Ready)
+                | (Self::Failed(_), Self::Failed(_))
+        )
     }
 }
 
@@ -49,7 +91,25 @@ pub enum Pending {
     G,
     Z,
     /// `[` or `]`, carrying which one it was.
-    Bracket(i64),
+    Bracket(Dir),
+}
+
+/// Backwards or forwards. Named because `-1` and `1` are only directions by
+/// convention, and nothing stops a `0`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Dir {
+    Prev,
+    Next,
+}
+
+impl Dir {
+    /// For the motions that still count in rows.
+    pub fn step(self) -> i64 {
+        match self {
+            Self::Prev => -1,
+            Self::Next => 1,
+        }
+    }
 }
 
 /// What is over everything else, if anything.
@@ -366,11 +426,62 @@ impl App {
     /// loader that cannot finish is worse than an error, because it looks
     /// like progress.
     fn gone() -> Load {
-        Load::Failed("the worker thread is gone — restart diffline".into())
+        Load::Failed(Arc::new(Error::Spawn {
+            program: "the worker thread",
+            source: std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "it is gone — restart diffline",
+            ),
+        }))
     }
 
-    pub fn poll(&self) -> Option<Response> {
-        self.service.as_ref().and_then(Service::poll)
+    /// The next answer from the worker, if one has arrived.
+    ///
+    /// Takes `&mut self` because finding out the worker is gone is itself a
+    /// state change: everything still waiting will wait for ever otherwise,
+    /// which on screen is a skeleton animating over data that is not coming.
+    pub fn poll(&mut self) -> Option<Response> {
+        match self.service.as_ref().map(Service::poll) {
+            Some(Ok(r)) => r,
+            Some(Err(_)) => {
+                self.worker_died();
+                None
+            }
+            None => None,
+        }
+    }
+
+    /// Fails everything that was waiting, once, when the worker goes.
+    fn worker_died(&mut self) {
+        if self.service.is_none() {
+            return;
+        }
+        // Dropped so this runs once rather than on every frame from here on.
+        self.service = None;
+        self.busy = false;
+        let gone = || Self::gone();
+        if self.files_state.is_loading() {
+            self.files_state = gone();
+        }
+        if self.agents_state.is_loading() {
+            self.agents_state = gone();
+        }
+        for st in self.rows_state.values_mut() {
+            if st.is_loading() {
+                *st = gone();
+            }
+        }
+        for st in self.blame_state.values_mut() {
+            if st.is_loading() {
+                *st = gone();
+            }
+        }
+        for c in &mut self.comments {
+            if c.state == crate::diffline::model::State::Sending {
+                c.state = crate::diffline::model::State::Queued;
+            }
+        }
+        self.flash("the worker thread is gone — restart diffline");
     }
 
     /// Is anything requested and unanswered? The loop waits less if so.
@@ -451,8 +562,8 @@ impl App {
                         self.cursor = 0;
                     }
                     Err(e) => {
-                        self.files_state = Load::Failed(e.brief());
                         self.flash(e.brief());
+                        self.files_state = Load::Failed(Arc::new(e));
                     }
                 }
             }
@@ -477,7 +588,7 @@ impl App {
                         self.rows_state.insert(path, Load::Ready);
                     }
                     Err(e) => {
-                        self.rows_state.insert(path, Load::Failed(e.brief()));
+                        self.rows_state.insert(path, Load::Failed(Arc::new(e)));
                     }
                 }
             }
@@ -488,7 +599,7 @@ impl App {
                     self.blame_state.insert(path, Load::Ready);
                 }
                 Err(e) => {
-                    self.blame_state.insert(path, Load::Failed(e.brief()));
+                    self.blame_state.insert(path, Load::Failed(Arc::new(e)));
                 }
             },
 
@@ -498,7 +609,7 @@ impl App {
                     self.agents_state = Load::Ready;
                 }
                 Err(e) => {
-                    self.agents_state = Load::Failed(e.brief());
+                    self.agents_state = Load::Failed(Arc::new(e));
                 }
             },
 
@@ -738,6 +849,64 @@ mod tests {
             "so `ensure` fetches the width that is now wanted"
         );
         assert_eq!(a.diff_rows().len(), 5, "and the old rows still stand");
+    }
+
+    #[test]
+    fn a_failure_keeps_the_error_rather_than_a_sentence_about_it() {
+        // `Load::Failed(String)` threw away the type the whole program is
+        // built on: `is_transient` could not be asked from here and `source`
+        // was never walked anywhere.
+        let mut a = app();
+        a.apply(Response::Files {
+            scope: Scope::WorkingTree,
+            result: Err(crate::error::Error::Command {
+                args: "git diff".into(),
+                status: Some(1),
+                stderr: "connection reset".into(),
+            }),
+        });
+        assert!(a.files_state.failure().is_some(), "the error is kept whole");
+        assert!(
+            a.files_state.is_transient(),
+            "a connection error is worth retrying, and now that is askable"
+        );
+
+        a.apply(Response::Files {
+            scope: Scope::WorkingTree,
+            result: Err(crate::error::Error::Spawn {
+                program: "git",
+                source: std::io::Error::from(std::io::ErrorKind::NotFound),
+            }),
+        });
+        assert!(
+            !a.files_state.is_transient(),
+            "a missing git is not, and offering a retry would be a lie"
+        );
+        assert_eq!(
+            a.files_state.error().as_deref(),
+            Some("git not found — is it installed?")
+        );
+    }
+
+    #[test]
+    fn a_worker_that_dies_mid_flight_does_not_leave_a_skeleton_turning() {
+        // The send side already refused to leave a request in the air. The
+        // receive side turned "the worker is gone" into "nothing yet", which
+        // looks identical and lasts for ever.
+        let mut a = app();
+        a.service = Some(Service::spawn());
+        a.files_state = Load::Loading;
+        a.rows_state.insert("src/a.rs".into(), Load::Loading);
+
+        // Dropping the worker's end of the channel is what dying looks like
+        // from here.
+        drop(a.service.take());
+        a.service = Some(Service::dead());
+
+        assert!(a.poll().is_none());
+        assert!(!a.waiting(), "nothing may still be marked as on its way");
+        assert!(a.files_state.failure().is_some());
+        assert!(a.rows_state["src/a.rs"].failure().is_some());
     }
 
     #[test]

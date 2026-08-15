@@ -5,7 +5,7 @@
 //! The same shape the GitHub browser uses next door: requests in, responses
 //! out, and the interface polls.
 
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
 use super::git;
@@ -59,6 +59,10 @@ pub enum Response {
     Sent(Res<()>),
 }
 
+/// The worker thread is not coming back.
+#[derive(Clone, Copy, Debug)]
+pub struct Gone;
+
 pub struct Service {
     tx: Sender<Request>,
     rx: Receiver<Response>,
@@ -88,8 +92,27 @@ impl Service {
         self.tx.send(req).is_ok()
     }
 
-    pub fn poll(&self) -> Option<Response> {
-        self.rx.try_recv().ok()
+    /// The next answer, if one has arrived.
+    ///
+    /// `Disconnected` is not the same as `Empty` and must not be flattened
+    /// into it: the send side already refuses to leave a request in the air,
+    /// but a worker that dies *after* taking one would otherwise leave that
+    /// one loading for ever — `poll` returning `None` looks exactly like an
+    /// answer that has not come yet.
+    /// A service whose worker is already gone, for testing what happens then.
+    #[cfg(test)]
+    pub fn dead() -> Self {
+        let (tx, _) = channel::<Request>();
+        let (_, rx) = channel::<Response>();
+        Self { tx, rx }
+    }
+
+    pub fn poll(&self) -> Result<Option<Response>, Gone> {
+        match self.rx.try_recv() {
+            Ok(r) => Ok(Some(r)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(Gone),
+        }
     }
 }
 

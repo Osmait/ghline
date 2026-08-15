@@ -16,11 +16,17 @@ pub use crate::error::{Error, Result as Res};
 
 /// The leading arguments identify the call in error messages; the rest is
 /// usually a long query that adds nothing.
+/// How a failed call is named in an error. Includes the program, because
+/// three of them share one error type and "`pr list` failed" does not say
+/// which of them was run.
 fn label(args: &[&str]) -> String {
-    args.iter()
-        .take_while(|a| !a.starts_with('-'))
-        .take(3)
-        .cloned()
+    std::iter::once("gh")
+        .chain(
+            args.iter()
+                .take_while(|a| !a.starts_with('-'))
+                .take(3)
+                .copied(),
+        )
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -30,7 +36,10 @@ fn run(args: &[&str]) -> Res<String> {
     let out = Command::new("gh")
         .args(args)
         .output()
-        .map_err(Error::Spawn)?;
+        .map_err(|source| Error::Spawn {
+            program: "gh",
+            source,
+        })?;
     if !out.status.success() {
         return Err(Error::Command {
             args: label(args),
@@ -1313,13 +1322,18 @@ mod tests {
     }
 
     #[test]
-    fn label_keeps_the_subcommand_and_drops_the_flags() {
+    fn label_names_the_program_and_drops_the_flags() {
+        // The program is part of it now: three of them share one error type,
+        // and "`pr list` failed" does not say which was run.
         assert_eq!(
             label(&["pr", "list", "-R", "o/r", "--json", "number"]),
-            "pr list"
+            "gh pr list"
         );
-        assert_eq!(label(&["api", "graphql", "-f", "query=..."]), "api graphql");
-        assert_eq!(label(&[]), "");
+        assert_eq!(
+            label(&["api", "graphql", "-f", "query=..."]),
+            "gh api graphql"
+        );
+        assert_eq!(label(&[]), "gh");
     }
 
     #[test]

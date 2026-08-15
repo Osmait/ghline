@@ -18,11 +18,17 @@ use crate::data::{Agent, AgentStatus};
 pub use crate::error::{Error, Result as Res};
 
 /// The leading arguments identify the call in error messages.
+/// How a failed call is named in an error. Includes the program, because
+/// three of them share one error type and "`pr list` failed" does not say
+/// which of them was run.
 fn label(args: &[&str]) -> String {
-    args.iter()
-        .take_while(|a| !a.starts_with('-'))
-        .take(3)
-        .cloned()
+    std::iter::once("herdr")
+        .chain(
+            args.iter()
+                .take_while(|a| !a.starts_with('-'))
+                .take(3)
+                .copied(),
+        )
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -32,7 +38,10 @@ fn call(args: &[&str]) -> Res<Value> {
     let out = Command::new("herdr")
         .args(args)
         .output()
-        .map_err(Error::Spawn)?;
+        .map_err(|source| Error::Spawn {
+            program: "herdr",
+            source,
+        })?;
 
     // A dead server or a bad flag fails the usual way, with a status and a
     // line on stderr rather than an envelope.
@@ -164,7 +173,7 @@ pub fn create_worktree(repo_root: &str, branch: &str, label: &str) -> Res<String
         .to_string();
     if pane.is_empty() {
         return Err(Error::Field {
-            args: "worktree create".into(),
+            args: "herdr worktree create".into(),
             field: "root_pane.pane_id",
         });
     }
@@ -192,7 +201,7 @@ pub fn create_workspace(cwd: &str, label: &str) -> Res<String> {
         .to_string();
     if pane.is_empty() {
         return Err(Error::Field {
-            args: "workspace create".into(),
+            args: "herdr workspace create".into(),
             field: "root_pane.pane_id",
         });
     }

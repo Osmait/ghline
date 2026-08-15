@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crossterm::event::KeyCode;
 
-use super::app::Pending;
+use super::app::{Dir, Pending};
 
 /// Everything a key can be bound to.
 ///
@@ -363,8 +363,8 @@ impl Chord {
             Pending::Leader => format!("<leader>{key}"),
             Pending::G => format!("g{key}"),
             Pending::Z => format!("z{key}"),
-            Pending::Bracket(d) if d < 0 => format!("[{key}"),
-            Pending::Bracket(_) => format!("]{key}"),
+            Pending::Bracket(Dir::Prev) => format!("[{key}"),
+            Pending::Bracket(Dir::Next) => format!("]{key}"),
         }
     }
 }
@@ -428,8 +428,8 @@ pub fn parse_chord(spec: &str) -> Option<Chord> {
         let prefix = match first {
             'g' => Pending::G,
             'z' => Pending::Z,
-            '[' => Pending::Bracket(-1),
-            ']' => Pending::Bracket(1),
+            '[' => Pending::Bracket(Dir::Prev),
+            ']' => Pending::Bracket(Dir::Next),
             _ => return None,
         };
         let mut c = parse_chord(&rest)?;
@@ -600,8 +600,8 @@ impl Map {
             KeyCode::Char(' ') => Pending::Leader,
             KeyCode::Char('g') => Pending::G,
             KeyCode::Char('z') => Pending::Z,
-            KeyCode::Char('[') => Pending::Bracket(-1),
-            KeyCode::Char(']') => Pending::Bracket(1),
+            KeyCode::Char('[') => Pending::Bracket(Dir::Prev),
+            KeyCode::Char(']') => Pending::Bracket(Dir::Next),
             _ => return false,
         };
         self.binds.keys().any(|c| c.prefix == want)

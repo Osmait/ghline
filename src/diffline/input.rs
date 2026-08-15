@@ -2,10 +2,30 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
+use super::app::{App, Dir, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
 use super::keys::{self, Action};
 use super::model::{Comment, Kind, State};
 use super::service::Request;
+
+/// Where on the screen a motion is aiming.
+///
+/// An enum rather than the `i64` sentinels this started with: `goto_screen(
+/// i64::MIN)` meant "the top" only because both ends of the call agreed to
+/// pretend, and nothing stopped a third value being passed.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Place {
+    Top,
+    Middle,
+    Bottom,
+}
+
+/// Which way `w`, `b` and `e` go, and how far into the word.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Word {
+    Forward,
+    End,
+    Back,
+}
 
 /// The commands the palette offers, and the key each is also on.
 pub const COMMANDS: &[(&str, &str)] = &[
@@ -157,7 +177,7 @@ impl App {
     ///
     /// Of the window, not of the file — that is the whole point of them, and
     /// it is why the render has to hand back the height it used.
-    fn goto_screen(&mut self, where_to: i64) {
+    fn goto_screen(&mut self, where_to: Place) {
         let rows = self.diff_rows().len();
         if rows == 0 {
             return;
@@ -165,9 +185,9 @@ impl App {
         let top = self.diff_scroll;
         let bottom = (top + self.view_height.saturating_sub(1)).min(rows - 1);
         let target = match where_to {
-            i64::MIN => top,
-            0 => top + (bottom - top) / 2,
-            _ => bottom,
+            Place::Top => top,
+            Place::Middle => top + (bottom - top) / 2,
+            Place::Bottom => bottom,
         };
         self.cursor = target.min(rows - 1);
         // A header is not a line you can sit on, so slide off it.
@@ -238,12 +258,12 @@ impl App {
     }
 
     /// `zz`, `zt`, `zb`: move the window rather than the cursor.
-    fn scroll_cursor_to(&mut self, where_to: i64) {
+    fn scroll_cursor_to(&mut self, where_to: Place) {
         let h = self.view_height.max(1);
         self.diff_scroll = match where_to {
-            i64::MIN => self.cursor,
-            0 => self.cursor.saturating_sub(h / 2),
-            _ => self.cursor.saturating_sub(h.saturating_sub(1)),
+            Place::Top => self.cursor,
+            Place::Middle => self.cursor.saturating_sub(h / 2),
+            Place::Bottom => self.cursor.saturating_sub(h.saturating_sub(1)),
         };
     }
 
@@ -258,12 +278,13 @@ impl App {
     /// `w`, `b`, `e`. The diff has no editable column, so these move the
     /// window by words rather than a caret between them — which is what you
     /// wanted them for here anyway: getting to the far end of a long line.
-    fn word(&mut self, d: i64, to_end: bool) {
+    fn word(&mut self, motion: Word) {
         use unicode_width::UnicodeWidthChar;
         let text = self.cursor_text();
         let mut cols: Vec<usize> = Vec::new();
         let mut col = 0usize;
         let mut prev_sep = true;
+        let to_end = motion == Word::End;
         for c in text.chars() {
             let sep = !c.is_alphanumeric() && c != '_';
             if to_end {
@@ -277,12 +298,16 @@ impl App {
             col += UnicodeWidthChar::width(c).unwrap_or(0);
         }
         let here = self.hscroll;
-        let next = if d > 0 {
+        let next = if motion != Word::Back {
             cols.into_iter().find(|c| *c > here)
         } else {
             cols.into_iter().rfind(|c| *c < here)
         };
-        self.hscroll = next.unwrap_or(if d > 0 { self.longest_line() } else { 0 });
+        self.hscroll = next.unwrap_or(if motion == Word::Back {
+            0
+        } else {
+            self.longest_line()
+        });
     }
 
     /// `^`: the first character that is not a space.
@@ -353,7 +378,7 @@ impl App {
             .unwrap_or(0) as i64;
         self.scope = self.scopes[(i + d).rem_euclid(n) as usize].clone();
         self.refresh();
-        let label = self.scope.label();
+        let label = self.scope.to_string();
         self.flash(format!("scope → {label}"));
     }
 
@@ -549,7 +574,7 @@ impl App {
     pub fn render_queue(&self) -> String {
         let mut out = String::from("Review notes on the current diff.\n");
         out.push_str(&format!("Repository: {}\n", self.repo));
-        out.push_str(&format!("Scope: {}\n\n", self.scope.label()));
+        out.push_str(&format!("Scope: {}\n\n", self.scope));
 
         let mut paths: Vec<&str> = self.comments.iter().map(Comment::path).collect();
         paths.sort_unstable();
@@ -789,8 +814,8 @@ impl App {
                 KeyCode::Char(' ') => Pending::Leader,
                 KeyCode::Char('g') => Pending::G,
                 KeyCode::Char('z') => Pending::Z,
-                KeyCode::Char('[') => Pending::Bracket(-1),
-                _ => Pending::Bracket(1),
+                KeyCode::Char('[') => Pending::Bracket(Dir::Prev),
+                _ => Pending::Bracket(Dir::Next),
             };
             return;
         }
@@ -829,9 +854,9 @@ impl App {
                     }
                 }
             }
-            Action::ScreenTop => self.goto_screen(i64::MIN),
-            Action::ScreenMiddle => self.goto_screen(0),
-            Action::ScreenBottom => self.goto_screen(1),
+            Action::ScreenTop => self.goto_screen(Place::Top),
+            Action::ScreenMiddle => self.goto_screen(Place::Middle),
+            Action::ScreenBottom => self.goto_screen(Place::Bottom),
             Action::HalfDown => self.move_by(h / 2),
             Action::HalfUp => self.move_by(-h / 2),
             Action::PageDown => self.move_by(h),
@@ -846,9 +871,9 @@ impl App {
             Action::FileNext => self.step_file(1),
             Action::ScopePrev => self.step_scope(-1),
             Action::ScopeNext => self.step_scope(1),
-            Action::CursorToMiddle => self.scroll_cursor_to(0),
-            Action::CursorToTop => self.scroll_cursor_to(i64::MIN),
-            Action::CursorToBottom => self.scroll_cursor_to(1),
+            Action::CursorToMiddle => self.scroll_cursor_to(Place::Middle),
+            Action::CursorToTop => self.scroll_cursor_to(Place::Top),
+            Action::CursorToBottom => self.scroll_cursor_to(Place::Bottom),
 
             // --- along the line ---
             Action::ScrollRight if self.pane == Pane::Diff => {
@@ -861,9 +886,9 @@ impl App {
             // left to walk between panes.
             Action::ScrollLeft => self.focus_by(-1),
             Action::ScrollRight => self.focus_by(1),
-            Action::WordForward => self.word(1, false),
-            Action::WordEnd => self.word(1, true),
-            Action::WordBack => self.word(-1, false),
+            Action::WordForward => self.word(Word::Forward),
+            Action::WordEnd => self.word(Word::End),
+            Action::WordBack => self.word(Word::Back),
             Action::LineStart => self.hscroll = 0,
             Action::FirstWord => self.first_non_blank(),
             Action::LineEnd => self.hscroll = self.longest_line(),

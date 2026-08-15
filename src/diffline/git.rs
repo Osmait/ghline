@@ -12,16 +12,22 @@ use crate::error::{Error, Result as Res};
 
 /// Runs git in `repo` and returns its stdout.
 fn run(repo: &str, args: &[&str]) -> Res<String> {
-    let label = args.iter().take(2).copied().collect::<Vec<_>>().join(" ");
+    let label = std::iter::once("git")
+        .chain(args.iter().take(2).copied())
+        .collect::<Vec<_>>()
+        .join(" ");
     let out = Command::new("git")
         .args(["-C", repo, "-c", "core.pager=cat", "--no-pager"])
         .args(args)
         .output()
-        .map_err(Error::Spawn)?;
+        .map_err(|source| Error::Spawn {
+            program: "git",
+            source,
+        })?;
 
     if !out.status.success() {
         return Err(Error::Command {
-            args: format!("git {label}"),
+            args: label,
             status: out.status.code(),
             stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
         });
@@ -83,7 +89,7 @@ fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
                 // a rename is `R096\told\tnew`; the path we want is the last
                 rest.rsplit('\t').next() == Some(path)
             })
-            .map_or(Status::Modified, |(mark, _)| Status::parse(mark))
+            .map_or(Status::Modified, |(mark, _)| Status::from(mark))
     };
 
     numstat
