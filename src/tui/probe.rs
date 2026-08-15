@@ -14,6 +14,30 @@
 
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
+
+/// A blank buffer of exactly this size, for a component test.
+///
+/// A component below the `Frame` level takes a `Buffer` and a `Rect`, so its
+/// tests never build a terminal at all. Four of the level modules wanted this
+/// same two-line constructor.
+pub fn buffer(w: u16, h: u16) -> Buffer {
+    Buffer::empty(Rect::new(0, 0, w, h))
+}
+
+/// One row of a buffer, trailing blanks trimmed.
+///
+/// Trimmed, unlike `rows` above, because a component test is usually asking
+/// what a row *says*: the padding to the right of it is the pane's business
+/// and not the component's.
+pub fn row(buf: &Buffer, y: u16) -> String {
+    (0..buf.area.width)
+        .map(|x| buf[(x, y)].symbol())
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
 
 /// Every row of the drawn frame, one string each, with trailing blanks kept.
 ///

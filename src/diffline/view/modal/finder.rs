@@ -49,7 +49,18 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
     rule(buf, m, m.y + 2, theme::border());
 
     let hits = app.hits();
-    crate::tui::query_line(buf, m, m.y + 3, &app.query, "❯ ", "fuzzy find…", app.blink);
+    crate::tui::query_line(
+        buf,
+        m,
+        m.y + 3,
+        &crate::tui::Query {
+            text: &app.query,
+            lead: "❯ ",
+            placeholder: "fuzzy find…",
+            caret: app.blink,
+            accent: theme::yellow(),
+        },
+    );
     put_right(
         buf,
         m.right() - 2,

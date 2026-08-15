@@ -30,38 +30,18 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let base = Style::default().bg(theme::panel());
     let inner_right = modal.right() - 2;
 
-    // --- the query line
-    let y = modal.y + 1;
-    let mut x = put(
+    crate::tui::query_line(
         buf,
-        modal.x + 2,
-        y,
-        inner_right,
-        "❯ ",
-        base.fg(theme::cyan()),
+        modal,
+        modal.y + 1,
+        &crate::tui::Query {
+            text: &app.finder_query,
+            lead: "❯ ",
+            placeholder: app.finder_source.placeholder(),
+            caret: app.blink,
+            accent: theme::cyan(),
+        },
     );
-    if app.finder_query.is_empty() {
-        put_trunc(
-            buf,
-            x,
-            y,
-            inner_right,
-            app.finder_source.placeholder(),
-            base.fg(theme::dimmer()),
-        );
-    } else {
-        x = put_trunc(
-            buf,
-            x,
-            y,
-            inner_right,
-            &app.finder_query,
-            base.fg(theme::bright()),
-        );
-        if app.blink {
-            put(buf, x, y, inner_right, "█", base.fg(theme::cyan()));
-        }
-    }
     rule(buf, modal, modal.y + 2, theme::cyan());
 
     // --- the sources
