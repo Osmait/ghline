@@ -36,6 +36,22 @@ pub enum Pane {
     Queue,
 }
 
+/// A prefix key that has been pressed and not yet resolved.
+///
+/// vim's grammar is prefixes: `g` and `z` open a second alphabet, `[` and `]`
+/// open the "go to the previous or next one of these" alphabet, and the
+/// leader opens this program's own.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Pending {
+    #[default]
+    None,
+    Leader,
+    G,
+    Z,
+    /// `[` or `]`, carrying which one it was.
+    Bracket(i64),
+}
+
 /// What is over everything else, if anything.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Modal {
@@ -157,10 +173,16 @@ pub struct App {
     pub should_quit: bool,
     pub wants_redraw: bool,
     /// Half of a `gg`. Cleared by any other key, so `g` then `j` is a `j`.
-    pub pending_g: bool,
-    /// Space was pressed and is waiting for the key it leads to, the way a
-    /// leader works in the editor most of this keymap is borrowed from.
-    pub pending_leader: bool,
+    /// A key that begins something longer and is waiting for the rest of it.
+    pub pending: Pending,
+    /// Digits typed before a motion. `5j` is five lines, not a five and a j.
+    pub count: Option<usize>,
+    /// What `/` last looked for, which is what `n` and `N` repeat.
+    pub last_search: String,
+    /// How many rows of diff were on screen at the last draw. `H`, `M`, `L`
+    /// and the `z` commands are about the window, so they have to know how
+    /// big it is, and only the render does.
+    pub view_height: usize,
 }
 
 impl App {
@@ -209,8 +231,10 @@ impl App {
             anim: 0,
             should_quit: false,
             wants_redraw: false,
-            pending_g: false,
-            pending_leader: false,
+            pending: Pending::None,
+            count: None,
+            last_search: String::new(),
+            view_height: 20,
         }
     }
 

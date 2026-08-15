@@ -2,54 +2,62 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{App, FinderTab, Hit, Load, Modal, Pane, first_code};
-use super::model::{Comment, State};
+use super::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
+use super::model::{Comment, Kind, State};
 use super::service::Request;
 
 /// The commands the palette offers, and the key each is also on.
 pub const COMMANDS: &[(&str, &str)] = &[
-    ("toggle blame", "b"),
-    ("toggle blast radius", "d"),
-    ("expand context", "+"),
-    ("collapse context", "-"),
-    ("next file", "n"),
-    ("prev file", "p"),
-    ("add comment", "c"),
-    ("delete comment under cursor", "x"),
-    ("pick agent", "a"),
-    ("send queue to agent", "S"),
+    ("toggle blame", "␣b"),
+    ("toggle blast radius", "␣g"),
+    ("expand context", "␣+"),
+    ("collapse context", "␣-"),
+    ("next file", "]f"),
+    ("prev file", "[f"),
+    ("add comment", "␣n"),
+    ("delete comment under cursor", "␣x"),
+    ("pick agent", "␣a"),
+    ("send queue to agent", "␣s"),
     ("clear queue", ""),
-    ("next scope", "]"),
-    ("refresh", "r"),
-    ("open help", "?"),
-    ("quit", "q"),
+    ("next scope", "]s"),
+    ("prev scope", "[s"),
+    ("split view", "␣v"),
+    ("refresh", "␣r"),
+    ("open help", "␣?"),
+    ("quit", "␣q"),
 ];
 
 pub const HELP: &[(&str, &str)] = &[
-    ("j / k", "move cursor"),
-    ("gg / G", "top / bottom"),
-    ("h / l", "scroll code left / right"),
-    ("0", "back to the start of the line"),
+    ("— motions —", ""),
+    ("j / k", "line down / up"),
+    ("{count}j", "that many lines"),
+    ("gg / G", "first / last line"),
+    ("{count}G", "go to that line"),
+    ("H / M / L", "top / middle / bottom of screen"),
+    ("^d / ^u", "half a screen"),
+    ("^f / ^b", "a whole screen"),
+    ("^e / ^y", "scroll without moving"),
+    ("{ / }", "previous / next hunk"),
+    ("[c / ]c", "previous / next change"),
+    ("[f / ]f", "previous / next file"),
+    ("[s / ]s", "previous / next scope"),
+    ("zz / zt / zb", "cursor to middle / top / bottom"),
+    ("h / l", "scroll the line"),
+    ("w / b / e", "by words"),
+    ("0 / ^ / $", "start / first word / end"),
+    ("/ then n / N", "search, then repeat"),
+    ("v or V", "visual line mode"),
+    ("o", "to the other end of the selection"),
+    ("— leader (␣) —", ""),
     ("␣e / ␣c", "show or hide tree / comments"),
     ("␣d", "back to the code"),
-    ("⇥ / ⇧⇥", "next / previous pane"),
-    ("n / p", "next / prev file"),
-    ("/", "fuzzy finder"),
-    (":", "command palette"),
-    ("⇥", "switch finder scope"),
-    ("V / esc", "select line range"),
-    ("c", "comment on line / range"),
-    ("x", "delete comment"),
-    ("a", "pick target agent"),
-    ("S", "send whole queue"),
-    ("s", "split / unified view"),
-    ("b", "inline blame"),
-    ("d", "blast radius"),
-    ("+ / -", "expand / collapse context"),
-    ("[ / ]", "previous / next scope"),
-    ("r", "refresh"),
-    ("^l", "repaint the screen"),
-    ("? / q", "this help / quit"),
+    ("␣n / ␣x", "note on selection / delete note"),
+    ("␣a / ␣s", "pick agent / send queue"),
+    ("␣v / ␣b", "split view / inline blame"),
+    ("␣g", "blast radius"),
+    ("␣+ / ␣-", "expand / collapse context"),
+    ("␣r / ␣? / ␣q", "refresh / help / quit"),
+    (":", "everything else"),
 ];
 
 impl App {
@@ -107,7 +115,21 @@ impl App {
                 let n = self.files.len();
                 self.goto_file(step(self.file_idx, d, n));
             }
-            Pane::Diff => self.move_cursor(d),
+            // One step at a time, `d` of them. Passing `d` straight to
+            // `move_cursor` made it hunt for a code line in strides of `d`,
+            // so a `5j` that landed on a hunk header went five further —
+            // ten lines for one keystroke — and a half-page in a short file
+            // stepped clean past the end and refused to move at all.
+            Pane::Diff => {
+                let step = d.signum();
+                for _ in 0..d.abs() {
+                    let before = self.cursor;
+                    self.move_cursor(step);
+                    if self.cursor == before {
+                        break;
+                    }
+                }
+            }
             Pane::Queue => {
                 self.queue_sel = step(self.queue_sel, d, self.comments.len());
             }
@@ -140,6 +162,186 @@ impl App {
                 return;
             }
         }
+    }
+
+    // --- motions ---
+    //
+    // Everything here moves and nothing here acts, which is the division the
+    // keymap is built on: the plain keys navigate, the leader commands.
+
+    /// The nth code row, counting from one as `:42` does.
+    fn goto_line(&mut self, n: usize) {
+        let rows = self.diff_rows();
+        let code: Vec<usize> = (0..rows.len())
+            .filter(|i| rows[*i].kind.is_code())
+            .collect();
+        if code.is_empty() {
+            return;
+        }
+        let i = n.saturating_sub(1).min(code.len() - 1);
+        self.cursor = code[i];
+    }
+
+    /// `H`, `M`, `L`: the top, middle and bottom of what is on screen.
+    ///
+    /// Of the window, not of the file — that is the whole point of them, and
+    /// it is why the render has to hand back the height it used.
+    fn goto_screen(&mut self, where_to: i64) {
+        let rows = self.diff_rows().len();
+        if rows == 0 {
+            return;
+        }
+        let top = self.diff_scroll;
+        let bottom = (top + self.view_height.saturating_sub(1)).min(rows - 1);
+        let target = match where_to {
+            i64::MIN => top,
+            0 => top + (bottom - top) / 2,
+            _ => bottom,
+        };
+        self.cursor = target.min(rows - 1);
+        // A header is not a line you can sit on, so slide off it.
+        if !self.diff_rows()[self.cursor].kind.is_code() {
+            self.move_cursor(1);
+        }
+    }
+
+    /// `{` and `}`: the previous or next hunk header, vim's paragraph motion
+    /// read onto a diff — a hunk is what a paragraph is here.
+    fn hunk(&mut self, d: i64) {
+        let rows = self.diff_rows();
+        let mut i = self.cursor as i64;
+        loop {
+            i += d;
+            if i < 0 || i >= rows.len() as i64 {
+                // the ends are still somewhere to go, as they are in vim
+                self.cursor = if d > 0 {
+                    rows.len().saturating_sub(1)
+                } else {
+                    0
+                };
+                let rows = self.diff_rows();
+                if !rows.is_empty() && !rows[self.cursor].kind.is_code() {
+                    self.move_cursor(if d > 0 { -1 } else { 1 });
+                }
+                return;
+            }
+            if rows[i as usize].kind == Kind::Header {
+                self.cursor = i as usize;
+                self.move_cursor(1);
+                return;
+            }
+        }
+    }
+
+    /// `[c` and `]c`: the previous or next run of changed lines.
+    ///
+    /// A run, not a line: twelve deleted lines in a row are one change, and
+    /// stopping on each of them would make the motion useless on exactly the
+    /// diffs it is for.
+    fn change(&mut self, d: i64) {
+        let rows = self.diff_rows();
+        let changed = |i: usize| matches!(rows[i].kind, Kind::Added | Kind::Deleted);
+        let mut i = self.cursor as i64;
+        let mut left_current = !changed(self.cursor.min(rows.len().saturating_sub(1)));
+        loop {
+            i += d;
+            if i < 0 || i >= rows.len() as i64 {
+                return;
+            }
+            let here = changed(i as usize);
+            if !here {
+                left_current = true;
+            } else if left_current {
+                // walk back to the first line of the run when arriving from
+                // below, so `[c` lands on its start rather than its end
+                let mut j = i;
+                if d < 0 {
+                    while j > 0 && changed((j - 1) as usize) {
+                        j -= 1;
+                    }
+                }
+                self.cursor = j as usize;
+                return;
+            }
+        }
+    }
+
+    /// `zz`, `zt`, `zb`: move the window rather than the cursor.
+    fn scroll_cursor_to(&mut self, where_to: i64) {
+        let h = self.view_height.max(1);
+        self.diff_scroll = match where_to {
+            i64::MIN => self.cursor,
+            0 => self.cursor.saturating_sub(h / 2),
+            _ => self.cursor.saturating_sub(h.saturating_sub(1)),
+        };
+    }
+
+    /// The text the cursor is on, which is what the horizontal motions walk.
+    fn cursor_text(&self) -> String {
+        self.diff_rows()
+            .get(self.cursor)
+            .map(|r| r.text.clone())
+            .unwrap_or_default()
+    }
+
+    /// `w`, `b`, `e`. The diff has no editable column, so these move the
+    /// window by words rather than a caret between them — which is what you
+    /// wanted them for here anyway: getting to the far end of a long line.
+    fn word(&mut self, d: i64, to_end: bool) {
+        use unicode_width::UnicodeWidthChar;
+        let text = self.cursor_text();
+        let mut cols: Vec<usize> = Vec::new();
+        let mut col = 0usize;
+        let mut prev_sep = true;
+        for c in text.chars() {
+            let sep = !c.is_alphanumeric() && c != '_';
+            if to_end {
+                if !sep && col > 0 {
+                    cols.push(col);
+                }
+            } else if !sep && prev_sep {
+                cols.push(col);
+            }
+            prev_sep = sep;
+            col += UnicodeWidthChar::width(c).unwrap_or(0);
+        }
+        let here = self.hscroll;
+        let next = if d > 0 {
+            cols.into_iter().find(|c| *c > here)
+        } else {
+            cols.into_iter().rfind(|c| *c < here)
+        };
+        self.hscroll = next.unwrap_or(if d > 0 { self.longest_line() } else { 0 });
+    }
+
+    /// `^`: the first character that is not a space.
+    fn first_non_blank(&mut self) {
+        let text = self.cursor_text();
+        self.hscroll = text.len() - text.trim_start().len();
+    }
+
+    /// `n` and `N`: the next or previous line matching what `/` last asked
+    /// for. Case-insensitive, as vim is with `ignorecase`, and it wraps.
+    fn search(&mut self, d: i64) {
+        if self.last_search.is_empty() {
+            self.flash("no previous search");
+            return;
+        }
+        let needle = self.last_search.to_lowercase();
+        let rows = self.diff_rows();
+        let n = rows.len();
+        if n == 0 {
+            return;
+        }
+        for step in 1..=n {
+            let i = (self.cursor as i64 + d * step as i64).rem_euclid(n as i64) as usize;
+            if rows[i].kind.is_code() && rows[i].text.to_lowercase().contains(&needle) {
+                self.cursor = i;
+                self.flash(format!("/{}", self.last_search));
+                return;
+            }
+        }
+        self.flash(format!("no match for {}", self.last_search));
     }
 
     pub fn goto_file(&mut self, i: usize) {
@@ -503,6 +705,11 @@ impl App {
                 self.flash("queue cleared");
             }
             "next scope" => self.step_scope(1),
+            "prev scope" => self.step_scope(-1),
+            "split view" => {
+                self.split = !self.split;
+                self.hscroll = 0;
+            }
             "refresh" => {
                 self.refresh();
                 self.flash("refreshing…");
@@ -558,83 +765,154 @@ impl App {
             self.modal_key(m, ev, ctrl);
             return;
         }
+        // --- ^keys: the window and the page, as in vim ---
         if ctrl {
+            let h = self.view_height.max(1) as i64;
             match ev.code {
-                KeyCode::Char('d') => self.move_by(10),
-                KeyCode::Char('u') => self.move_by(-10),
+                KeyCode::Char('d') => self.move_by(h / 2),
+                KeyCode::Char('u') => self.move_by(-h / 2),
+                KeyCode::Char('f') => self.move_by(h),
+                KeyCode::Char('b') => self.move_by(-h),
+                KeyCode::Char('e') => self.diff_scroll += 1,
+                KeyCode::Char('y') => self.diff_scroll = self.diff_scroll.saturating_sub(1),
                 _ => {}
             }
+            self.count = None;
             return;
         }
 
-        // `space` leads to a pane, which is what frees `h` and `l` to move
-        // around inside the code rather than out of it.
-        if std::mem::take(&mut self.pending_leader) {
-            match ev.code {
-                KeyCode::Char('e') => self.toggle_pane(Pane::Tree),
-                KeyCode::Char('c') => self.toggle_pane(Pane::Queue),
-                KeyCode::Char('d') => self.pane = Pane::Diff,
-                _ => {}
+        // --- a prefix that is already open owns this key ---
+        match std::mem::take(&mut self.pending) {
+            Pending::Leader => {
+                self.leader_key(ev.code);
+                self.count = None;
+                return;
             }
-            self.pending_g = false;
-            return;
-        }
-        if ev.code == KeyCode::Char(' ') {
-            self.pending_leader = true;
-            self.pending_g = false;
-            return;
-        }
-
-        match ev.code {
-            KeyCode::Char('j') | KeyCode::Down => self.move_by(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_by(-1),
-            KeyCode::Tab => self.focus_by(1),
-            KeyCode::BackTab => self.focus_by(-1),
-
-            // Inside the code these scroll it; anywhere else there is nothing
-            // to scroll, so they keep moving between panes.
-            KeyCode::Char('l') | KeyCode::Right if self.pane == Pane::Diff => {
-                self.hscroll = (self.hscroll + 4).min(self.longest_line());
-            }
-            KeyCode::Char('h') | KeyCode::Left if self.pane == Pane::Diff && self.hscroll > 0 => {
-                self.hscroll = self.hscroll.saturating_sub(4);
-            }
-            KeyCode::Char('0') if self.pane == Pane::Diff => self.hscroll = 0,
-            KeyCode::Char('h') | KeyCode::Left => self.focus_by(-1),
-            KeyCode::Char('l') | KeyCode::Right => self.focus_by(1),
-            KeyCode::PageDown => self.move_by(20),
-            KeyCode::PageUp => self.move_by(-20),
-
-            KeyCode::Char('g') => {
-                // `gg` in two presses, which is what the hands expect
-                if self.pending_g {
-                    self.pending_g = false;
-                    self.cursor = first_code(self.diff_rows(), 0);
-                } else {
-                    self.pending_g = true;
+            Pending::G => {
+                let n = self.count.take().unwrap_or(1) as i64;
+                match ev.code {
+                    // `gg`, or `{count}gg`
+                    KeyCode::Char('g') => {
+                        if n > 1 {
+                            self.goto_line(n as usize);
+                        } else {
+                            self.cursor = first_code(self.diff_rows(), 0);
+                        }
+                    }
+                    // `gj` / `gk`: down and up a *display* line. Nothing here
+                    // wraps, so they are `j` and `k` — which is exactly what
+                    // vim does when nothing wraps, and it means a hand that
+                    // types them out of habit is not left holding a dead key.
+                    KeyCode::Char('j') => self.move_by(n),
+                    KeyCode::Char('k') => self.move_by(-n),
+                    _ => {}
                 }
                 return;
             }
-            KeyCode::Char('G') => {
-                self.cursor = self.diff_rows().len().saturating_sub(1);
+            Pending::Z => {
+                match ev.code {
+                    KeyCode::Char('z') => self.scroll_cursor_to(0),
+                    KeyCode::Char('t') => self.scroll_cursor_to(i64::MIN),
+                    KeyCode::Char('b') => self.scroll_cursor_to(1),
+                    _ => {}
+                }
+                self.count = None;
+                return;
             }
+            Pending::Bracket(d) => {
+                match ev.code {
+                    // `]c` is the next change, as it is in a merge conflict
+                    KeyCode::Char('c') => self.change(d),
+                    // and the two things this program has that vim does not
+                    KeyCode::Char('f') => self.step_file(d),
+                    KeyCode::Char('s') => self.step_scope(d),
+                    _ => {}
+                }
+                self.count = None;
+                return;
+            }
+            Pending::None => {}
+        }
 
-            KeyCode::Char('n') => self.step_file(1),
-            KeyCode::Char('p') => self.step_file(-1),
-            KeyCode::Char(']') => self.step_scope(1),
-            KeyCode::Char('[') => self.step_scope(-1),
+        // --- a count in front of a motion ---
+        if let KeyCode::Char(c @ '1'..='9') = ev.code {
+            let d = c.to_digit(10).unwrap_or(0) as usize;
+            self.count = Some(self.count.unwrap_or(0) * 10 + d);
+            return;
+        }
+        if ev.code == KeyCode::Char('0') && self.count.is_some() {
+            self.count = Some(self.count.unwrap_or(0) * 10);
+            return;
+        }
+        // A prefix opens an alphabet and keeps the count for whatever
+        // finishes it: `5gg` is one command, and taking the count here would
+        // leave the `gg` with nothing to act on.
+        self.pending = match ev.code {
+            KeyCode::Char(' ') => Pending::Leader,
+            KeyCode::Char('g') => Pending::G,
+            KeyCode::Char('z') => Pending::Z,
+            KeyCode::Char('[') => Pending::Bracket(-1),
+            KeyCode::Char(']') => Pending::Bracket(1),
+            _ => Pending::None,
+        };
+        if self.pending != Pending::None {
+            return;
+        }
 
+        let n = self.count.take().unwrap_or(1) as i64;
+
+        match ev.code {
+            // --- vertical ---
+            KeyCode::Char('j') | KeyCode::Down => self.move_by(n),
+            KeyCode::Char('k') | KeyCode::Up => self.move_by(-n),
+            KeyCode::Char('G') => match self.count.take() {
+                Some(l) => self.goto_line(l),
+                // `{count}G` was consumed into `n` above, so a bare G is n == 1
+                None if n > 1 => self.goto_line(n as usize),
+                None => {
+                    self.cursor = self.diff_rows().len().saturating_sub(1);
+                    if !self.diff_rows().is_empty() && !self.diff_rows()[self.cursor].kind.is_code()
+                    {
+                        self.move_cursor(-1);
+                    }
+                }
+            },
+            KeyCode::Char('H') => self.goto_screen(i64::MIN),
+            KeyCode::Char('M') => self.goto_screen(0),
+            KeyCode::Char('L') => self.goto_screen(1),
+            KeyCode::Char('{') => self.hunk(-1),
+            KeyCode::Char('}') => self.hunk(1),
+            KeyCode::PageDown => self.move_by(self.view_height as i64),
+            KeyCode::PageUp => self.move_by(-(self.view_height as i64)),
+
+            // --- horizontal, which here means the window over a long line ---
+            KeyCode::Char('l') | KeyCode::Right if self.pane == Pane::Diff => {
+                self.hscroll = (self.hscroll + n as usize).min(self.longest_line());
+            }
+            KeyCode::Char('h') | KeyCode::Left if self.pane == Pane::Diff && self.hscroll > 0 => {
+                self.hscroll = self.hscroll.saturating_sub(n as usize);
+            }
+            KeyCode::Char('w') if self.pane == Pane::Diff => self.word(1, false),
+            KeyCode::Char('e') if self.pane == Pane::Diff => self.word(1, true),
+            KeyCode::Char('b') if self.pane == Pane::Diff => self.word(-1, false),
+            KeyCode::Char('0') if self.pane == Pane::Diff => self.hscroll = 0,
+            KeyCode::Char('^') if self.pane == Pane::Diff => self.first_non_blank(),
+            KeyCode::Char('$') if self.pane == Pane::Diff => self.hscroll = self.longest_line(),
+            KeyCode::Char('h') | KeyCode::Left => self.focus_by(-1),
+            KeyCode::Char('l') | KeyCode::Right => self.focus_by(1),
+            KeyCode::Tab => self.focus_by(1),
+            KeyCode::BackTab => self.focus_by(-1),
+
+            // --- search ---
             KeyCode::Char('/') => {
                 self.modal = Some(Modal::Finder);
                 self.query.clear();
                 self.sel = 0;
             }
-            KeyCode::Char(':') => {
-                self.modal = Some(Modal::Palette);
-                self.query.clear();
-                self.sel = 0;
-            }
+            KeyCode::Char('n') => self.search(1),
+            KeyCode::Char('N') => self.search(-1),
 
+            // --- modes ---
             KeyCode::Char('V' | 'v') => {
                 self.anchor = if self.anchor.is_none() {
                     Some(self.cursor)
@@ -642,37 +920,68 @@ impl App {
                     None
                 };
             }
-            KeyCode::Esc => self.anchor = None,
+            // `o` in visual: to the other end of the selection, so a range
+            // can be grown from the end you did not start at.
+            KeyCode::Char('o') => {
+                if let Some(a) = self.anchor {
+                    self.anchor = Some(self.cursor);
+                    self.cursor = a;
+                }
+            }
+            KeyCode::Esc => {
+                self.anchor = None;
+                self.count = None;
+            }
 
-            KeyCode::Char('c') => self.open_comment(),
+            KeyCode::Char(':') => {
+                self.modal = Some(Modal::Palette);
+                self.query.clear();
+                self.sel = 0;
+            }
+            KeyCode::Enter if self.pane == Pane::Tree => self.pane = Pane::Diff,
+            _ => {}
+        }
+    }
+
+    /// The leader's alphabet: everything that is not a motion.
+    ///
+    /// The split is the point of the rewrite — a plain key moves, and a key
+    /// after the leader does something. Anything not here is in `:`.
+    fn leader_key(&mut self, code: KeyCode) {
+        match code {
+            // panes
+            KeyCode::Char('e') => self.toggle_pane(Pane::Tree),
+            KeyCode::Char('c') => self.toggle_pane(Pane::Queue),
+            KeyCode::Char('d') => self.pane = Pane::Diff,
+            // the review
+            KeyCode::Char('n') => self.open_comment(),
             KeyCode::Char('x') => self.delete_comment(),
             KeyCode::Char('a') => self.open_agents(),
-            KeyCode::Char('S') => self.send_queue(),
-            KeyCode::Char('b') => self.toggle_blame(),
-            KeyCode::Char('s') => {
+            KeyCode::Char('s') => self.send_queue(),
+            // the view
+            KeyCode::Char('v') => {
                 self.split = !self.split;
-                // The columns halve, so wherever the code was scrolled to
-                // means something else now.
+                // the columns halve, so wherever the code was scrolled to
+                // means something else now
                 self.hscroll = 0;
                 self.flash(if self.split {
-                    "split view [s]"
+                    "split view"
                 } else {
-                    "unified view [s]"
+                    "unified view"
                 });
             }
-            KeyCode::Char('d') => self.modal = Some(Modal::Deps),
+            KeyCode::Char('b') => self.toggle_blame(),
+            KeyCode::Char('g') => self.modal = Some(Modal::Deps),
+            KeyCode::Char('+' | '=') => self.set_context(self.context as i64 + 3),
+            KeyCode::Char('-') => self.set_context(self.context as i64 - 3),
             KeyCode::Char('r') => {
                 self.refresh();
                 self.flash("refreshing…");
             }
-            KeyCode::Char('+' | '=') => self.set_context(self.context as i64 + 3),
-            KeyCode::Char('-') => self.set_context(self.context as i64 - 3),
             KeyCode::Char('?') => self.modal = Some(Modal::Help),
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Enter if self.pane == Pane::Tree => self.pane = Pane::Diff,
             _ => {}
         }
-        self.pending_g = false;
     }
 
     /// While a modal is up it owns the keyboard, because the letters are its
@@ -744,6 +1053,12 @@ impl App {
             KeyCode::Char(c) if !ctrl => {
                 self.query.push(c);
                 self.sel = 0;
+                // What `n` and `N` will repeat. Taken as it is typed rather
+                // than on accept, so that a search you looked at and escaped
+                // out of is still the last search — which is what vim does.
+                if m == Modal::Finder {
+                    self.last_search = self.query.clone();
+                }
             }
             _ => {}
         }
@@ -877,6 +1192,11 @@ mod tests {
         );
     }
 
+    fn bracket(a: &mut App, open: char, c: char) {
+        press(a, KeyCode::Char(open));
+        press(a, KeyCode::Char(c));
+    }
+
     fn leader(a: &mut App, c: char) {
         press(a, KeyCode::Char(' '));
         press(a, KeyCode::Char(c));
@@ -886,7 +1206,7 @@ mod tests {
     fn c_in_the_tree_asks_about_the_file_rather_than_a_line() {
         let mut a = app();
         a.pane = Pane::Tree;
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         assert_eq!(a.modal, Some(Modal::Comment));
         typed(&mut a, "why is this here?");
         press(&mut a, KeyCode::Enter);
@@ -918,7 +1238,7 @@ mod tests {
         );
 
         a.pane = Pane::Tree;
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "about the file");
         press(&mut a, KeyCode::Enter);
         assert!(a.comments[0].anchors.is_empty());
@@ -993,7 +1313,7 @@ mod tests {
         press(&mut a, KeyCode::Char(' '));
         press(&mut a, KeyCode::Char('z'));
         assert_eq!(a.pane, Pane::Diff);
-        assert!(!a.pending_leader, "the leader must not stay held");
+        assert_eq!(a.pending, Pending::None, "the leader must not stay held");
         // and the very next key is a plain key again
         press(&mut a, KeyCode::Char('l'));
         assert!(a.hscroll > 0);
@@ -1184,12 +1504,176 @@ mod tests {
         assert_eq!(a.cursor, 4, "the pending g did not swallow the j");
     }
 
+    fn ctrl(a: &mut App, c: char) {
+        a.on_key(KeyEvent {
+            code: KeyCode::Char(c),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        });
+    }
+
+    #[test]
+    fn a_count_survives_the_prefix_that_follows_it() {
+        // `5gg` is one command. Consuming the count when `g` opened its
+        // alphabet left the `gg` with nothing to act on, and the cursor went
+        // to line 1 instead of line 5.
+        let mut a = app();
+        typed(&mut a, "3");
+        assert_eq!(a.count, Some(3), "the digit is held, not acted on");
+        press(&mut a, KeyCode::Char('g'));
+        assert_eq!(a.count, Some(3), "and it survives the prefix");
+        press(&mut a, KeyCode::Char('g'));
+
+        let code: Vec<usize> = (0..a.diff_rows().len())
+            .filter(|i| a.diff_rows()[*i].kind.is_code())
+            .collect();
+        assert_eq!(a.cursor, code[2], "the third code line");
+    }
+
+    #[test]
+    fn a_count_repeats_a_motion() {
+        let mut a = app();
+        a.cursor = 1;
+        typed(&mut a, "2");
+        press(&mut a, KeyCode::Char('j'));
+        let mut b = app();
+        b.cursor = 1;
+        press(&mut b, KeyCode::Char('j'));
+        press(&mut b, KeyCode::Char('j'));
+        assert_eq!(a.cursor, b.cursor, "2j is j twice");
+        assert_eq!(a.count, None, "and the count is spent");
+    }
+
+    #[test]
+    fn a_digit_is_a_count_but_zero_alone_is_a_motion() {
+        // `0` is the start of the line unless it is continuing a number,
+        // which is the one piece of vim's digit handling that is not obvious.
+        let mut a = app();
+        a.pane = Pane::Diff;
+        a.hscroll = 12;
+        press(&mut a, KeyCode::Char('0'));
+        assert_eq!(a.hscroll, 0, "a bare 0 goes to the start of the line");
+
+        a.hscroll = 12;
+        typed(&mut a, "10");
+        assert_eq!(a.count, Some(10), "after a 1 it is part of the number");
+        assert_eq!(a.hscroll, 12, "and it did not move anything");
+    }
+
+    #[test]
+    fn hunks_and_changes_are_different_motions() {
+        let mut a = app();
+        a.cursor = first_code(a.diff_rows(), 0);
+
+        // `}` goes to the next hunk; this fixture has one, so it lands at the
+        // end rather than nowhere
+        press(&mut a, KeyCode::Char('}'));
+        assert!(a.diff_rows()[a.cursor].kind.is_code(), "never on a header");
+
+        // `]c` walks changed lines, and a run of them counts once
+        let mut b = app();
+        b.cursor = first_code(b.diff_rows(), 0);
+        bracket(&mut b, ']', 'c');
+        assert!(
+            matches!(b.diff_rows()[b.cursor].kind, Kind::Added | Kind::Deleted),
+            "]c should land on a change, landed on {:?}",
+            b.diff_rows()[b.cursor].kind
+        );
+    }
+
+    #[test]
+    fn screen_motions_are_about_the_window_not_the_file() {
+        let mut a = app();
+        a.view_height = 3;
+        a.diff_scroll = 1;
+        press(&mut a, KeyCode::Char('L'));
+        let low = a.cursor;
+        press(&mut a, KeyCode::Char('H'));
+        assert!(a.cursor <= low, "H is above L");
+        assert!(
+            a.cursor >= a.diff_scroll,
+            "H must not go above what is on screen"
+        );
+    }
+
+    #[test]
+    fn zt_and_zb_move_the_window_and_leave_the_cursor() {
+        let mut a = app();
+        a.view_height = 4;
+        a.cursor = 4;
+        press(&mut a, KeyCode::Char('z'));
+        press(&mut a, KeyCode::Char('t'));
+        assert_eq!(a.diff_scroll, 4, "the cursor line is now the top one");
+        assert_eq!(a.cursor, 4, "and the cursor did not move");
+    }
+
+    #[test]
+    fn ctrl_d_is_half_a_screen_of_whatever_size_it_is() {
+        let mut a = app();
+        a.view_height = 10;
+        a.cursor = 1;
+        ctrl(&mut a, 'd');
+        let ten = a.cursor;
+        a.cursor = 1;
+        a.view_height = 2;
+        ctrl(&mut a, 'd');
+        assert!(
+            a.cursor <= ten,
+            "a shorter window should move less, not the same fixed ten"
+        );
+    }
+
+    #[test]
+    fn n_repeats_what_slash_asked_for() {
+        let mut a = app();
+        press(&mut a, KeyCode::Char('/'));
+        typed(&mut a, "new");
+        press(&mut a, KeyCode::Esc);
+        assert_eq!(a.last_search, "new", "escaping still leaves a last search");
+
+        a.cursor = 1;
+        press(&mut a, KeyCode::Char('n'));
+        assert!(
+            a.diff_rows()[a.cursor].text.to_lowercase().contains("new"),
+            "landed on {:?}",
+            a.diff_rows()[a.cursor].text
+        );
+    }
+
+    #[test]
+    fn a_motion_in_visual_mode_grows_the_selection() {
+        // Visual mode is the whole point of the motions being separate from
+        // the commands: everything that moves must extend a range too.
+        let mut a = app();
+        a.cursor = 1;
+        press(&mut a, KeyCode::Char('V'));
+        typed(&mut a, "2");
+        press(&mut a, KeyCode::Char('j'));
+        let (lo, hi) = a.span();
+        assert!(a.visual());
+        assert!(hi > lo, "the range should have grown");
+        assert_eq!(lo, 1, "and kept the end it started from");
+    }
+
+    #[test]
+    fn o_swaps_the_ends_of_a_selection() {
+        let mut a = app();
+        a.cursor = 1;
+        press(&mut a, KeyCode::Char('V'));
+        press(&mut a, KeyCode::Char('j'));
+        let (lo, hi) = a.span();
+        press(&mut a, KeyCode::Char('o'));
+        assert_eq!(a.span(), (lo, hi), "the range is the same");
+        assert_eq!(a.cursor, lo, "but the cursor is now at the other end");
+    }
+
     #[test]
     fn stepping_past_the_last_file_comes_back_to_the_first() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('n'));
+        bracket(&mut a, ']', 'f');
         assert_eq!(a.file_idx, 1);
-        press(&mut a, KeyCode::Char('n'));
+        bracket(&mut a, ']', 'f');
         assert_eq!(a.file_idx, 0);
     }
 
@@ -1219,7 +1703,7 @@ mod tests {
     #[test]
     fn a_comment_is_written_against_the_line_it_was_made_on() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "why here?");
         press(&mut a, KeyCode::Enter);
 
@@ -1234,7 +1718,7 @@ mod tests {
         press(&mut a, KeyCode::Char('V'));
         press(&mut a, KeyCode::Char('j'));
         press(&mut a, KeyCode::Char('j'));
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "this whole block");
         press(&mut a, KeyCode::Enter);
 
@@ -1245,7 +1729,7 @@ mod tests {
     #[test]
     fn an_empty_note_is_not_a_comment() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         press(&mut a, KeyCode::Enter);
         assert!(a.comments.is_empty());
         assert!(a.modal.is_none());
@@ -1254,7 +1738,7 @@ mod tests {
     #[test]
     fn escape_discards_the_draft_rather_than_saving_it() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "never mind");
         press(&mut a, KeyCode::Esc);
         assert!(a.comments.is_empty());
@@ -1266,14 +1750,14 @@ mod tests {
         let mut a = app();
         press(&mut a, KeyCode::Char('V'));
         press(&mut a, KeyCode::Char('j'));
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "x");
         press(&mut a, KeyCode::Enter);
         assert_eq!(a.comments.len(), 1);
 
         // the cursor is on the second line of a two-line comment
         a.cursor = 2;
-        press(&mut a, KeyCode::Char('x'));
+        leader(&mut a, 'x');
         assert!(a.comments.is_empty(), "being inside it is enough");
     }
 
@@ -1281,7 +1765,7 @@ mod tests {
     fn a_comment_survives_the_diff_being_fetched_again() {
         // the whole point of anchoring to lines rather than to rows
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "keep me");
         press(&mut a, KeyCode::Enter);
 
@@ -1293,7 +1777,7 @@ mod tests {
     #[test]
     fn changing_the_context_re_asks_only_for_the_open_file() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('+'));
+        leader(&mut a, '+');
         assert_eq!(a.context, 6);
         assert_eq!(a.rows_state.get("src/a.rs"), Some(&Load::Idle));
     }
@@ -1302,11 +1786,11 @@ mod tests {
     fn the_context_has_ends_and_stays_between_them() {
         let mut a = app();
         for _ in 0..20 {
-            press(&mut a, KeyCode::Char('+'));
+            leader(&mut a, '+');
         }
         assert_eq!(a.context, 21);
         for _ in 0..20 {
-            press(&mut a, KeyCode::Char('-'));
+            leader(&mut a, '-');
         }
         assert_eq!(a.context, 3);
     }
@@ -1316,11 +1800,11 @@ mod tests {
     #[test]
     fn the_queue_travels_as_one_message_grouped_by_file() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "first note");
         press(&mut a, KeyCode::Enter);
         a.cursor = 3;
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "second note");
         press(&mut a, KeyCode::Enter);
 
@@ -1336,11 +1820,11 @@ mod tests {
     fn notes_arrive_in_the_order_the_agent_will_work_in() {
         let mut a = app();
         a.cursor = 4; // the later line first
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "later");
         press(&mut a, KeyCode::Enter);
         a.cursor = 1;
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "earlier");
         press(&mut a, KeyCode::Enter);
 
@@ -1354,7 +1838,7 @@ mod tests {
     #[test]
     fn sending_an_empty_queue_says_so_rather_than_sending_nothing() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('S'));
+        leader(&mut a, 's');
         assert!(!a.busy);
         assert!(a.toast.contains("empty"), "{}", a.toast);
     }
@@ -1362,10 +1846,10 @@ mod tests {
     #[test]
     fn sending_with_no_agent_says_which_key_finds_one() {
         let mut a = app();
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "x");
         press(&mut a, KeyCode::Enter);
-        press(&mut a, KeyCode::Char('S'));
+        leader(&mut a, 's');
         assert!(!a.busy);
         assert!(a.toast.contains('a'), "{}", a.toast);
     }
@@ -1381,10 +1865,10 @@ mod tests {
             title: String::new(),
             focused: false,
         }];
-        press(&mut a, KeyCode::Char('c'));
+        leader(&mut a, 'n');
         typed(&mut a, "x");
         press(&mut a, KeyCode::Enter);
-        press(&mut a, KeyCode::Char('S'));
+        leader(&mut a, 's');
 
         assert!(!a.busy, "nothing was sent");
         assert!(a.toast.contains("working"), "{}", a.toast);
@@ -1437,12 +1921,21 @@ mod tests {
 
     #[test]
     fn escape_closes_whatever_is_up() {
-        for k in ['/', ':', 'a', 'd', '?'] {
+        for k in ['/', ':'] {
             let mut a = app();
             press(&mut a, KeyCode::Char(k));
             assert!(a.modal.is_some(), "{k} should open something");
             press(&mut a, KeyCode::Esc);
             assert!(a.modal.is_none(), "{k} should close on esc");
+        }
+        // and the ones that moved under the leader when the plain keys
+        // became motions
+        for k in ['a', 'g', '?'] {
+            let mut a = app();
+            leader(&mut a, k);
+            assert!(a.modal.is_some(), "leader {k} should open something");
+            press(&mut a, KeyCode::Esc);
+            assert!(a.modal.is_none(), "leader {k} should close on esc");
         }
     }
 
@@ -1455,6 +1948,8 @@ mod tests {
                     *label,
                     "toggle blame"
                         | "toggle blast radius"
+                        | "prev scope"
+                        | "split view"
                         | "expand context"
                         | "collapse context"
                         | "next file"

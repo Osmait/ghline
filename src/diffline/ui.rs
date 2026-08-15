@@ -440,6 +440,10 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 
     let height = body.height as usize;
+    // Handed back so that `H`, `M`, `L`, `^d` and the `z` commands can be
+    // about the window: they are the motions that need to know its size, and
+    // this is the only place it is known.
+    app.view_height = height;
     scroll_into_view(&mut app.diff_scroll, app.cursor, height, rows.len());
 
     let (lo, hi) = app.span();
@@ -562,6 +566,7 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App, rows: &[super::model:
         })
         .unwrap_or(0);
     let height = body.height as usize;
+    app.view_height = height;
     scroll_into_view(&mut app.diff_scroll, at, height, pairs.len());
 
     let (lo, hi) = app.span();
@@ -1025,6 +1030,21 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
         None if app.visual() => ("VISUAL LINE", theme::cyan()),
         None => ("NORMAL", theme::yellow()),
     };
+    // What has been typed and not yet resolved, shown where vim shows it.
+    // A count or a half-finished prefix is a keystroke the reader is in the
+    // middle of, and not showing it is how you end up pressing it twice.
+    let pending = {
+        let mut p = app.count.map(|n| n.to_string()).unwrap_or_default();
+        p.push_str(match app.pending {
+            super::app::Pending::Leader => "␣",
+            super::app::Pending::G => "g",
+            super::app::Pending::Z => "z",
+            super::app::Pending::Bracket(d) if d < 0 => "[",
+            super::app::Pending::Bracket(_) => "]",
+            super::app::Pending::None => "",
+        });
+        p
+    };
     let mut x = put(
         buf,
         0,
@@ -1062,9 +1082,9 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
     );
 
     let hint = if app.visual() {
-        "j/k extend · c comment on range · esc cancel"
+        "any motion extends · ␣n note on range · o other end · esc cancel"
     } else {
-        "j/k move · h/l scroll · s split · ␣e/␣c pane · c comment · a agent · S send · ? help"
+        "j/k move · }/]c hunk/change · ␣ leader · : commands · ␣? help"
     };
     let toast = format!(" {} ", app.toast);
     let tx = put_right(
@@ -1074,9 +1094,21 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
         &toast,
         Style::default().bg(theme::sel()).fg(theme::yellow()),
     );
+    // Where vim puts it: right of the hint, left of everything else.
+    let hx = if pending.is_empty() {
+        tx
+    } else {
+        put_right(
+            buf,
+            tx.saturating_sub(2),
+            area.y,
+            &pending,
+            base.fg(theme::bright()),
+        )
+    };
     put_right(
         buf,
-        tx.saturating_sub(2),
+        hx.saturating_sub(2),
         area.y,
         hint,
         base.fg(theme::dimmer()),
@@ -1675,9 +1707,13 @@ fn deps(buf: &mut Buffer, area: Rect, app: &App) {
     }
 }
 
+/// Width of the key column in the help. Named because two places depend on
+/// it agreeing.
+const KEY_W: u16 = 14;
+
 fn help(buf: &mut Buffer, area: Rect) {
     let rows = super::input::HELP;
-    let m = centered(area, 74, (rows.len() as u16).div_ceil(2) + 5);
+    let m = centered(area, 86, (rows.len() as u16).div_ceil(2) + 5);
     frame(buf, m, theme::yellow());
     let base = Style::default().bg(theme::panel());
     put(
@@ -1698,8 +1734,10 @@ fn help(buf: &mut Buffer, area: Rect) {
             break;
         }
         let x = m.x + 2 + col as u16 * half;
-        put(buf, x, y, x + 10, k, base.fg(theme::yellow()));
-        put_trunc(buf, x + 10, y, x + half - 1, d, base.fg(theme::dim()));
+        // Wide enough for the longest of them: `zz / zt / zb` and
+        // `{count}j` were being cut, which turns a keymap into a puzzle.
+        put(buf, x, y, x + KEY_W, k, base.fg(theme::yellow()));
+        put_trunc(buf, x + KEY_W, y, x + half - 1, d, base.fg(theme::dim()));
     }
 }
 
