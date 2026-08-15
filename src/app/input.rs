@@ -6,6 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::data::{Kind, TABS};
 use crate::demo;
+use crate::nav::{Dir, Place};
 
 impl App {
     /// Scrolls the detail body. The real limit is applied by the render, which
@@ -63,8 +64,8 @@ impl App {
         match ev.code {
             KeyCode::Esc => self.finder_open = false,
             KeyCode::Enter => self.finder_accept(),
-            KeyCode::Tab => self.finder_source_by(1),
-            KeyCode::BackTab => self.finder_source_by(-1),
+            KeyCode::Tab => self.finder_source_by(Dir::Next),
+            KeyCode::BackTab => self.finder_source_by(Dir::Prev),
             KeyCode::Down => self.finder_move(1, len),
             KeyCode::Up => self.finder_move(-1, len),
             KeyCode::Char('n') if ctrl => self.finder_move(1, len),
@@ -90,13 +91,13 @@ impl App {
         self.finder_sel = (self.finder_sel as i64 + d).rem_euclid(len as i64) as usize;
     }
 
-    fn finder_source_by(&mut self, d: i64) {
+    fn finder_source_by(&mut self, d: Dir) {
         let all = crate::finder::Source::ALL;
         let i = all
             .iter()
             .position(|s| *s == self.finder_source)
             .unwrap_or(0) as i64;
-        self.finder_source = all[(i + d).rem_euclid(all.len() as i64) as usize];
+        self.finder_source = all[(i + d.step()).rem_euclid(all.len() as i64) as usize];
         self.finder_sel = 0;
         self.finder_scroll = 0;
         self.finder_hits.clear();
@@ -159,12 +160,12 @@ impl App {
 
     /// `[` / `]`: the previous or next repository, without needing the pane
     /// open. Everything the view is about follows the change.
-    pub fn step_repo(&mut self, d: i64) {
+    pub fn step_repo(&mut self, d: Dir) {
         let n = self.repos().len() as i64;
         if n == 0 {
             return;
         }
-        let next = (self.repo_idx() as i64 + d).rem_euclid(n) as usize;
+        let next = (self.repo_idx() as i64 + d.step()).rem_euclid(n) as usize;
         self.repo = next;
         self.item = 0;
         self.item_scroll = 0;
@@ -195,14 +196,14 @@ impl App {
 
     /// Moves focus one pane left (`-1`) or right (`1`). `h`/`l` stop at the
     /// edges; `tab` wraps around.
-    fn focus_by(&mut self, d: i64, wrap: bool) {
+    fn focus_by(&mut self, d: Dir, wrap: bool) {
         let panes = self.panes();
         let n = panes.len() as i64;
         let i = panes.iter().position(|p| *p == self.pane).unwrap_or(0) as i64;
         let j = if wrap {
-            (i + d).rem_euclid(n)
+            (i + d.step()).rem_euclid(n)
         } else {
-            (i + d).clamp(0, n - 1)
+            (i + d.step()).clamp(0, n - 1)
         };
         self.pane = panes[j as usize];
     }
@@ -414,9 +415,9 @@ impl App {
     }
 
     /// `g` / `G`: to the start or the end of the focused pane.
-    fn goto(&mut self, top: bool) {
+    fn goto(&mut self, to: Place) {
         match self.pane {
-            Pane::Body | Pane::Log | Pane::DiffBody if top => {
+            Pane::Body | Pane::Log | Pane::DiffBody if to == Place::Top => {
                 if self.pane == Pane::Log {
                     self.follow = false;
                 }
@@ -431,7 +432,7 @@ impl App {
                 self.follow = false;
                 self.log_scroll = usize::MAX;
             }
-            _ => self.move_by(if top {
+            _ => self.move_by(if to == Place::Top {
                 -i64::from(u32::MAX)
             } else {
                 i64::from(u32::MAX)
@@ -867,12 +868,12 @@ impl App {
         match ev.code {
             KeyCode::Char('j') | KeyCode::Down => self.move_by(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_by(-1),
-            KeyCode::Char('h') | KeyCode::Left => self.focus_by(-1, false),
-            KeyCode::Char('l') | KeyCode::Right => self.focus_by(1, false),
-            KeyCode::Tab => self.focus_by(1, true),
-            KeyCode::BackTab => self.focus_by(-1, true),
-            KeyCode::Char('g') => self.goto(true),
-            KeyCode::Char('G') => self.goto(false),
+            KeyCode::Char('h') | KeyCode::Left => self.focus_by(Dir::Prev, false),
+            KeyCode::Char('l') | KeyCode::Right => self.focus_by(Dir::Next, false),
+            KeyCode::Tab => self.focus_by(Dir::Next, true),
+            KeyCode::BackTab => self.focus_by(Dir::Prev, true),
+            KeyCode::Char('g') => self.goto(Place::Top),
+            KeyCode::Char('G') => self.goto(Place::Bottom),
             KeyCode::Enter => self.enter(),
             KeyCode::Esc | KeyCode::Char('q') => self.back(),
             KeyCode::Char('a') => {
@@ -881,8 +882,8 @@ impl App {
             }
             KeyCode::Char('b') => self.toggle_sidebar(),
             KeyCode::Char('p') => self.open_finder(),
-            KeyCode::Char('[') => self.step_repo(-1),
-            KeyCode::Char(']') => self.step_repo(1),
+            KeyCode::Char('[') => self.step_repo(Dir::Prev),
+            KeyCode::Char(']') => self.step_repo(Dir::Next),
             KeyCode::Char('t') => self.open_themes(),
             KeyCode::Char('?') => self.help_open = true,
             KeyCode::Char(':') => {

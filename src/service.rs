@@ -6,6 +6,7 @@
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
+use crate::data::Kind;
 use crate::data::MergeMethod;
 use crate::data::{Account, Comment, FileChange, Hunk, Item, Job, RawLog, Repo, Review};
 use crate::error::Error;
@@ -332,8 +333,8 @@ fn handle(req: Request) -> Response {
         } => {
             let result = match source {
                 FinderSource::Commits => gh::search_commits(&owner, &query),
-                FinderSource::Prs => gh::search_issues(&owner, &query, true),
-                _ => gh::search_issues(&owner, &query, false),
+                FinderSource::Prs => gh::search_issues(&owner, &query, Kind::Pr),
+                _ => gh::search_issues(&owner, &query, Kind::Issue),
             };
             Response::Search {
                 query,

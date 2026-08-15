@@ -10,7 +10,8 @@ use std::collections::HashMap;
 
 use crossterm::event::KeyCode;
 
-use super::app::{Dir, Pending};
+use super::app::Pending;
+use crate::nav::Dir;
 
 /// Everything a key can be bound to.
 ///

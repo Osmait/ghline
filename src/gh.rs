@@ -7,6 +7,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
+use crate::data::Kind;
 use crate::data::{
     Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
     Repo, Review, ReviewState, RunDetail, Status, Step, TreeEntry,
@@ -711,8 +712,13 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
 ///
 /// An empty query is fine here — GitHub allows qualifier-only searches for
 /// issues — and returns the most recently updated.
-pub fn search_issues(owner: &str, query: &str, prs: bool) -> Res<Vec<SearchHit>> {
-    let kind = if prs { "prs" } else { "issues" };
+pub fn search_issues(owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>> {
+    // `search_issues(owner, query, true)` did not say what `true` was for.
+    // The enum was already in the crate; it just was not being used here.
+    let kind = match want {
+        Kind::Pr => "prs",
+        _ => "issues",
+    };
     let mut args = vec![
         "search",
         kind,

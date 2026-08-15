@@ -1077,8 +1077,8 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
             super::app::Pending::Leader => "␣",
             super::app::Pending::G => "g",
             super::app::Pending::Z => "z",
-            super::app::Pending::Bracket(super::app::Dir::Prev) => "[",
-            super::app::Pending::Bracket(super::app::Dir::Next) => "]",
+            super::app::Pending::Bracket(crate::nav::Dir::Prev) => "[",
+            super::app::Pending::Bracket(crate::nav::Dir::Next) => "]",
             super::app::Pending::None => "",
         });
         p

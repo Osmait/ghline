@@ -2,22 +2,11 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use super::app::{App, Dir, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
+use super::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
 use super::keys::{self, Action};
 use super::model::{Comment, Kind, State};
 use super::service::{Request, Write};
-
-/// Where on the screen a motion is aiming.
-///
-/// An enum rather than the `i64` sentinels this started with: `goto_screen(
-/// i64::MIN)` meant "the top" only because both ends of the call agreed to
-/// pretend, and nothing stopped a third value being passed.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Place {
-    Top,
-    Middle,
-    Bottom,
-}
+use crate::nav::{Dir, Place};
 
 /// Which way `w`, `b` and `e` go, and how far into the word.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

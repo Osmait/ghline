@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error::Error;
+use crate::nav::Dir;
 
 use super::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
 use super::service::{Request, Response, Service};
@@ -92,24 +93,6 @@ pub enum Pending {
     Z,
     /// `[` or `]`, carrying which one it was.
     Bracket(Dir),
-}
-
-/// Backwards or forwards. Named because `-1` and `1` are only directions by
-/// convention, and nothing stops a `0`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum Dir {
-    Prev,
-    Next,
-}
-
-impl Dir {
-    /// For the motions that still count in rows.
-    pub fn step(self) -> i64 {
-        match self {
-            Self::Prev => -1,
-            Self::Next => 1,
-        }
-    }
 }
 
 /// What is over everything else, if anything.
