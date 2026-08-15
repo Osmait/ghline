@@ -1,0 +1,48 @@
+---
+source: tests/frames.rs
+expression: "frame(\"p\")"
+---
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requests                                                           synced 3s ago · idle  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   5 items · / to filter  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌ ⇅ #217   fix(layout): clamp sidebar width to a minimum of 12 cols [bug]                                                                       open  ✗ checks  
+▌          fix/sidebar-clamp · marasanz · +128/-34 · 6 files · 26m ago                                                                                          
+  ⇅ #214   feat(actions): stream job logs with follow mode [feature]                                                                            open  ◐ checks  
+           feat/log-stream · kdev · +342/-9 · 4 files · 5h ago                                                                                                  
+  ⇅ #209   chore(deps): bump cro┌──────────────────────────────────────────────────────────────────────────────────────────────┐                open  ✓ checks  
+           dependabot/crossterm │ ❯ filter repositories                                                                        │                                
+  ⑂ #203   feat(auth): multi-acc├──────────────────────────────────────────────────────────────────────────────────────────────┤               draft  ○ checks  
+           feat/multi-account · │ ▸ repos   issues   pull requests   commits                                               tab │                                
+  ⑃ #196   refactor: move keymap│                                                                                              │              merged  ✓ checks  
+           refactor/keymap-crate│▌ ▪ ripgrep-ui                                                                                │                                
+                                │▌   Rust · 7 open issues · 2 open PRs                                                         │                                
+                                │  ▪ dotfiles                                                                                  │                                
+                                │    Shell · 1 open issues · 0 open PRs                                                        │                                
+                                │  ▪ tuikit                                                                                    │                                
+                                │    Go · 12 open issues · 4 open PRs                                                          │                                
+                                │  ▪ notes.md                                                                                  │                                
+                                │    Python · 0 open issues · 1 open PRs                                                       │                                
+                                │  ▪ aoc-2025                                                                                  │                                
+                                │    Rust · 2 open issues · 0 open PRs                                                         │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                │                                                                                              │                                
+                                ├──────────────────────────────────────────────────────────────────────────────────────────────┤                                
+                                │ 5 results                                                    ↑↓ or ^n/^p · enter opens · esc │                                
+                                └──────────────────────────────────────────────────────────────────────────────────────────────┘                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                                 1/5  marasanz/tuikit

@@ -1,0 +1,48 @@
+---
+source: tests/frames.rs
+expression: "frame(\"<enter>d\")"
+---
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requests › #217 › diff                                             synced 3s ago · idle  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ FILES CHANGED                        │ src/layout/solver.rs                                 2 hunks · fix/sidebar-clamp → main  ▤ unified [s]  ○ ignore ws [w] 
+──────────────────────────────────────│─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌ src/layout/solver.rs        +64 -18 │              @@ -186,14 +186,26 @@ impl Solver {                                                                        
+  src/layout/mod.rs            +12 -4 │   186   186    fn split(&mut self, area: Rect) -> (Rect, Rect) {                                                        
+  src/app/reducer.rs           +27 -9 │   187   187        let cols = area.width;                                                                               
+  src/ui/sidebar.rs            +18 -3 │   188        -     let sidebar = cols / 4;                                                                              
+  tests/layout.rs               +7 -0 │   189        -     let content = cols - sidebar;                                                                        
+  CHANGELOG.md                  +0 -0 │         188  +     // never let the sidebar collapse into a negative width                                              
+                                      │         189  +     let sidebar = if cols < MIN_TOTAL {                                                                  
+                                      │         190  +         0                                                                                                
+                                      │         191  +     } else {                                                                                             
+                                      │         192  +         (cols / 4).clamp(MIN_SIDEBAR, MAX_SIDEBAR)                                                       
+                                      │         193  +     };                                                                                                   
+                                      │         194  +     let content = cols.saturating_sub(sidebar);                                                          
+                                      │   190   195        (Rect::new(0, 0, sidebar, area.height),                                                              
+                                      │   191   196         Rect::new(sidebar, 0, content, area.height))                                                        
+                                      │   192   197    }                                                                                                        
+                                      │              @@ -204,7 +216,9 @@ impl Solver {                                                                          
+                                      │   204   216    pub fn resize(&mut self, area: Rect) {                                                                   
+                                      │   205        -     debug_assert!(area.width > 0);                                                                       
+                                      │         217  +     debug_assert_eq!(self.sidebar.max(MIN_SIDEBAR), MIN_SIDEBAR,                                         
+                                      │         218  +         "sidebar width must never go below {MIN_SIDEBAR}");                                              
+                                      │   206   219        self.dirty = true;                                                                                   
+                                      │   207   220    }                                                                                                        
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+──────────────────────────────────────│                                                                                                                         
+ 6 files changed · +128 -34           │                                                                                                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  DIFF   j/k file · enter/l diff · s split · w ignore ws · esc back                                                                        1/6  marasanz/tuikit

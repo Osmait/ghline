@@ -157,6 +157,38 @@ fn settle(app: &mut App) {
     }
 }
 
+/// The demo, with the keys applied and the clock wound on.
+///
+/// Four callers built this the same way and one of them would eventually have
+/// stopped matching: a snapshot is only worth having if the frame is the same
+/// on any machine, and that starts with reading nobody's config.
+pub fn demo(keys: &str, ticks: usize) -> App {
+    let _ =
+        crate::shared::settings::use_store(Box::new(crate::shared::settings::Memory::default()));
+    let mut app = App::new(Source::Demo, None);
+    for k in parse_keys(keys) {
+        app.on_key(k);
+    }
+    for _ in 0..ticks {
+        app.tick();
+    }
+    // A blinking cursor is half the frames it is in; this is the half that is
+    // worth looking at.
+    app.blink = true;
+    app
+}
+
+/// One frame of the demo as plain text, a row per line and no colour.
+///
+/// What the golden tests in `tests/` compare against. The SVG below is the
+/// same frame for a human to look at; this is the one a diff can be read on.
+pub fn frame(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<String> {
+    let mut app = demo(keys, ticks);
+    let mut term = Terminal::new(TestBackend::new(width, height))?;
+    term.draw(|f| ui::draw(f, &mut app))?;
+    Ok(crate::tui::probe::screen(&term))
+}
+
 /// Render with real data: applies the keys, waiting on `gh` between each one.
 fn build_live(keys: &str, ticks: usize) -> App {
     let mut app = App::new(Source::Live, None);
@@ -204,19 +236,7 @@ pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::
 }
 
 pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
-    // A snapshot has to be the same frame on any machine, so it reads
-    // nobody's config.
-    let _ =
-        crate::shared::settings::use_store(Box::new(crate::shared::settings::Memory::default()));
-    let mut app = App::new(Source::Demo, None);
-    for k in parse_keys(keys) {
-        app.on_key(k);
-    }
-    for _ in 0..ticks {
-        app.tick();
-    }
-    app.blink = true;
-
+    let mut app = demo(keys, ticks);
     let mut term = Terminal::new(TestBackend::new(width, height))?;
     term.draw(|f| ui::draw(f, &mut app))?;
     print!("{}", to_svg(term.backend().buffer(), width, height));
@@ -224,19 +244,7 @@ pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result
 }
 
 pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
-    // A snapshot has to be the same frame on any machine, so it reads
-    // nobody's config.
-    let _ =
-        crate::shared::settings::use_store(Box::new(crate::shared::settings::Memory::default()));
-    let mut app = App::new(Source::Demo, None);
-    for k in parse_keys(keys) {
-        app.on_key(k);
-    }
-    for _ in 0..ticks {
-        app.tick();
-    }
-    app.blink = true;
-
+    let mut app = demo(keys, ticks);
     let mut term = Terminal::new(TestBackend::new(width, height))?;
     term.draw(|f| ui::draw(f, &mut app))?;
 

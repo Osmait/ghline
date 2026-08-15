@@ -1,0 +1,5 @@
+---
+source: tests/frames.rs
+expression: f
+---
+terminal too small

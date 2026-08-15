@@ -1,0 +1,28 @@
+---
+source: tests/frames.rs
+expression: f
+---
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › synced 3s ago · idle  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────
+  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                  
+────────────────────────────────────────────────────────────────────────────────────────
+▌ ⇅ #217   fix(layout): clamp sidebar width to a minimum of 12 … [bug]  open  ✗ checks  
+▌          fix/sidebar-clamp · marasanz · +128/-34 · 6 files · 26m ago                  
+  ⇅ #214   feat(actions): stream job logs with follow mode [feature]    open  ◐ checks  
+           feat/log-stream · kdev · +342/-9 · 4 files · 5h ago                          
+  ⇅ #209   chore(deps): bump crossterm to 0.28 [deps]                   open  ✓ checks  
+           dependabot/crossterm · dependabot · +9/-9 · 2 files · 1d ago                 
+  ⑂ #203   feat(auth): multi-account switcher with … [feature] [auth]  draft  ○ checks  
+           feat/multi-account · sofi · +611/-56 · 6 files · 2d ago                      
+  ⑃ #196   refactor: move keymap into its own crate                   merged  ✓ checks  
+           refactor/keymap-crate · tsuki · +370/-648 · 5 files · 4d ago                 
+                                                                                        
+                                                                                        
+                                                                                        
+                                                                                        
+                                                                                        
+                                                                                        
+                                                                                        
+                                                                                        
+────────────────────────────────────────────────────────────────────────────────────────
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filt…  1/5  marasanz/tuikit

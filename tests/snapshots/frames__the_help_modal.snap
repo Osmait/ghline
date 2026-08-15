@@ -1,0 +1,48 @@
+---
+source: tests/frames.rs
+expression: "frame(\"?\")"
+---
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requests                                                           synced 3s ago · idle  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   5 items · / to filter  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌ ⇅ #217   fix(layout): clamp sidebar width to a minimum of 12 cols [bug]                                                                       open  ✗ checks  
+▌          fix/sidebar-clamp · marasanz · +128/-34 · 6 files · 26m ago                                                                                          
+  ⇅ #214   feat(actions): stream job logs with follow mode [feature]                                                                            open  ◐ checks  
+           feat/log-stream · kdev · +342/-9 · 4 files · 5h ago                                                                                                  
+  ⇅ #209   chore(deps): bump crossterm t┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✓ checks  
+           dependabot/crossterm · depend│ KEYBINDINGS                                                    esc to close │                                         
+  ⑂ #203   feat(auth): multi-account swi├─────────────────────────────────────────────────────────────────────────────┤                        draft  ○ checks  
+           feat/multi-account · sofi · +│         j / k  move in the pane           :sidebar  hide / show repos       │                                         
+  ⑃ #196   refactor: move keymap into it│         h / l  pane left / right             :find  the finder              │                       merged  ✓ checks  
+           refactor/keymap-crate · tsuki│         g / G  top / bottom                      ?  this help               │                                         
+                                        │         1 2 3  Issues / PRs / Actions           :q  close overlay           │                                         
+                                        │         enter  enter the pane              ^d / ^u  half page scroll        │                                         
+                                        │       esc / q  back one level                    d  diff of the PR files    │                                         
+                                        │             a  switch account                    s  split / unified diff    │                                         
+                                        │             t  switch theme                      w  ignore whitespace       │                                         
+                                        │             b  hide / show repos               tab  next pane               │                                         
+                                        │         [ / ]  previous / next repo              m  merge the pull request  │                                         
+                                        │             p  find repos, issues, P…            c  close / reopen the PR   │                                         
+                                        │             o  expand / collapse job             D  delete the branch       │                                         
+                                        │             /  filter (list or log)          y / n  confirm / cancel        │                                         
+                                        │             e  jump to first error           click  focus pane, select row  │                                         
+                                        │             f  toggle log follow          2x click  open it                 │                                         
+                                        │             r  refresh (fake)                wheel  scroll under pointer    │                                         
+                                        │             :  command line                      4  the repo's files        │                                         
+                                        │      :account  account picker                    5  agents running here     │                                         
+                                        │  :issues :prs  jump to a tab                     E  edit the file in $EDIT… │                                         
+                                        │         :logs  open logs of selection           ^l  repaint the screen      │                                         
+                                        │  :diff :files  open the diff                     x  send this to an agent   │                                         
+                                        │        :theme  theme picker            x then type  …and say something spe… │                                         
+                                        │                                                                             │                                         
+                                        └─────────────────────────────────────────────────────────────────────────────┘                                         
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                                 1/5  marasanz/tuikit

@@ -13,7 +13,6 @@
 
 pub mod diff;
 pub mod hit;
-#[cfg(test)]
 pub mod probe;
 pub mod run;
 pub mod theme;

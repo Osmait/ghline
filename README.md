@@ -707,10 +707,10 @@ with no echo.
 ## Tests
 
 ```sh
-cargo test          # 86 unit tests
+cargo test          # 581 unit tests and 10 golden frames
 cargo clippy        # the lint set configured in Cargo.toml
-cargo machete       # unused dependencies
-cargo audit         # advisories against the dependency tree
+cargo doc           # the rustdoc lints, which are denied
+make audit          # unused dependencies, advisories, licences, sources
 ```
 
 The lint set in `Cargo.toml` forbids `unsafe`, and warns on `unwrap`, `expect`,
@@ -724,6 +724,22 @@ unified diffs with renames and no-newline markers, hunk line numbering, wrapping
 and truncation at column boundaries (including wide glyphs), scroll clamping,
 pane navigation, and the pull request state machine with an empty or filtered
 list.
+
+Those tests say what a view is *about* — a count in a tab, a line that stops at
+the pane's edge — which is why they survive a redesign of everything around the
+thing they name, and also why the layout can move underneath them. `tests/`
+takes the other half: ten whole frames of the demo, compared character for
+character, so any change to any of them fails with the screen before and after
+as the diff.
+
+```sh
+cargo test --test frames        # the golden frames
+cargo insta review              # look at what changed, accept or reject
+INSTA_UPDATE=always cargo test --test frames   # accept without cargo-insta
+```
+
+A golden is only worth what the look at it was worth. Accepting a frame you
+have not read turns a failing test into a passing one and nothing else.
 
 ## Terminal-free renders
 

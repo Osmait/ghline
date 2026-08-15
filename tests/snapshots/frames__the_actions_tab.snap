@@ -1,0 +1,48 @@
+---
+source: tests/frames.rs
+expression: "frame(\"3\")"
+---
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Actions                                                                 synced 3s ago · idle  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   5 items · / to filter  
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▌ ✗ #1827  CI · fix/sidebar-clamp                                                                                                                      failure  
+▌          pull_request · marasanz · 3m 02s · 24m ago                                                                                                           
+  ◐ #1826  Release · build-release                                                                                                                     running  
+           workflow_dispatch · kdev · 1m 06s · 4m ago                                                                                                           
+  ✓ #1825  CI · main                                                                                                                                   success  
+           push · tsuki · 2m 51s · 3h ago                                                                                                                       
+  ✓ #1824  Nightly · tui snapshots                                                                                                                     success  
+           schedule · github-actions · 6m 12s · 11h ago                                                                                                         
+  ⊗ #1823  CI · feat/log-stream                                                                                                                      cancelled  
+           pull_request · kdev · 48s · 1d ago                                                                                                                   
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+                                                                                                                                                                
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter                                                                         1/5  marasanz/tuikit

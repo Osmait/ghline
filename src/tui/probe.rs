@@ -5,10 +5,12 @@
 //! symbol, join the row — written out again in every file that has view tests:
 //! four copies of one loop, differing in nothing.
 //!
-//! `#[cfg(test)]` because that is all it is for. The two places that read a
-//! frame outside a test, `github::snapshot` and diffline's `--snapshot`, want
-//! the colours as well and turn the buffer into SVG; they are a different job
-//! that happens to start at the same buffer.
+//! Public rather than `#[cfg(test)]`, because two things outside the unit
+//! tests need it: the golden frames in `tests/`, which are a separate crate
+//! and cannot see a test-only item, and `github::snapshot::frame`. The
+//! `--snapshot` SVG paths do not — they want the colours too, and turning a
+//! buffer into SVG is a different job that happens to start at the same
+//! buffer.
 
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
