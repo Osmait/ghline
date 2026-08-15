@@ -20,7 +20,11 @@ unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
 [lints.clippy]
-# nothing in the product may panic on its own; tests opt out locally
+# Nothing may panic by accident — no `unwrap`, no `expect`, no bare `panic!`;
+# tests opt out locally. Deliberate assertions are the exception and are
+# spelt out as such: `debug_assert!` for invariants whose violation costs a
+# wrong cell, and a plain `assert!` only where being wrong would be worse
+# than stopping — a note handed to an agent against the wrong file.
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"

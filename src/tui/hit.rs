@@ -59,6 +59,7 @@ impl<T: Copy> Region<T> {
         if self.len == 0 {
             return None;
         }
+        debug_assert!(self.row_h > 0, "a region with rows of no height");
         let offset = row.checked_sub(self.area.y)? / self.row_h;
         let i = self.scroll + offset as usize;
         (i < self.len).then_some(i)

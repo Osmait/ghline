@@ -79,6 +79,26 @@ pub fn pair(sides: &[Side]) -> Vec<Pair> {
             }
         }
     }
+
+    // The invariant the whole thing rests on: a cursor is a row index, so a
+    // row this never places is one you can select and not see, and one placed
+    // twice is a line you can comment on from two places and queue twice.
+    // Context counts twice on purpose — it is the same line on both sides.
+    debug_assert!(
+        {
+            let mut seen = vec![0usize; sides.len()];
+            for p in &out {
+                for i in [p.left, p.right, p.header].into_iter().flatten() {
+                    seen[i] += 1;
+                }
+            }
+            sides
+                .iter()
+                .enumerate()
+                .all(|(i, side)| seen[i] == if *side == Side::Context { 2 } else { 1 })
+        },
+        "a row was folded twice or not at all"
+    );
     out
 }
 

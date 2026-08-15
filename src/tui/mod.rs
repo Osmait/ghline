@@ -46,6 +46,15 @@ pub fn clear(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
 
 /// Writes `text` at (x, y), clipping at `max_x` (exclusive). Returns the end x.
 pub fn put(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Style) -> u16 {
+    // The invariant this program has broken twice: a tab measured as one
+    // column and drawn as eight, and a diff line painted over the pane beside
+    // it. Both were found by looking at a screenshot. `debug_assert` because
+    // the cost of being wrong here is a wrong cell, and the cost of a panic
+    // is a terminal left in raw mode with a queue of unsent comments in it.
+    debug_assert!(
+        x <= max_x,
+        "asked to write at {x} with a right edge of {max_x}"
+    );
     let mut cx = x;
     if y >= buf.area.bottom() {
         return cx;
@@ -83,6 +92,7 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Styl
         }
         cx += w;
     }
+    debug_assert!(cx <= max_x, "wrote to {cx}, past the edge at {max_x}");
     cx
 }
 
@@ -255,6 +265,16 @@ pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usiz
     }
     let max = len.saturating_sub(height);
     *offset = (*offset).min(max);
+
+    // What this function is *for*: after it, the selection is on screen. It
+    // is easy to write a version that clamps the offset and quietly loses
+    // that, which is a cursor you cannot see and cannot find.
+    debug_assert!(
+        sel >= len || (sel >= *offset && sel < *offset + height),
+        "selection {sel} is outside the window {}..{} of {len}",
+        *offset,
+        *offset + height
+    );
 }
 
 pub fn bold(style: Style) -> Style {
@@ -456,6 +476,10 @@ pub fn rows(
                 put(buf, area.x, y + dy, area.right(), "▌", style.fg(accent));
             }
         }
+        debug_assert!(
+            slot.bottom() <= area.bottom() && slot.right() <= area.right(),
+            "a row was laid out past the list it belongs to"
+        );
         out.push(RowSlot {
             index,
             area: slot,
@@ -578,6 +602,12 @@ impl<'a> Dialog<'a> {
         };
         let top = modal_head(buf, outer, self.title, self.hint, self.accent);
         let bottom = outer.bottom().saturating_sub(1 + self.footer);
+        // A box too short for its own chrome — four rows of frame, title and
+        // rule in three rows of height. The body is empty either way, but
+        // without this it is empty *below the frame*, so anything drawn into
+        // it lands outside the modal. Found by the assertion under it.
+        let top = top.min(bottom);
+        debug_assert!(top <= bottom, "the body starts below where it ends");
         Body {
             outer,
             accent: self.accent,

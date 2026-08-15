@@ -56,6 +56,13 @@ pub fn expand_tabs(text: &str) -> std::borrow::Cow<'_, str> {
             }
         }
     }
+    // What the whole function is for. A tab reaching a cell is measured as
+    // one column by the layout and drawn as up to four by the terminal, which
+    // is how a diff line ended up painted over the pane beside it.
+    debug_assert!(
+        !out.contains('\t'),
+        "a tab survived the expansion that exists to remove it"
+    );
     std::borrow::Cow::Owned(out)
 }
 

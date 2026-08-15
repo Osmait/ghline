@@ -758,11 +758,19 @@ pub struct Tally {
 impl Tally {
     pub fn of(jobs: &[Job]) -> Self {
         let count = |want: &[Status]| jobs.iter().filter(|j| want.contains(&j.status)).count();
-        Self {
+        let t = Self {
             passed: count(&[Status::Success]),
             failed: count(&[Status::Failure]),
             in_progress: count(&[Status::Running, Status::Pending]),
-        }
+        };
+        // The three are drawn side by side as if they accounted for the run.
+        // They do not have to add up — a skipped job is none of them — but
+        // they may never add up to more than there is.
+        debug_assert!(
+            t.passed + t.failed + t.in_progress <= jobs.len(),
+            "counted more jobs than the run has"
+        );
+        t
     }
 }
 

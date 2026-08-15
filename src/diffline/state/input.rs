@@ -475,6 +475,19 @@ impl App {
                 .unwrap_or_default()
         };
 
+        // A hard assertion, and the only kind of place that gets one: a
+        // comment is an instruction handed to an agent, and an anchor naming
+        // the wrong file or line 0 is an instruction to change the wrong
+        // code. Being wrong here is worse than stopping.
+        //
+        // It cannot fire today — the anchors and the file are both taken
+        // from `self.path()` a line apart, so they agree by construction.
+        // That is the point of writing it down: the construction is what a
+        // later change would break, and this is what would notice.
+        assert!(
+            anchors.iter().all(|a| a.path == file && a.line > 0),
+            "a note anchored somewhere other than the file it is about"
+        );
         self.comments.push(Comment {
             anchors,
             file,
@@ -508,6 +521,13 @@ impl App {
     pub fn send_queue(&mut self) {
         if self.comments.is_empty() {
             self.flash("queue is empty");
+            return;
+        }
+        // Nothing may be sent while a send is in flight: the second one would
+        // arrive at an agent already reading the first, and the comments
+        // would be marked sent by whichever answered last.
+        if self.busy {
+            self.flash("still sending");
             return;
         }
         let text = self.render_queue();

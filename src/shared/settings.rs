@@ -83,6 +83,11 @@ impl Store for Files {
     }
 
     fn set(&self, key: &str, value: &str) -> io::Result<()> {
+        // A blank key writes a line the parser will skip on the way back, so
+        // the setting is lost silently — which looks exactly like it was
+        // never saved.
+        debug_assert!(!key.trim().is_empty(), "a setting with no name");
+        debug_assert!(!key.contains('='), "a key holding the separator");
         let p = config_path()
             .ok_or_else(|| io::Error::other("no HOME or XDG_CONFIG_HOME to write to"))?;
         // Read-modify-write rather than writing the one key: two settings
