@@ -149,84 +149,39 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
 pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     use crate::theme::Theme;
 
-    let rows = Theme::all().len() as u16 * 2;
-    let modal = centered(area, 60, rows + 7);
-    frame(buf, modal, theme::purple());
-
-    let base = Style::default().bg(theme::panel());
-    put(
+    let all = Theme::all();
+    let modal = centered(area, 60, all.len() as u16 * 2 + 7);
+    let top = crate::tui::modal_head(
         buf,
-        modal.x + 2,
-        modal.y + 1,
-        modal.right(),
+        modal,
         "THEME",
-        base.fg(theme::purple()),
-    );
-    put_right(
-        buf,
-        modal.right() - 2,
-        modal.y + 1,
         "j/k previews · enter · esc",
-        base.fg(theme::dimmer()),
+        theme::purple(),
     );
-    rule(buf, modal, modal.y + 2, theme::purple());
 
+    let list = Rect {
+        x: modal.x + 1,
+        y: top,
+        width: modal.width - 2,
+        height: modal.bottom().saturating_sub(top),
+    };
     // The modal as a whole first, so a click on its chrome is absorbed
     // rather than falling through to the pane behind it; the rows go on top.
     app.hits.push(Region::plain(Target::Themes, modal));
-    app.hits.push(Region::rows(
-        Target::Themes,
-        Rect {
-            x: modal.x + 1,
-            y: modal.y + 3,
-            width: modal.width - 2,
-            height: modal.bottom().saturating_sub(modal.y + 3),
-        },
-        2,
-        0,
-        Theme::all().len(),
-    ));
+    app.hits
+        .push(Region::rows(Target::Themes, list, 2, 0, all.len()));
 
-    for (i, t) in Theme::all().iter().enumerate() {
-        let y = modal.y + 3 + i as u16 * 2;
-        let sel = i == app.theme_sel;
-        let bg = if sel { theme::sel() } else { theme::panel() };
-        fill(
-            buf,
-            Rect {
-                x: modal.x + 1,
-                y,
-                width: modal.width - 2,
-                height: 2,
-            },
-            bg,
-        );
-        let s = Style::default().bg(bg);
-        if sel {
-            put(
-                buf,
-                modal.x + 1,
-                y,
-                modal.right(),
-                "▌",
-                s.fg(theme::purple()),
-            );
-            put(
-                buf,
-                modal.x + 1,
-                y + 1,
-                modal.right(),
-                "▌",
-                s.fg(theme::purple()),
-            );
-        }
-
+    for slot in crate::tui::rows(buf, list, all.len(), 2, app.theme_sel, 0, theme::purple()) {
+        let Some(t) = all.get(slot.index) else {
+            continue;
+        };
+        let s = slot.style;
         let active = *t == theme::current();
         put(
             buf,
-            modal.x + 3,
-            y,
-            modal.right(),
+            slot.area.x + 2,
+            slot.area.y,
+            slot.area.right(),
             if active { "●" } else { "○" },
             s.fg(if active {
                 theme::green()
@@ -234,42 +189,28 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
                 theme::dimmer()
             }),
         );
-        let fg = if sel { theme::bright() } else { theme::fg() };
-        put_trunc(buf, modal.x + 5, y, modal.right() - 2, t.name(), s.fg(fg));
+        let fg = if slot.selected {
+            theme::bright()
+        } else {
+            theme::fg()
+        };
         put_trunc(
             buf,
-            modal.x + 5,
-            y + 1,
-            modal.right() - 2,
+            slot.area.x + 4,
+            slot.area.y,
+            slot.area.right() - 1,
+            t.name(),
+            s.fg(fg),
+        );
+        put_trunc(
+            buf,
+            slot.area.x + 4,
+            slot.area.y + 1,
+            slot.area.right() - 1,
             t.about(),
             s.fg(theme::dimmer()),
         );
     }
-
-    // a strip of the palette, so the accents can be compared at a glance
-    let foot_y = modal.bottom() - 2;
-    rule(buf, modal, foot_y - 1, theme::purple());
-    let swatch = [
-        theme::green(),
-        theme::yellow(),
-        theme::red(),
-        theme::purple(),
-        theme::orange(),
-        theme::cyan(),
-        theme::cyan_soft(),
-    ];
-    let mut x = modal.x + 2;
-    for c in swatch {
-        x = put(buf, x, foot_y, modal.right() - 2, "██", base.fg(c));
-        x = put(buf, x, foot_y, modal.right() - 2, " ", base);
-    }
-    put_right(
-        buf,
-        modal.right() - 2,
-        foot_y,
-        "applies as you move",
-        base.fg(theme::dimmer()),
-    );
 }
 
 pub fn help(buf: &mut Buffer, area: Rect) {

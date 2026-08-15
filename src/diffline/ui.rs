@@ -1207,41 +1207,6 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
 
 // ------------------------------------------------------------------ modals
 
-/// The query line every searching modal starts with.
-fn query_line(buf: &mut Buffer, m: Rect, y: u16, app: &App, lead: &str, placeholder: &str) {
-    let base = Style::default().bg(theme::panel());
-    let x = put(
-        buf,
-        m.x + 2,
-        y,
-        m.right() - 2,
-        lead,
-        base.fg(theme::yellow()),
-    );
-    if app.query.is_empty() {
-        put_trunc(
-            buf,
-            x,
-            y,
-            m.right() - 2,
-            placeholder,
-            base.fg(theme::dimmer()),
-        );
-    } else {
-        let end = put_trunc(
-            buf,
-            x,
-            y,
-            m.right() - 2,
-            &app.query,
-            base.fg(theme::bright()),
-        );
-        if app.blink {
-            put(buf, end, y, m.right() - 2, "█", base.fg(theme::yellow()));
-        }
-    }
-}
-
 fn finder(buf: &mut Buffer, area: Rect, app: &App) {
     let m = centered(
         area,
@@ -1279,7 +1244,7 @@ fn finder(buf: &mut Buffer, area: Rect, app: &App) {
     rule(buf, m, m.y + 2, theme::border());
 
     let hits = app.hits();
-    query_line(buf, m, m.y + 3, app, "❯ ", "fuzzy find…");
+    crate::tui::query_line(buf, m, m.y + 3, &app.query, "❯ ", "fuzzy find…", app.blink);
     put_right(
         buf,
         m.right() - 2,
@@ -1421,7 +1386,7 @@ fn palette(buf: &mut Buffer, area: Rect, app: &App) {
     let m = centered(area, 64, h);
     frame(buf, m, theme::purple());
 
-    query_line(buf, m, m.y + 1, app, ": ", "command…");
+    crate::tui::query_line(buf, m, m.y + 1, &app.query, ": ", "command…", app.blink);
     rule(buf, m, m.y + 2, theme::border());
 
     for (n, label) in hits.iter().enumerate() {
@@ -1709,81 +1674,42 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
 fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let all = crate::theme::Theme::all();
     let m = centered(area, 60, (all.len() as u16 * 2 + 5).min(area.height - 2));
-    frame(buf, m, theme::cyan());
-    let base = Style::default().bg(theme::panel());
-    put(
-        buf,
-        m.x + 2,
-        m.y + 1,
-        m.right() - 2,
-        "THEME",
-        base.fg(theme::yellow()),
-    );
-    put_right(
-        buf,
-        m.right() - 2,
-        m.y + 1,
-        "⏎ keep · esc undo",
-        base.fg(theme::dimmer()),
-    );
-    rule(buf, m, m.y + 2, theme::border());
+    let top = crate::tui::modal_head(buf, m, "THEME", "⏎ keep · esc undo", theme::cyan());
     app.hits.push(Region::plain(Target::Modal, m));
-    app.hits.push(Region::rows(
-        Target::Modal,
-        Rect {
-            x: m.x + 1,
-            y: m.y + 3,
-            width: m.width - 2,
-            height: m.bottom().saturating_sub(m.y + 3),
-        },
-        2,
-        0,
-        all.len(),
-    ));
 
-    for (i, t) in all.iter().enumerate() {
-        let y = m.y + 3 + i as u16 * 2;
-        if y + 1 >= m.bottom() {
-            break;
-        }
-        let bg = if i == app.sel {
-            theme::sel()
-        } else {
-            theme::panel()
+    let list = Rect {
+        x: m.x + 1,
+        y: top,
+        width: m.width - 2,
+        height: m.bottom().saturating_sub(top + 1),
+    };
+    app.hits
+        .push(Region::rows(Target::Modal, list, 2, 0, all.len()));
+
+    for slot in crate::tui::rows(buf, list, all.len(), 2, app.sel, 0, theme::yellow()) {
+        let Some(t) = all.get(slot.index) else {
+            continue;
         };
-        fill(
-            buf,
-            Rect {
-                x: m.x + 1,
-                y,
-                width: m.width - 2,
-                height: 2,
-            },
-            bg,
-        );
-        let s = Style::default().bg(bg);
-        if i == app.sel {
-            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
-        }
+        let s = slot.style;
         put_trunc(
             buf,
-            m.x + 3,
-            y,
-            m.right() - 14,
+            slot.area.x + 2,
+            slot.area.y,
+            slot.area.right() - 12,
             t.name(),
             s.fg(theme::bright()),
         );
         put_trunc(
             buf,
-            m.x + 3,
-            y + 1,
-            m.right() - 2,
+            slot.area.x + 2,
+            slot.area.y + 1,
+            slot.area.right() - 1,
             t.about(),
             s.fg(theme::dimmer()),
         );
         // A row of the accents, so the list shows the theme rather than
         // naming it — the picker is already painted in whichever is selected.
-        let mut x = m.right() - 12;
+        let mut x = slot.area.right() - 11;
         for c in [
             theme::green(),
             theme::yellow(),
@@ -1791,7 +1717,7 @@ fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
             theme::cyan(),
             theme::purple(),
         ] {
-            x = put(buf, x, y, m.right() - 2, "██", s.fg(c));
+            x = put(buf, x, slot.area.y, slot.area.right() - 1, "██", s.fg(c));
         }
     }
 }

@@ -337,6 +337,134 @@ pub fn rule(buf: &mut Buffer, area: Rect, y: u16, color: Color) {
     }
 }
 
+// --- components -------------------------------------------------------------
+//
+// These take data rather than an app, which is the whole reason they can be
+// shared: there are two unrelated `App` types in this crate and neither
+// component has any business knowing either. What a row *contains* stays with
+// whoever has the data; what every row has in common lives here.
+
+/// The heading every modal starts with: a frame, a title, a hint on the
+/// right, and the rule under both.
+///
+/// Returns the first row of the body, so a caller never counts the chrome.
+pub fn modal_head(buf: &mut Buffer, m: Rect, title: &str, hint: &str, accent: Color) -> u16 {
+    frame(buf, m, accent);
+    let base = Style::default().bg(theme::panel());
+    put(buf, m.x + 2, m.y + 1, m.right() - 2, title, base.fg(accent));
+    if !hint.is_empty() {
+        put_right(buf, m.right() - 2, m.y + 1, hint, base.fg(theme::dimmer()));
+    }
+    rule(buf, m, m.y + 2, accent);
+    m.y + 3
+}
+
+/// The line a searching modal types into.
+///
+/// Takes the query rather than the app that holds it — the only thing it ever
+/// wanted from one, and the reason this could not be shared before.
+pub fn query_line(
+    buf: &mut Buffer,
+    m: Rect,
+    y: u16,
+    query: &str,
+    lead: &str,
+    placeholder: &str,
+    caret: bool,
+) {
+    let base = Style::default().bg(theme::panel());
+    let x = put(
+        buf,
+        m.x + 2,
+        y,
+        m.right() - 2,
+        lead,
+        base.fg(theme::yellow()),
+    );
+    if query.is_empty() {
+        put_trunc(
+            buf,
+            x,
+            y,
+            m.right() - 2,
+            placeholder,
+            base.fg(theme::dimmer()),
+        );
+        return;
+    }
+    let end = put_trunc(buf, x, y, m.right() - 2, query, base.fg(theme::bright()));
+    if caret {
+        put(buf, end, y, m.right() - 2, "▌", base.fg(theme::yellow()));
+    }
+}
+
+/// One row of a list, as laid out.
+#[derive(Clone, Copy, Debug)]
+pub struct RowSlot {
+    /// Which entry it is, counting through the scroll.
+    pub index: usize,
+    /// Where to draw it. The selection bar is already painted in the first
+    /// column, so start past it unless you mean to cover it.
+    pub area: Rect,
+    /// The background it was filled with, to build styles from.
+    pub style: Style,
+    pub selected: bool,
+}
+
+/// Lays out a list of selectable rows and paints what they all have in
+/// common: the background of the one selected, and the bar down its edge.
+///
+/// It deliberately does not know what a row contains. That varies — a theme
+/// shows a name and a swatch, an agent a status dot and a working directory —
+/// and a component that tried to cover both would take five optional
+/// parameters and still be wrong for the third caller. This paints the part
+/// that was written out thirty-one times, and hands back where to put the
+/// rest.
+pub fn rows(
+    buf: &mut Buffer,
+    area: Rect,
+    count: usize,
+    row_h: u16,
+    sel: usize,
+    scroll: usize,
+    accent: Color,
+) -> Vec<RowSlot> {
+    let row_h = row_h.max(1);
+    let mut out = Vec::new();
+    for (n, index) in (scroll..count).enumerate() {
+        let y = area.y + n as u16 * row_h;
+        if y + row_h > area.bottom() {
+            break;
+        }
+        let selected = index == sel;
+        let bg = if selected {
+            theme::sel()
+        } else {
+            theme::panel()
+        };
+        let slot = Rect {
+            x: area.x,
+            y,
+            width: area.width,
+            height: row_h,
+        };
+        fill(buf, slot, bg);
+        let style = Style::default().bg(bg);
+        if selected {
+            for dy in 0..row_h {
+                put(buf, area.x, y + dy, area.right(), "▌", style.fg(accent));
+            }
+        }
+        out.push(RowSlot {
+            index,
+            area: slot,
+            style,
+            selected,
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,5 +704,141 @@ mod tests {
         assert_eq!(truncate_to("áéíóú", 3), "áéí");
         // and a wide glyph takes two columns, so only one fits in three
         assert_eq!(truncate_to("→→", 3), "→→");
+    }
+
+    // --- components ---
+
+    #[test]
+    fn a_modal_head_hands_back_the_first_row_of_the_body() {
+        // So a caller never counts the chrome, which is how two copies of it
+        // drifted apart in the first place.
+        let mut buf = buffer(40, 10);
+        let m = Rect::new(0, 0, 40, 10);
+        let top = modal_head(&mut buf, m, "TITLE", "hint", theme::cyan());
+        assert_eq!(top, 3, "frame, title, rule");
+        assert!(row(&buf, 1).contains("TITLE"));
+        assert!(row(&buf, 1).contains("hint"));
+    }
+
+    #[test]
+    fn the_query_line_shows_a_placeholder_only_while_it_is_empty() {
+        let m = Rect::new(0, 0, 40, 3);
+        let mut buf = buffer(40, 3);
+        query_line(&mut buf, m, 0, "", "> ", "type...", false);
+        assert!(row(&buf, 0).contains("type..."));
+
+        let mut buf = buffer(40, 3);
+        query_line(&mut buf, m, 0, "abc", "> ", "type...", false);
+        assert!(row(&buf, 0).contains("abc"));
+        assert!(!row(&buf, 0).contains("type..."));
+    }
+
+    #[test]
+    fn the_caret_blinks_rather_than_being_drawn_always() {
+        let m = Rect::new(0, 0, 40, 3);
+        let mut on = buffer(40, 3);
+        query_line(&mut on, m, 0, "abc", "> ", "", true);
+        let mut off = buffer(40, 3);
+        query_line(&mut off, m, 0, "abc", "> ", "", false);
+        assert_ne!(row(&on, 0), row(&off, 0));
+    }
+
+    #[test]
+    fn rows_lays_out_every_entry_that_fits_and_no_more() {
+        let mut buf = buffer(20, 4);
+        let slots = rows(
+            &mut buf,
+            Rect::new(0, 0, 20, 4),
+            10,
+            2,
+            0,
+            0,
+            theme::yellow(),
+        );
+        assert_eq!(slots.len(), 2, "two two-row entries fit in four rows");
+        assert_eq!(slots[1].area.y, 2);
+    }
+
+    #[test]
+    fn rows_counts_through_the_scroll() {
+        let mut buf = buffer(20, 4);
+        let slots = rows(
+            &mut buf,
+            Rect::new(0, 0, 20, 4),
+            100,
+            1,
+            0,
+            30,
+            theme::yellow(),
+        );
+        assert_eq!(slots[0].index, 30);
+    }
+
+    #[test]
+    fn only_the_selected_row_gets_the_bar() {
+        let mut buf = buffer(20, 3);
+        let slots = rows(
+            &mut buf,
+            Rect::new(0, 0, 20, 3),
+            3,
+            1,
+            1,
+            0,
+            theme::yellow(),
+        );
+        assert!(slots[1].selected);
+        assert!(!slots[0].selected);
+        assert!(row(&buf, 1).starts_with('\u{258c}'), "{:?}", row(&buf, 1));
+        assert!(!row(&buf, 0).starts_with('\u{258c}'));
+    }
+
+    #[test]
+    fn a_selection_bar_runs_the_whole_height_of_a_tall_row() {
+        // A two-row entry barred on only its first line reads as two entries,
+        // one of them selected.
+        let mut buf = buffer(20, 2);
+        rows(
+            &mut buf,
+            Rect::new(0, 0, 20, 2),
+            1,
+            2,
+            0,
+            0,
+            theme::yellow(),
+        );
+        assert!(row(&buf, 0).starts_with('\u{258c}'));
+        assert!(row(&buf, 1).starts_with('\u{258c}'));
+    }
+
+    #[test]
+    fn an_empty_list_lays_out_nothing() {
+        let mut buf = buffer(20, 4);
+        assert!(
+            rows(
+                &mut buf,
+                Rect::new(0, 0, 20, 4),
+                0,
+                1,
+                0,
+                0,
+                theme::yellow()
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_zero_row_height_does_not_loop_for_ever() {
+        let mut buf = buffer(20, 4);
+        let slots = rows(
+            &mut buf,
+            Rect::new(0, 0, 20, 4),
+            10,
+            0,
+            0,
+            0,
+            theme::yellow(),
+        );
+        assert_eq!(slots.len(), 4, "treated as one row each");
     }
 }
