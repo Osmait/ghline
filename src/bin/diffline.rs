@@ -8,15 +8,7 @@
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
-};
-use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+use github_tui::tui::run::{Program, Terminal_, run};
 
 use github_tui::diffline::app::App;
 use github_tui::diffline::model::Scope;
@@ -101,8 +93,9 @@ fn main() -> io::Result<()> {
     }
 
     let mouse = !args.iter().any(|a| a == "--no-mouse");
-    let mut term = TerminalGuard::enter(mouse)?;
-    let res = run(&mut term, &mut app);
+    let mut term = Terminal_::enter(mouse)?;
+    let res = run(&mut term, &mut Diffline::new(&mut app));
+    // the guard gives the terminal back even if `run` returned an error
     drop(term);
 
     if let Err(e) = &res {
@@ -124,112 +117,87 @@ fn usage() {
     println!("  ?     everything else");
 }
 
-/// Holds the terminal in the alternate screen and restores it on drop, even
-/// through a panic. Without it a panic leaves the console in raw mode.
-struct TerminalGuard {
-    term: Terminal<CrosstermBackend<io::Stdout>>,
+/// diffline's timers, and what the runtime needs to run it.
+///
+/// The timers stay here because they are about what this program draws — a
+/// cursor that blinks, skeletons that travel, a toast that ages out — and a
+/// runtime that owned them would have to be told about each one anyway.
+struct Diffline<'a> {
+    app: &'a mut App,
+    blink: Instant,
+    anim: Instant,
+    tick: Instant,
 }
 
-impl TerminalGuard {
-    fn enter(mouse: bool) -> io::Result<Self> {
-        enable_raw_mode()?;
-        if let Err(e) = execute!(io::stdout(), EnterAlternateScreen) {
-            let _ = disable_raw_mode();
-            return Err(e);
+impl<'a> Diffline<'a> {
+    fn new(app: &'a mut App) -> Self {
+        let now = Instant::now();
+        Self {
+            app,
+            blink: now,
+            anim: now,
+            tick: now,
         }
-        // Capturing the mouse takes the terminal's own click-to-select with
-        // it, so anyone who copies text out of here more than they click
-        // needs a way to say no.
-        if mouse {
-            let _ = execute!(io::stdout(), EnableMouseCapture);
-        }
-        let previous = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            restore();
-            previous(info);
-        }));
-
-        let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-        term.hide_cursor()?;
-        Ok(Self { term })
     }
 }
 
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        restore();
-        let _ = self.term.show_cursor();
+impl Program for Diffline<'_> {
+    fn ensure(&mut self) {
+        self.app.ensure();
     }
-}
 
-/// Idempotent and infallible: it is called from the panic hook, where there is
-/// nobody to return an error to.
-fn restore() {
-    let _ = disable_raw_mode();
-    let _ = execute!(io::stdout(), DisableMouseCapture);
-    let _ = execute!(io::stdout(), LeaveAlternateScreen);
-}
+    fn draw(&mut self, f: &mut ratatui::Frame<'_>) {
+        ui::draw(f, self.app);
+    }
 
-fn run(term: &mut TerminalGuard, app: &mut App) -> io::Result<()> {
-    let mut last_blink = Instant::now();
-    let mut last_anim = Instant::now();
-    let mut last_tick = Instant::now();
+    fn on_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.app.on_key(key);
+    }
 
-    loop {
-        app.ensure();
-        term.term.draw(|f| ui::draw(f, app))?;
+    fn on_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+        self.app.on_mouse(mouse);
+    }
 
-        // A short wait while anything is in flight, so an answer is drawn as
-        // soon as it lands rather than on the next keystroke.
-        let waiting = app.waiting();
-        let timeout = BLINK
-            .saturating_sub(last_blink.elapsed())
-            .min(TICK.saturating_sub(last_tick.elapsed()))
-            .min(if waiting {
-                ANIM.saturating_sub(last_anim.elapsed())
+    fn drain(&mut self) {
+        while let Some(res) = self.app.poll() {
+            self.app.apply(res);
+        }
+    }
+
+    /// The soonest of the three, and only the skeletons when something is
+    /// actually on its way: an idle program has nothing to animate.
+    fn next_wake(&self) -> Duration {
+        BLINK
+            .saturating_sub(self.blink.elapsed())
+            .min(TICK.saturating_sub(self.tick.elapsed()))
+            .min(if self.app.waiting() {
+                ANIM.saturating_sub(self.anim.elapsed())
             } else {
                 Duration::MAX
             })
-            .max(Duration::from_millis(16));
+    }
 
-        if event::poll(timeout)? {
-            match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
-                // Motion arrives whether or not anything is pressed and there
-                // is nothing here that follows a pointer, so it is dropped
-                // before it can cost a frame.
-                Event::Mouse(m) if m.kind != MouseEventKind::Moved => app.on_mouse(m),
-                _ => {}
-            }
+    fn on_wake(&mut self) {
+        if self.app.waiting() && self.anim.elapsed() >= ANIM {
+            self.app.anim = self.app.anim.wrapping_add(1);
+            self.anim = Instant::now();
         }
+        if self.blink.elapsed() >= BLINK {
+            self.app.blink = !self.app.blink;
+            self.blink = Instant::now();
+        }
+        if self.tick.elapsed() >= TICK {
+            self.app.tick();
+            self.tick = Instant::now();
+        }
+    }
 
-        while let Some(res) = app.poll() {
-            app.apply(res);
-        }
+    fn wants_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.app.wants_redraw)
+    }
 
-        // Ratatui writes only the cells that differ from the last frame, so a
-        // terminal that got out of step with it stays that way until told to
-        // forget what it thought was there.
-        if std::mem::take(&mut app.wants_redraw) {
-            term.term.clear()?;
-        }
-
-        if waiting && last_anim.elapsed() >= ANIM {
-            app.anim = app.anim.wrapping_add(1);
-            last_anim = Instant::now();
-        }
-        if last_blink.elapsed() >= BLINK {
-            app.blink = !app.blink;
-            last_blink = Instant::now();
-        }
-        if last_tick.elapsed() >= TICK {
-            app.tick();
-            last_tick = Instant::now();
-        }
-
-        if app.should_quit {
-            return Ok(());
-        }
+    fn should_quit(&self) -> bool {
+        self.app.should_quit
     }
 }
 
@@ -246,7 +214,7 @@ fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
         settle(app);
     }
 
-    let mut term = Terminal::new(TestBackend::new(w, h))?;
+    let mut term = ratatui::Terminal::new(TestBackend::new(w, h))?;
     term.draw(|f| ui::draw(f, app))?;
     print!(
         "{}",

@@ -13,6 +13,7 @@
 
 pub mod diff;
 pub mod hit;
+pub mod run;
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;

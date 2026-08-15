@@ -7,15 +7,7 @@
 use std::io;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
-};
-use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+use github_tui::tui::run::{Handover, Program, Terminal_, run};
 
 use github_tui::github::app::{App, Source};
 use github_tui::github::{gh, snapshot, ui};
@@ -93,8 +85,8 @@ fn main() -> io::Result<()> {
     // to say no.
     let mouse = !args.iter().any(|a| a == "--no-mouse");
 
-    let mut term = TerminalGuard::enter(mouse)?;
-    let res = run(&mut term, source);
+    let mut term = Terminal_::enter(mouse)?;
+    let res = run(&mut term, &mut GithubTui::new(source));
     // the guard restores the terminal even if `run` returns an error
     drop(term);
 
@@ -102,83 +94,6 @@ fn main() -> io::Result<()> {
         eprintln!("gh-tui: {e}");
     }
     res
-}
-
-/// Holds the terminal in the alternate screen while alive and restores it on
-/// drop, even if the thread panics. Without it a panic would leave the console
-/// in raw mode with no echo.
-struct TerminalGuard {
-    term: Terminal<CrosstermBackend<io::Stdout>>,
-    /// Whether mouse capture was on, so suspending and resuming puts back what
-    /// was there rather than what the default happens to be.
-    mouse: bool,
-}
-
-impl TerminalGuard {
-    fn enter(mouse: bool) -> io::Result<Self> {
-        enable_raw_mode()?;
-        let mut out = io::stdout();
-        let entered = if mouse {
-            execute!(out, EnterAlternateScreen, EnableMouseCapture)
-        } else {
-            execute!(out, EnterAlternateScreen)
-        };
-        if let Err(e) = entered {
-            let _ = disable_raw_mode();
-            return Err(e);
-        }
-        // a panic only skips the guard's Drop when it aborts; on unwind the
-        // hook leaves the terminal usable before the message is printed
-        let previous = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            restore();
-            previous(info);
-        }));
-
-        let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-        term.hide_cursor()?;
-        Ok(Self { term, mouse })
-    }
-
-    fn inner(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
-        &mut self.term
-    }
-
-    /// Hands the terminal to another program and takes it back afterwards.
-    ///
-    /// An editor wants the real terminal: its own screen, its own raw mode,
-    /// its own mouse handling. Anything less and it draws into ours. The
-    /// restore on the way back is unconditional, so an editor that dies badly
-    /// still leaves this program with a terminal it can use.
-    fn suspend<T>(&mut self, run: impl FnOnce() -> T) -> io::Result<T> {
-        restore();
-        let out = run();
-        enable_raw_mode()?;
-        execute!(io::stdout(), EnterAlternateScreen)?;
-        if self.mouse {
-            execute!(io::stdout(), EnableMouseCapture)?;
-        }
-        self.term.hide_cursor()?;
-        // the editor scribbled over every cell we thought we had drawn
-        self.term.clear()?;
-        Ok(out)
-    }
-}
-
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        restore();
-        let _ = self.term.show_cursor();
-    }
-}
-
-/// Puts the terminal back to normal. Idempotent and infallible: it is called
-/// from the panic hook, where there is nobody to return an error to.
-fn restore() {
-    let _ = disable_raw_mode();
-    // Mouse capture is released first: leaving it on would keep the terminal
-    // sending escape sequences at a shell that has no idea what they are.
-    let _ = execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
 }
 
 /// Runs the reader's editor on a file, at a line.
@@ -216,84 +131,100 @@ fn which(bin: &str) -> bool {
         .is_some_and(|paths| std::env::split_paths(&paths).any(|d| d.join(bin).is_file()))
 }
 
-fn run(term: &mut TerminalGuard, source: Source) -> io::Result<()> {
-    let mut app = App::new(source);
-    let mut last_tick = Instant::now();
-    let mut last_blink = Instant::now();
-    let mut last_anim = Instant::now();
-    let mut last_find = Instant::now();
+/// github-tui's timers, and what the runtime needs to run it.
+struct GithubTui {
+    app: App,
+    tick: Instant,
+    blink: Instant,
+    anim: Instant,
+    find: Instant,
+}
 
-    loop {
-        // request whatever the current view needs (non-blocking: it goes to the gh thread)
-        app.ensure();
-        term.inner().draw(|f| ui::draw(f, &mut app))?;
+impl GithubTui {
+    fn new(source: Source) -> Self {
+        let now = Instant::now();
+        Self {
+            app: App::new(source),
+            tick: now,
+            blink: now,
+            anim: now,
+            find: now,
+        }
+    }
+}
 
-        // a short wait while requests are in flight, so the response is drawn
-        // as soon as it arrives
-        let waiting = app.waiting();
-        let timeout = TICK
-            .saturating_sub(last_tick.elapsed())
-            .min(BLINK.saturating_sub(last_blink.elapsed()))
-            .min(if waiting {
-                ANIM.saturating_sub(last_anim.elapsed())
+impl Program for GithubTui {
+    fn ensure(&mut self) {
+        self.app.ensure();
+    }
+
+    fn draw(&mut self, f: &mut ratatui::Frame<'_>) {
+        ui::draw(f, &mut self.app);
+    }
+
+    fn on_key(&mut self, key: crossterm::event::KeyEvent) {
+        self.app.on_key(key);
+    }
+
+    fn on_mouse(&mut self, mouse: crossterm::event::MouseEvent) {
+        self.app.on_mouse(mouse);
+    }
+
+    fn drain(&mut self) {
+        while let Some(res) = self.app.poll_service() {
+            self.app.apply(res);
+        }
+    }
+
+    /// The soonest of four, two of them conditional: skeletons only travel
+    /// while something is on its way, and the finder's debounce only matters
+    /// while the finder is open.
+    fn next_wake(&self) -> Duration {
+        TICK.saturating_sub(self.tick.elapsed())
+            .min(BLINK.saturating_sub(self.blink.elapsed()))
+            .min(if self.app.waiting() {
+                ANIM.saturating_sub(self.anim.elapsed())
             } else {
                 Duration::MAX
             })
-            .min(if app.finder_open {
-                FIND.saturating_sub(last_find.elapsed())
+            .min(if self.app.finder_open {
+                FIND.saturating_sub(self.find.elapsed())
             } else {
                 Duration::MAX
             })
-            .max(Duration::from_millis(16));
+    }
 
-        if event::poll(timeout)? {
-            match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => app.on_key(key),
-                // Moves arrive for every cell the pointer crosses and mean
-                // nothing here; dropping them early keeps the loop quiet.
-                Event::Mouse(m) if !matches!(m.kind, MouseEventKind::Moved) => app.on_mouse(m),
-                Event::Resize(_, _) => {}
-                _ => {}
-            }
+    fn on_wake(&mut self) {
+        if self.tick.elapsed() >= TICK {
+            self.app.tick();
+            self.tick = Instant::now();
         }
+        if self.find.elapsed() >= FIND {
+            self.app.finder_tick();
+            self.find = Instant::now();
+        }
+        if self.app.waiting() && self.anim.elapsed() >= ANIM {
+            self.app.anim = self.app.anim.wrapping_add(1);
+            self.anim = Instant::now();
+        }
+        if self.blink.elapsed() >= BLINK {
+            self.app.blink = !self.app.blink;
+            self.blink = Instant::now();
+        }
+    }
 
-        while let Some(res) = app.poll_service() {
-            app.apply(res);
-        }
+    fn wants_redraw(&mut self) -> bool {
+        std::mem::take(&mut self.app.wants_redraw)
+    }
 
-        // Ratatui writes only the cells that differ from the last frame, which
-        // is what makes it quick and also what makes a terminal that got out
-        // of step with it stay that way. `clear` forgets what it thought was
-        // on screen, so the next frame paints every cell.
-        if std::mem::take(&mut app.wants_redraw) {
-            term.inner().clear()?;
-        }
+    /// The editor. It wants the whole terminal, so the runtime gives it back
+    /// between frames rather than in the middle of one.
+    fn take_handover(&mut self) -> Option<Handover> {
+        let (path, line) = self.app.edit_request.take()?;
+        Some(Box::new(move || edit(&path, line)))
+    }
 
-        // The editor takes the whole terminal, so this happens between frames
-        // rather than inside one.
-        if let Some((path, line)) = app.edit_request.take() {
-            term.suspend(|| edit(&path, line))??;
-        }
-
-        if last_tick.elapsed() >= TICK {
-            app.tick();
-            last_tick = Instant::now();
-        }
-        if last_find.elapsed() >= FIND {
-            app.finder_tick();
-            last_find = Instant::now();
-        }
-        if waiting && last_anim.elapsed() >= ANIM {
-            app.anim = app.anim.wrapping_add(1);
-            last_anim = Instant::now();
-        }
-        if last_blink.elapsed() >= BLINK {
-            app.blink = !app.blink;
-            last_blink = Instant::now();
-        }
-
-        if app.should_quit {
-            return Ok(());
-        }
+    fn should_quit(&self) -> bool {
+        self.app.should_quit
     }
 }
