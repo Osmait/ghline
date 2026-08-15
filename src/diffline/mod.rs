@@ -13,6 +13,30 @@
 //! The arrows point one way: `view` reads `state`, `state` asks `source`,
 //! everything knows `model`, and `model` knows none of them.
 //!
+//! ## What moving down the file list costs
+//!
+//! The same shape github-tui has, with the slow part being `git` and the
+//! lexer rather than a network: selecting a file asks for its diff, and the
+//! answer comes back already coloured.
+//!
+//! ```text
+//!   drawing thread                        │  worker thread
+//!   ──────────────────────────────────────┼────────────────────────────────
+//!   on_key(j)      cursor moves           │
+//!   ensure()       this file's diff ──────┼──► Request::Diff { path, context }
+//!   draw()         the pane, still empty  │       │
+//!      ⋮                                  │    `git diff -U<context> …`
+//!      ⋮                                  │    parse into rows
+//!      ⋮                                  │    highlight the whole file
+//!   drain()        ◄──────────────────────┼── Response::Diff { rows, spans }
+//!   draw()         rows and colour        │
+//! ```
+//!
+//! The lexer runs on that thread rather than at drawing time, and the answer
+//! carries the spans with the rows because they are one thing: a pane that
+//! had rows but not yet colour would either flash uncoloured or index a spans
+//! list that is shorter than its rows.
+//!
 //! One exception, named rather than quietly true: `source::service` calls
 //! `state::keys::write_template`. Writing a file is infrastructure and
 //! belongs here, but the file's shape is the keymap's, so the writer lives

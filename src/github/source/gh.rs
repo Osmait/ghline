@@ -68,7 +68,7 @@ pub fn available() -> bool {
         .unwrap_or(false)
 }
 
-// ------------------------------------------------------------------ utilidades
+// -------------------------------------------------------------------- helpers
 
 fn s(v: &Value, key: &str) -> String {
     v.get(key)
@@ -161,7 +161,7 @@ fn label_rgb(hex: &str) -> (u8, u8, u8) {
     )
 }
 
-// -------------------------------------------------------------------- cuentas
+// ------------------------------------------------------------------- accounts
 
 /// The signed-in user and their organisations, as switchable accounts.
 pub fn accounts() -> Res<Vec<Account>> {
@@ -258,7 +258,7 @@ pub fn repos(login: &str) -> Res<Vec<Repo>> {
         .collect())
 }
 
-// --------------------------------------------------------------------- listas
+// --------------------------------------------------------------------- lists
 
 fn labels_of(v: &Value) -> Vec<Label> {
     arr(v, "labels")
@@ -444,7 +444,7 @@ pub fn runs(repo: &str) -> Res<Vec<Item>> {
         .collect())
 }
 
-// -------------------------------------------------------------------- detalle
+// --------------------------------------------------------------------- detail
 
 /// A PR's body, files and reviews; requested when the detail is opened.
 pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Review>)> {
@@ -464,7 +464,7 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Revi
             path: s(f, "path"),
             add: format!("+{}", n(f, "additions")),
             del: format!("-{}", n(f, "deletions")),
-            hunks: Vec::new(), // llegan aparte, con `gh pr diff`
+            hunks: Vec::new(), // they arrive separately, from `gh pr diff`
         })
         .collect();
 
@@ -814,7 +814,7 @@ pub fn search_commits(owner: &str, query: &str) -> Res<Vec<SearchHit>> {
         .collect())
 }
 
-// -------------------------------------------------------------------- acciones
+// -------------------------------------------------------------------- actions
 
 pub fn merge(repo: &str, num: i64, method: &str) -> Res<()> {
     let flag = match method {
@@ -844,7 +844,7 @@ pub fn delete_branch(repo: &str, branch: &str) -> Res<()> {
     .map(|_| ())
 }
 
-// ------------------------------------------------------- todos los repos
+// ------------------------------------------------------ all repositories
 //
 // The "all repositories" pseudo-repo. Issues and pull requests come from one
 // GraphQL search each — the REST search would not carry the diff counts a row

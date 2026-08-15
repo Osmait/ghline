@@ -794,7 +794,7 @@ pub struct SearchHit {
 mod tests {
     use super::*;
 
-    // --- what the view used to work out for itself ---
+    // --- the counts a row shows, worked out here rather than while drawing ---
 
     fn review(state: ReviewState) -> Review {
         Review {

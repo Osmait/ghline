@@ -612,5 +612,5 @@ impl App {
                 || self.file_state.values().any(Load::is_loading))
     }
 
-    // --- selectores ---
+    // --- selectors ---
 }

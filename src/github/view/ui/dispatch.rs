@@ -21,8 +21,25 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     let dests = app.dispatch_dests();
     let width = area.width.saturating_sub(8).min(84);
-    // header, rule, the note and its rule, the rows, rule, footer, and the
-    // frame's two borders
+    // Where the 2 and the 11 come from. Two lines per destination, and eight
+    // of fixed furniture around them:
+    //
+    //     ┌────────────────────────┐  y      border
+    //     │ SEND issue #217 …      │  y+1    header
+    //     ├────────────────────────┤  y+2    rule
+    //     │ ❯ the instruction      │  y+3    the note
+    //     ├────────────────────────┤  y+4    rule
+    //     │ ▌ claude   ~/work/tui  │ ─┐ the list: y+5 to bottom-4, and the
+    //     │            2 comments  │ ─┘ only part that grows
+    //     ├────────────────────────┤  bottom-3  rule
+    //     │ type to add … · ⌂ …    │  bottom-2  footer
+    //     └────────────────────────┘  bottom-1  border
+    //
+    // Which makes the list `height - 8`, so eight would fit exactly. The
+    // three above that are slack: it leaves the list one row more than there
+    // are destinations, and a list that cannot fill itself never scrolls. The
+    // `min` is what takes it away again on a screen too short to hold it, and
+    // that is the one case the scrolling below is for.
     let height = (dests.len() as u16 * 2 + 11).min(area.height.saturating_sub(4));
     let modal = centered(area, width, height);
     frame(buf, modal, theme::cyan());

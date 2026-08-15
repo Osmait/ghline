@@ -52,6 +52,19 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     draw_body(buf, body, app);
 }
 
+/// The changed-files pane: a fixed header and footer, rows scrolling between.
+///
+/// ```text
+///   area.y     │ FILES CHANGED           header
+///        +1    │ ─────────────────────   rule
+///        +2    │ src/layout/solver.rs    the rows, one line each and the
+///         ⋮    │ src/app/reducer.rs      only part that scrolls
+///   bottom-2   │ ─────────────────────   rule
+///   bottom-1   │ 6 files changed · …     footer, the PR's totals
+/// ```
+///
+/// The two rules are drawn from the fixed ends inwards, so the rows get
+/// whatever is left and a pane too short to hold both simply has no rows.
 fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());
 
@@ -105,7 +118,6 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         Style::default().bg(theme::panel()).fg(theme::dimmer()),
     );
 
-    // rows
     let sel = app.file_idx();
     let len = app.diff_files().len();
     if len == 0 && app.diff_status().is_loading() {

@@ -233,6 +233,17 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
+    // Two lines per entry, and every x below is one of these columns:
+    //
+    //     ▌ ⇅ #217   fix(layout): clamp the sidebar [bug]     open  ✗ checks
+    //     ▌          fix/sidebar-clamp · marasanz · +128/-34 · 26m ago
+    //     │ │ │      │                                        │
+    //     0 2 4      11 = text_x                              state_x
+    //
+    // `state_x` is not a column but a result: the state is laid out from
+    // `right() - 2` leftwards, and where it ends is where the title has to
+    // stop. So it is worked out before the title, which is why it is not in
+    // the order it is read in.
     for (row, i) in (scroll..items.len()).enumerate() {
         if row >= rows {
             break;
@@ -263,7 +274,6 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             put(buf, area.x, y + 1, area.right(), "▌", base.fg(mark));
         }
 
-        // icon + number
         let status = it.state;
         put(
             buf,
@@ -284,7 +294,6 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             base.fg(theme::dimmer()),
         );
 
-        // estado (derecha)
         let state_text = if it.kind() == Kind::Pr {
             format!("{}  {} checks", it.state, super::state_icon(it.checks()))
         } else {
@@ -297,7 +306,6 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         });
         let state_x = put_right(buf, area.right() - 2, y, &state_text, base.fg(state_color));
 
-        // title + labels
         let title_max = state_x.saturating_sub(2);
         let labels_w: u16 = it.labels.iter().map(|l| l.name.width() as u16 + 3).sum();
         let title_room = title_max.saturating_sub(text_x).saturating_sub(labels_w);

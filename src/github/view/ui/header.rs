@@ -1,4 +1,19 @@
-//! Barra superior: `gh │ cuenta │ breadcrumbs … sync · ? help`.
+//! The top bar.
+//!
+//! ```text
+//!  gh │ ● marasanz (personal) [a] │ marasanz / tuikit › Pull Requests   synced 3s ago · idle  ? help
+//!  ─┬─  ─────────────┬───────────   ──────────────┬───────────────────   ──────────┬─────────  ──┬───
+//!   │                │                            │                                │             │
+//!   │                account, clickable           where you are, one crumb per     │             the
+//!   the mark                                      level and each one clickable     │             help
+//!                                                                                  what the worker
+//!                                                                                  is doing, right
+//!                                                                                  aligned
+//! ```
+//!
+//! The crumbs are laid out left to right and the status right to left; they
+//! meet in the middle, and the crumbs are what gives way when there is not
+//! enough room for both.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -83,7 +98,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     x = put(buf, x, y, max, "gh", bold(base.fg(theme::yellow())));
     x = put(buf, x, y, max, "  │  ", base.fg(theme::dim()));
 
-    // cuenta activa
+    // the active account
     x = put(buf, x, y, max, "●", base.fg(theme::green()));
     x = put(buf, x, y, max, " ", base);
     x = put(buf, x, y, max, app.login(), base.fg(theme::fg()));

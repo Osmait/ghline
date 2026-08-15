@@ -221,6 +221,40 @@ pub fn restore() {
 }
 
 /// Runs `program` until it says to stop.
+///
+/// One pass, in the order it happens. The left column is the loop; the right
+/// is what the program is asked, and everything the program does is inside
+/// one of those calls:
+///
+/// ```text
+///   ┌─► ensure()          "ask for whatever this view needs" — must not
+///   │                      block, so it only posts to the worker thread
+///   │
+///   │   draw()             the whole frame, from state as it stands
+///   │
+///   │   poll(timeout)      timeout = next_wake(), floored at 16ms
+///   │     ├── key ───────► on_key(Press)
+///   │     ├── click ─────► on_mouse(Mouse)
+///   │     └── nothing      the program's own timer fell due
+///   │
+///   │   drain()            take whatever the worker answered meanwhile
+///   │
+///   │   wants_redraw()     true after something else wrote to the terminal;
+///   │                      clears so the next frame paints every cell
+///   │
+///   │   take_handover()    an editor wants the real terminal — done between
+///   │                      frames, never inside one
+///   │
+///   └── on_wake()          whatever fell due while it slept
+///       should_quit()
+/// ```
+///
+/// The order is the argument. `ensure` comes before `draw` so a view that has
+/// just been opened has already asked for its data by the time it is first
+/// drawn — one pass later and every view would flash empty before its skeleton
+/// appeared. `drain` comes after `poll` so an answer that landed during the
+/// wait is applied before the loop comes back round to `draw`, which is the
+/// very next thing it does.
 pub fn run(term: &mut Terminal_, program: &mut impl Program) -> io::Result<()> {
     loop {
         program.ensure();

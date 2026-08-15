@@ -15,6 +15,31 @@
 //! everything knows `data`, and `data` knows none of them — pinned by a test
 //! in that file since the first week.
 //!
+//! ## What a keystroke costs
+//!
+//! Nothing on the drawing thread waits for the network. Pressing `2` marks the
+//! pull request list as wanted and returns; the frame drawn a moment later
+//! shows a skeleton, and the rows replace it whenever they arrive.
+//!
+//! ```text
+//!   drawing thread                        │  worker thread
+//!   ──────────────────────────────────────┼────────────────────────────────
+//!   on_key(2)      tab = pull requests    │
+//!   ensure()       marks it Loading, ─────┼──► Request::List { repo, tab }
+//!                  then asks              │       │
+//!   draw()         skeleton, animating    │    `gh pr list --json …`
+//!      ⋮           (frames keep going)    │       │
+//!   drain()        ◄──────────────────────┼── Response::List { rows, … }
+//!   apply()        rows into state        │
+//!   draw()         the rows               │
+//! ```
+//!
+//! `ensure` runs before every frame and is idempotent because of the state it
+//! sets: each thing it can ask for is `Idle`, `Loading` or ready, and only
+//! `Idle` is asked. That is what makes it safe to call on every pass, and it
+//! is why no view has to remember to start its own load — a view that needs
+//! something says so by existing.
+//!
 //! Two exceptions, named rather than quietly true. `source::service` imports
 //! `state::finder::Source` to know what a search is for; it is request
 //! vocabulary that happens to live with the finder, and moving it collides
