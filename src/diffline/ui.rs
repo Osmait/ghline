@@ -133,6 +133,30 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     }
 }
 
+/// Right-aligns a run of pieces that are not all the same colour.
+///
+/// `put_right` takes one style for the whole string, which is why the counts
+/// were a flat grey: `+120 −80` is two facts and they are not the same fact.
+/// Returns the left edge, as `put_right` does.
+fn put_right_parts(buf: &mut Buffer, right_x: u16, y: u16, parts: &[(&str, Style)]) -> u16 {
+    let total: u16 = parts.iter().map(|(t, _)| t.width() as u16).sum();
+    let mut x = right_x.saturating_sub(total);
+    let left = x;
+    for (text, style) in parts {
+        x = put(buf, x, y, right_x, text, *style);
+    }
+    left
+}
+
+/// Green for what arrived and red for what went, unless it is zero — a file
+/// that added nothing should not be shouting green about it.
+fn count_style(base: Style, n: u32, added: bool) -> Style {
+    if n == 0 {
+        return base.fg(theme::dimmer());
+    }
+    base.fg(if added { theme::green() } else { theme::red() })
+}
+
 /// The count of queued comments, as a tab hanging off the top edge.
 ///
 /// Only while the queue itself is hidden. It names its own key, because a
@@ -203,12 +227,23 @@ fn header_bar(buf: &mut Buffer, area: Rect, app: &App) {
         .files
         .iter()
         .fold((0u32, 0u32), |(a, d), f| (a + f.add, d + f.del));
-    let right = format!(
-        "+{add}  −{del}  │  {} files  │  {} queued ",
+    let dim = base.fg(theme::dimmer());
+    let rest = format!(
+        "  │  {} files  │  {} queued ",
         app.files.len(),
         app.comments.len()
     );
-    put_right(buf, area.right(), 0, &right, base.fg(theme::dimmer()));
+    put_right_parts(
+        buf,
+        area.right(),
+        0,
+        &[
+            (&format!("+{add}"), count_style(base, add, true)),
+            ("  ", dim),
+            (&format!("−{del}"), count_style(base, del, false)),
+            (&rest, dim),
+        ],
+    );
 }
 
 // -------------------------------------------------------------------- tree
@@ -331,17 +366,19 @@ fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         // A file with notes on it carries a dot, so the tree says where the
         // work is without opening anything.
         let noted = app.comments.iter().any(|c| c.path() == f.path);
-        let counts = format!("+{} −{}{}", f.add, f.del, if noted { " ●" } else { "" });
-        let cx = put_right(
+        // The dot carries "this one has notes"; the counts carry what
+        // changed. Colouring the counts yellow to say both made them say
+        // neither.
+        let cx = put_right_parts(
             buf,
             area.right() - 1,
             y,
-            &counts,
-            base.fg(if noted {
-                theme::yellow()
-            } else {
-                theme::dimmer()
-            }),
+            &[
+                (&format!("+{}", f.add), count_style(base, f.add, true)),
+                (" ", base),
+                (&format!("−{}", f.del), count_style(base, f.del, false)),
+                (if noted { " ●" } else { "" }, base.fg(theme::yellow())),
+            ],
         );
         put_trunc(
             buf,
@@ -1955,6 +1992,65 @@ mod layout_tests {
         assert!(
             row[half..].contains('3'),
             "the right half should carry the new number 3:\n  {row}"
+        );
+    }
+
+    #[test]
+    fn the_counts_are_green_and_red_and_a_zero_is_neither() {
+        let mut a = app();
+        a.files = vec![
+            ChangedFile {
+                path: "src/a.rs".into(),
+                status: Status::Added,
+                add: 12,
+                del: 0,
+            },
+            ChangedFile {
+                path: "src/b.rs".into(),
+                status: Status::Modified,
+                add: 0,
+                del: 7,
+            },
+        ];
+        let mut term = Terminal::new(TestBackend::new(150, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let buf = term.backend().buffer();
+
+        // Walk the cells and collect the colour each run of digits was in,
+        // keyed by the sign in front of it.
+        let mut seen: Vec<(char, ratatui::style::Color)> = Vec::new();
+        for y in 0..buf.area.height {
+            let mut sign = None;
+            for x in 0..buf.area.width {
+                let Some(cell) = buf.cell((x, y)) else {
+                    continue;
+                };
+                match cell.symbol() {
+                    "+" => sign = Some('+'),
+                    "−" => sign = Some('-'),
+                    sym if sym.chars().next().is_some_and(|c| c.is_ascii_digit()) => {
+                        if let Some(s) = sign.take()
+                            && let Some(fg) = cell.fg.into()
+                        {
+                            seen.push((s, fg));
+                        }
+                    }
+                    _ => sign = None,
+                }
+            }
+        }
+
+        assert!(
+            seen.iter().any(|(s, c)| *s == '+' && *c == theme::green()),
+            "an addition count should be green: {seen:?}"
+        );
+        assert!(
+            seen.iter().any(|(s, c)| *s == '-' && *c == theme::red()),
+            "a deletion count should be red: {seen:?}"
+        );
+        assert!(
+            seen.iter().any(|(_, c)| *c == theme::dimmer()),
+            "a zero should stay quiet rather than shout its colour: {seen:?}"
         );
     }
 
