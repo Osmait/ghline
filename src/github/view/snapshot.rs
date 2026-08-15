@@ -159,7 +159,7 @@ fn settle(app: &mut App) {
 
 /// Render with real data: applies the keys, waiting on `gh` between each one.
 fn build_live(keys: &str, ticks: usize) -> App {
-    let mut app = App::new(Source::Live);
+    let mut app = App::new(Source::Live, None);
     settle(&mut app);
     for k in parse_keys(keys) {
         app.on_key(k);
@@ -183,7 +183,7 @@ pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::R
 /// Renders the demo with every pane held in its loading state, which is the
 /// only way to look at the skeletons without racing the network.
 pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::Result<()> {
-    let mut app = App::new(Source::Demo);
+    let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
     }
@@ -196,7 +196,7 @@ pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::
 }
 
 pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
-    let mut app = App::new(Source::Demo);
+    let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
     }
@@ -212,7 +212,7 @@ pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result
 }
 
 pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
-    let mut app = App::new(Source::Demo);
+    let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
     }

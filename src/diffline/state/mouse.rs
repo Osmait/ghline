@@ -113,8 +113,8 @@ mod tests {
             "/tmp/r".into(),
             crate::diffline::model::Scope::WorkingTree,
             vec![crate::diffline::model::Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         a.pane = Pane::Diff;
         a.hits.push(crate::diffline::hit::Region::plain(
             Target::Pane(Pane::Queue),
@@ -132,8 +132,8 @@ mod tests {
             "/tmp/r".into(),
             crate::diffline::model::Scope::WorkingTree,
             vec![crate::diffline::model::Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         a.hits.push(crate::diffline::hit::Region::plain(
             Target::Pane(Pane::Tree),
             area(),
@@ -149,8 +149,8 @@ mod tests {
             "/tmp/r".into(),
             crate::diffline::model::Scope::WorkingTree,
             vec![crate::diffline::model::Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         let before = a.pane;
         a.on_mouse(ev(Motion::Down(Button::Left), 5, 5));
         assert_eq!(a.pane, before, "there was no region there");
@@ -162,8 +162,8 @@ mod tests {
             "/tmp/r".into(),
             crate::diffline::model::Scope::WorkingTree,
             vec![crate::diffline::model::Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         a.pane = Pane::Diff;
         a.hits.push(crate::diffline::hit::Region::plain(
             Target::Pane(Pane::Tree),

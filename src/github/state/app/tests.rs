@@ -8,7 +8,7 @@ use crate::github::data::Status;
 use crate::shared::key::{Key, Press};
 
 fn demo() -> App {
-    App::new(Source::Demo)
+    App::new(Source::Demo, None)
 }
 
 /// The repository pane is hidden by default, so the tests that are about
@@ -161,7 +161,7 @@ fn moving_between_items_resets_the_body_scroll() {
 #[test]
 fn an_app_with_no_accounts_does_not_panic() {
     // this is what live mode looks like before the first response lands
-    let app = App::new(Source::Live);
+    let app = App::new(Source::Live, None);
     assert_eq!(app.repo_idx(), 0);
     assert_eq!(app.login(), "—");
     assert_eq!(app.repo_name(), "—");
@@ -752,7 +752,7 @@ fn the_finder_swallows_the_keys_beneath_it() {
 fn a_commit_search_waits_for_something_to_search_for() {
     // GitHub rejects a commit search made of qualifiers alone, so an empty
     // query must not be sent at all
-    let mut app = App::new(Source::Live);
+    let mut app = App::new(Source::Live, None);
     app.open_finder();
     app.finder_source = crate::github::data::Source::Commits;
     app.finder_sent = "\u{0}".into();

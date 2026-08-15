@@ -416,7 +416,9 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(source: Source) -> Self {
+    /// The worker is handed in rather than made here — the binary is the only
+    /// part that should decide there is one.
+    pub fn new(source: Source, service: Option<Service>) -> Self {
         let accounts = if source == Source::Demo {
             demo::accounts()
         } else {
@@ -439,7 +441,7 @@ impl App {
         }
         Self {
             source,
-            service: (source == Source::Live).then(Service::spawn),
+            service,
             accounts_state: if source == Source::Demo {
                 Load::Ready
             } else {

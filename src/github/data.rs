@@ -723,9 +723,121 @@ impl MergeMethod {
     }
 }
 
+impl PrDetail {
+    /// How many reviewers approved it.
+    ///
+    /// Here rather than counted where it is drawn: whether a pull request is
+    /// approved is a fact about the pull request, and a view that works it
+    /// out is a view that could work it out differently somewhere else.
+    pub fn approvals(&self) -> usize {
+        self.reviews
+            .iter()
+            .filter(|r| r.state == ReviewState::Approved)
+            .count()
+    }
+
+    /// How many asked for changes — the ones that stop a merge.
+    pub fn blocking(&self) -> usize {
+        self.reviews
+            .iter()
+            .filter(|r| r.state == ReviewState::ChangesRequested)
+            .count()
+    }
+}
+
+/// How a run's jobs are going.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Tally {
+    pub passed: usize,
+    pub failed: usize,
+    /// Running or waiting for a runner — both are "not done yet" to a reader,
+    /// and the summary line has no room for the difference.
+    pub in_progress: usize,
+}
+
+impl Tally {
+    pub fn of(jobs: &[Job]) -> Self {
+        let count = |want: &[Status]| jobs.iter().filter(|j| want.contains(&j.status)).count();
+        Self {
+            passed: count(&[Status::Success]),
+            failed: count(&[Status::Failure]),
+            in_progress: count(&[Status::Running, Status::Pending]),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- what the view used to work out for itself ---
+
+    fn review(state: ReviewState) -> Review {
+        Review {
+            author: "someone".into(),
+            state,
+        }
+    }
+
+    #[test]
+    fn a_pull_request_counts_its_own_approvals() {
+        let pr = PrDetail {
+            reviews: vec![
+                review(ReviewState::Approved),
+                review(ReviewState::Approved),
+                review(ReviewState::ChangesRequested),
+                review(ReviewState::Commented),
+            ],
+            ..PrDetail::default()
+        };
+        assert_eq!(pr.approvals(), 2);
+        assert_eq!(pr.blocking(), 1, "only a request for changes stops a merge");
+    }
+
+    #[test]
+    fn a_comment_is_neither_an_approval_nor_a_block() {
+        let pr = PrDetail {
+            reviews: vec![review(ReviewState::Commented)],
+            ..PrDetail::default()
+        };
+        assert_eq!((pr.approvals(), pr.blocking()), (0, 0));
+    }
+
+    fn a_job(status: Status) -> Job {
+        Job {
+            name: "j".into(),
+            status,
+            dur: String::new(),
+            steps: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_tally_counts_waiting_as_in_progress() {
+        // Running and waiting for a runner are both "not done yet", and the
+        // summary line has no room for the difference.
+        let t = Tally::of(&[
+            a_job(Status::Success),
+            a_job(Status::Success),
+            a_job(Status::Failure),
+            a_job(Status::Running),
+            a_job(Status::Pending),
+        ]);
+        assert_eq!((t.passed, t.failed, t.in_progress), (2, 1, 2));
+    }
+
+    #[test]
+    fn a_tally_of_nothing_is_all_zeroes_rather_than_a_panic() {
+        assert_eq!(Tally::of(&[]), Tally::default());
+    }
+
+    #[test]
+    fn a_skipped_job_is_none_of_the_three() {
+        // It neither passed nor failed nor is it coming, and counting it as
+        // any of those would make the three add up to a lie.
+        let t = Tally::of(&[a_job(Status::Skipped), a_job(Status::Cancelled)]);
+        assert_eq!((t.passed, t.failed, t.in_progress), (0, 0, 0));
+    }
 
     #[test]
     fn the_tab_constants_point_at_the_tabs_they_are_named_for() {

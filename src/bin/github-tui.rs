@@ -144,7 +144,11 @@ impl GithubTui {
     fn new(source: Source) -> Self {
         let now = Instant::now();
         Self {
-            app: App::new(source),
+            app: App::new(
+                source,
+                // Demo mode has nothing to ask, so it gets no thread.
+                (source == Source::Live).then(github_tui::github::service::Service::spawn),
+            ),
             tick: now,
             blink: now,
             anim: now,

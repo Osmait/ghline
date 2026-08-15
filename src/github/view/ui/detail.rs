@@ -563,18 +563,16 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     );
     y += 1;
 
-    let passed = jobs.iter().filter(|j| j.status == Status::Success).count();
-    let failed = jobs.iter().filter(|j| j.status == Status::Failure).count();
-    let progress = jobs
-        .iter()
-        .filter(|j| j.status == Status::Running || j.status == Status::Pending)
-        .count();
+    let tally = crate::github::data::Tally::of(&jobs);
     put_trunc(
         buf,
         area.x + 2,
         y,
         area.right() - 1,
-        &format!("{passed} passed · {failed} failed · {progress} in progress"),
+        &format!(
+            "{} passed · {} failed · {} in progress",
+            tally.passed, tally.failed, tally.in_progress
+        ),
         base.fg(theme::dimmer()),
     );
     y += 1;

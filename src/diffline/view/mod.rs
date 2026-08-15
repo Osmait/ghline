@@ -172,8 +172,8 @@ mod tests {
             "/tmp/r".into(),
             Scope::WorkingTree,
             vec![Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         a.files = vec![ChangedFile {
             path: "src/a.rs".into(),
             status: Status::Added,

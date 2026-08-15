@@ -7,7 +7,6 @@ use ratatui::style::Style;
 use crate::github::actions::Prompt;
 use crate::github::app::App;
 use crate::github::data::MERGE_METHODS;
-use crate::github::data::ReviewState;
 use crate::tui::scrim;
 use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
@@ -138,15 +137,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
 
     // check and review state, shown as a warning before you commit
     if is_merge {
-        let reviews = pr.map_or(&[][..], |p| p.reviews.as_slice());
-        let approvals = reviews
-            .iter()
-            .filter(|r| r.state == ReviewState::Approved)
-            .count();
-        let blocking = reviews
-            .iter()
-            .filter(|r| r.state == ReviewState::ChangesRequested)
-            .count();
+        let approvals = pr.map_or(0, crate::github::data::PrDetail::approvals);
+        let blocking = pr.map_or(0, crate::github::data::PrDetail::blocking);
         let cx = put(
             buf,
             x,

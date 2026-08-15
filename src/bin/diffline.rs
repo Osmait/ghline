@@ -83,7 +83,15 @@ fn main() -> io::Result<()> {
         .cloned()
         .unwrap_or(Scope::WorkingTree);
 
-    let mut app = App::new(repo, opening, scopes);
+    // The worker is started here, which is the only place that should decide
+    // there is one: a snapshot wants none, and a test wants to hand in its
+    // own.
+    let mut app = App::new(
+        repo,
+        opening,
+        scopes,
+        Some(github_tui::diffline::service::Service::spawn()),
+    );
 
     if let Some(i) = svg {
         let keys = args.get(i + 1).cloned().unwrap_or_default();

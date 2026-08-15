@@ -238,10 +238,17 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(repo: String, scope: Scope, scopes: Vec<Scope>) -> Self {
+    /// The worker is handed in rather than made here.
+    ///
+    /// The state layer knowing *how* to start a thread is the state layer
+    /// building its own infrastructure: the binary is the only part that
+    /// should decide there is one. It also stops the tests setting
+    /// `service = None` afterwards as a way of undoing a thread they never
+    /// wanted — they pass `None` and mean it.
+    pub fn new(repo: String, scope: Scope, scopes: Vec<Scope>, service: Option<Service>) -> Self {
         Self {
             repo,
-            service: Some(Service::spawn()),
+            service,
             scope,
             scopes,
             files: Vec::new(),
@@ -767,8 +774,8 @@ mod tests {
             "/tmp/x".into(),
             Scope::WorkingTree,
             vec![Scope::WorkingTree],
+            None,
         );
-        a.service = None;
         a.files = vec![ChangedFile {
             path: "src/a.rs".into(),
             status: crate::diffline::model::Status::Modified,
