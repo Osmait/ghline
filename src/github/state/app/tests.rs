@@ -2183,6 +2183,7 @@ mod editing {
 mod residue {
     use super::*;
     use crate::github::data::TreeEntry;
+    use crate::tui::probe;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -2226,18 +2227,6 @@ mod residue {
         app
     }
 
-    /// Everything on screen, as one string per row.
-    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
-        let buf = term.backend().buffer();
-        (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
-                    .collect()
-            })
-            .collect()
-    }
-
     #[test]
     fn a_shorter_file_does_not_leave_the_longer_one_showing_through() {
         let mut term = Terminal::new(TestBackend::new(120, 24)).unwrap();
@@ -2246,14 +2235,16 @@ mod residue {
         app.fs_sel = 0; // the long one
         term.draw(|f| crate::github::ui::draw(f, &mut app)).unwrap();
         assert!(
-            rows(&term).iter().any(|r| r.contains("DISTINCTIVE_MARKER")),
+            probe::rows(&term)
+                .iter()
+                .any(|r| r.contains("DISTINCTIVE_MARKER")),
             "the first file should be on screen at all"
         );
 
         app.select_in(Pane::FileTree, 1); // the short one
         term.draw(|f| crate::github::ui::draw(f, &mut app)).unwrap();
 
-        let after: Vec<String> = rows(&term);
+        let after: Vec<String> = probe::rows(&term);
         let leftover: Vec<&String> = after
             .iter()
             .filter(|r| r.contains("DISTINCTIVE") || r.contains("MARKER"))
@@ -2305,7 +2296,7 @@ mod residue {
         app.file_state.insert(key, Load::Loading);
         term.draw(|f| crate::github::ui::draw(f, &mut app)).unwrap();
 
-        let leftover: Vec<String> = rows(&term)
+        let leftover: Vec<String> = probe::rows(&term)
             .into_iter()
             .filter(|r| r.contains("DISTINCTIVE") || r.contains("MARKER"))
             .collect();

@@ -130,6 +130,7 @@ mod tests {
     use crate::diffline::model::State;
     use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};
     use crate::diffline::view::draw;
+    use crate::tui::probe;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -195,18 +196,6 @@ mod tests {
         a
     }
 
-    /// Every row of the screen, as one string.
-    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
-        let buf = term.backend().buffer();
-        (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
-                    .collect()
-            })
-            .collect()
-    }
-
     #[test]
     fn the_tab_says_how_many_are_queued_while_the_queue_is_away() {
         // The queue is hidden to begin with, so this count is the only thing
@@ -215,7 +204,7 @@ mod tests {
         a.queue_shown = false;
         let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
-        let screen = rows(&term).join("\n");
+        let screen = probe::screen(&term);
         assert!(screen.contains("no comments"), "{screen}");
 
         a.comments.push(crate::diffline::model::Comment {
@@ -227,14 +216,14 @@ mod tests {
         });
         let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
-        let screen = rows(&term).join("\n");
+        let screen = probe::screen(&term);
         assert!(screen.contains("1 queued"), "{screen}");
 
         // and it gets out of the way once the queue itself is on screen
         a.queue_shown = true;
         let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
-        let screen = rows(&term).join("\n");
+        let screen = probe::screen(&term);
         assert!(!screen.contains("queued · "), "{screen}");
     }
     #[test]

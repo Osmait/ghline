@@ -163,6 +163,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
 mod tests {
     use super::*;
     use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};
+    use crate::tui::probe;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -226,18 +227,6 @@ mod tests {
         a.spans.insert("src/a.rs".into(), spans);
         a.cursor = 1;
         a
-    }
-
-    /// Every row of the screen, as one string.
-    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
-        let buf = term.backend().buffer();
-        (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
-                    .collect()
-            })
-            .collect()
     }
 
     #[test]
@@ -305,7 +294,7 @@ mod tests {
         let mut a = app();
         let mut term = Terminal::new(TestBackend::new(100, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
-        let screen = rows(&term).join("\n");
+        let screen = probe::screen(&term);
         assert!(
             screen.contains("MARKER"),
             "the diff is the point and should survive a narrow terminal"

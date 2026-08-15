@@ -515,6 +515,7 @@ mod tests {
     use super::*;
     use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};
     use crate::diffline::view::draw;
+    use crate::tui::probe;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -580,18 +581,6 @@ mod tests {
         a
     }
 
-    /// Every row of the screen, as one string.
-    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
-        let buf = term.backend().buffer();
-        (0..buf.area.height)
-            .map(|y| {
-                (0..buf.area.width)
-                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
-                    .collect()
-            })
-            .collect()
-    }
-
     #[test]
     fn a_long_line_never_reaches_the_queue_pane() {
         // The bug this exists for: diff text drawn past its own pane lands on
@@ -606,7 +595,7 @@ mod tests {
 
             // the queue occupies the rightmost crate::diffline::view::QUEUE_W columns
             let queue_x = (width - crate::diffline::view::QUEUE_W) as usize;
-            for (y, row) in rows(&term).iter().enumerate() {
+            for (y, row) in probe::rows(&term).iter().enumerate() {
                 let tail: String = row.chars().skip(queue_x).collect();
                 assert!(
                     !tail.contains("MARKER"),
@@ -650,7 +639,7 @@ mod tests {
 
         let mut term = Terminal::new(TestBackend::new(150, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
-        let screen = rows(&term);
+        let screen = probe::rows(&term);
         let rendered = screen.join("\n");
 
         let row = screen
@@ -675,7 +664,7 @@ mod tests {
         let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
         term.draw(|f| draw(f, &mut a)).unwrap();
 
-        let cut = rows(&term)
+        let cut = probe::rows(&term)
             .into_iter()
             .find(|r| r.contains("MARKER"))
             .expect("the long line should be on screen");
