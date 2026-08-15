@@ -4,13 +4,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{
-    Seg, bold, fill, hline, markdown, pct, put, put_right, put_trunc, skel_bar, vline, wrap,
-};
+use super::markdown;
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{Kind, Status};
 use crate::theme;
+use crate::tui::{Seg, bold, fill, hline, pct, put, put_right, put_trunc, skel_bar, vline, wrap};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let Some(cur) = app.current() else { return };
@@ -360,7 +359,7 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
         // the counts hug the right edge of the available width
         let stats = format!("{} {}", f.add, f.del);
         let room = width.saturating_sub(stats.chars().count() + 1);
-        let path = super::truncate_pad(&f.path, room);
+        let path = crate::tui::truncate_pad(&f.path, room);
         out.push(vec![
             (path, base.fg(theme::body())),
             (" ".into(), base),

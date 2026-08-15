@@ -8,13 +8,14 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::overlay::{centered, frame, rule, scrim};
-use super::{fill, put, put_right, put_trunc, scroll_into_view};
+use super::overlay::scrim;
 use crate::app::App;
 use crate::app::hit::{Region, Target};
 use crate::finder::{HitKind, Source};
 use crate::fuzzy;
 use crate::theme;
+use crate::tui::{centered, frame, rule};
+use crate::tui::{fill, put, put_right, put_trunc, scroll_into_view};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);

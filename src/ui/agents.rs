@@ -9,11 +9,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::{fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::mux::AgentStatus;
 use crate::theme;
+use crate::tui::{fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 /// A colour per state, borrowed from the CI vocabulary because it means the
 /// same thing to a reader: something is happening, something finished,

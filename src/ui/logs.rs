@@ -4,12 +4,14 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, NodeKind, Pane};
 use crate::data::LogKind;
 use crate::data::Status;
 use crate::theme;
+use crate::tui::{
+    fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap,
+};
 
 const TREE_W: u16 = 38;
 

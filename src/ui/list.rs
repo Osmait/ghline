@@ -5,11 +5,11 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 use unicode_width::UnicodeWidthStr;
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{Detail, Item, Kind, Status, TABS};
 use crate::theme;
+use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
 pub fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {

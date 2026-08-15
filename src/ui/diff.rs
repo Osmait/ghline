@@ -5,11 +5,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
 use crate::theme;
+use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
 const FILES_W: u16 = 38;
 

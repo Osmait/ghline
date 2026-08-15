@@ -4,10 +4,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{bold, fill, put, put_right};
 use crate::app::{App, View};
 use crate::data::TABS;
 use crate::theme;
+use crate::tui::{bold, fill, put, put_right};
 
 pub struct Crumb {
     pub label: String,

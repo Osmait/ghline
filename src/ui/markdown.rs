@@ -14,8 +14,8 @@ use unicode_width::UnicodeWidthStr;
 // bridge below is the whole of that seam.
 use ratatui_core::style::{Color as CoreColor, Modifier as CoreModifier, Style as CoreStyle};
 
-use super::Seg;
 use crate::theme;
+use crate::tui::Seg;
 
 /// Renders a Markdown body into styled lines of at most `width` columns.
 pub fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {

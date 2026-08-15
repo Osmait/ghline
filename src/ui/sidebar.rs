@@ -4,10 +4,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::theme;
+use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());

@@ -9,11 +9,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 
-use super::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Load, Pane};
 use crate::icons::{file as icon_file, folder};
 use crate::theme;
+use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
 /// Width of the tree pane. Wide enough for a nested path, narrow enough that
 /// the file still gets most of the screen — which is what you came to read.

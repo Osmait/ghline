@@ -4,11 +4,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::{bold, fill, hline, put, put_right};
 use crate::actions::FlashKind;
 use crate::app::{App, Cmd, Pane, View};
 use crate::data::Kind;
 use crate::theme;
+use crate::tui::{bold, fill, hline, put, put_right};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     hline(buf, area.x, area.y, area.width, theme::border());
@@ -146,7 +146,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         ),
         None => (hint.as_str(), theme::dimmer()),
     };
-    super::put_trunc(buf, x + 2, y, pos_x.saturating_sub(2), text, base.fg(color));
+    crate::tui::put_trunc(buf, x + 2, y, pos_x.saturating_sub(2), text, base.fg(color));
 
     // ---- command line
     let Some(mode) = app.cmd else { return };

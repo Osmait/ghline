@@ -14,7 +14,10 @@ use unicode_width::UnicodeWidthStr;
 use super::app::{App, FinderTab, Modal, Pane};
 use super::model::{Kind, State};
 use crate::theme;
-use crate::ui::{clear, fill, hline, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
+use crate::tui::{
+    centered_over as centered, clear, fill, frame, hline, put, put_right, put_trunc, rule,
+    scroll_into_view, skel_bar, vline,
+};
 
 /// The file tree's width, and the queue's. Both fixed: the diff is what the
 /// screen is for, and it takes whatever is left.
@@ -449,7 +452,7 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
                     buf,
                     body.x + 8,
                     body.y + row as u16,
-                    crate::ui::pct(avail, widths[row % widths.len()]),
+                    crate::tui::pct(avail, widths[row % widths.len()]),
                     row,
                     app.anim,
                 );
@@ -1154,48 +1157,6 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
 }
 
 // ------------------------------------------------------------------ modals
-
-fn centered(area: Rect, w: u16, h: u16) -> Rect {
-    let w = w.min(area.width.saturating_sub(4));
-    let h = h.min(area.height.saturating_sub(2));
-    Rect {
-        x: area.x + (area.width - w) / 2,
-        y: area.y + (area.height - h) / 2,
-        width: w,
-        height: h,
-    }
-}
-
-fn frame(buf: &mut Buffer, area: Rect, color: ratatui::style::Color) {
-    clear(buf, area, theme::panel());
-    let s = Style::default().bg(theme::panel()).fg(color);
-    let top = "─".repeat(area.width.saturating_sub(2) as usize);
-    put(buf, area.x, area.y, area.right(), &format!("┌{top}┐"), s);
-    put(
-        buf,
-        area.x,
-        area.bottom() - 1,
-        area.right(),
-        &format!("└{top}┘"),
-        s,
-    );
-    for y in area.y + 1..area.bottom() - 1 {
-        put(buf, area.x, y, area.right(), "│", s);
-        put(buf, area.right() - 1, y, area.right(), "│", s);
-    }
-}
-
-fn rule(buf: &mut Buffer, area: Rect, y: u16, color: ratatui::style::Color) {
-    let line = "─".repeat(area.width.saturating_sub(2) as usize);
-    put(
-        buf,
-        area.x + 1,
-        y,
-        area.right(),
-        &line,
-        Style::default().bg(theme::panel()).fg(color),
-    );
-}
 
 /// The query line every searching modal starts with.
 fn query_line(buf: &mut Buffer, m: Rect, y: u16, app: &App, lead: &str, placeholder: &str) {

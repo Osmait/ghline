@@ -23,6 +23,7 @@ pub mod nav;
 pub mod syntax;
 pub mod text;
 pub mod theme;
+pub mod tui;
 
 // --- diffline ---
 pub mod diffline;

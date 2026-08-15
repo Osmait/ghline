@@ -4,11 +4,12 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
-use super::{clear, fill, hline, put, put_right, put_trunc};
 use crate::app::App;
 use crate::app::hit::{Region, Target};
 use crate::data::HELP;
 use crate::theme;
+use crate::tui::{centered, frame, rule};
+use crate::tui::{fill, put, put_right, put_trunc};
 
 /// Dims what is underneath, like the design's `background: #0b0e14bb`.
 pub fn scrim(buf: &mut Buffer, area: Rect) {
@@ -28,45 +29,6 @@ pub fn scrim(buf: &mut Buffer, area: Rect) {
                 let bg = s.bg.unwrap_or(theme::bg());
                 cell.set_style(Style::default().fg(shade(fg)).bg(shade(bg)));
             }
-        }
-    }
-}
-
-pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
-    let w = w.min(area.width);
-    let h = h.min(area.height);
-    Rect {
-        x: area.x + (area.width - w) / 2,
-        y: area.y + (area.height - h) / 2,
-        width: w,
-        height: h,
-    }
-}
-
-/// A single-line frame in the modal's accent colour.
-pub fn frame(buf: &mut Buffer, area: Rect, color: Color) {
-    clear(buf, area, theme::panel());
-    let s = Style::default().bg(theme::panel()).fg(color);
-    let top = format!("┌{}┐", "─".repeat(area.width as usize - 2));
-    let bottom = format!("└{}┘", "─".repeat(area.width as usize - 2));
-    put(buf, area.x, area.y, area.right(), &top, s);
-    put(buf, area.x, area.bottom() - 1, area.right(), &bottom, s);
-    for y in area.y + 1..area.bottom() - 1 {
-        put(buf, area.x, y, area.right(), "│", s);
-        put(buf, area.right() - 1, y, area.right(), "│", s);
-    }
-}
-
-/// The modal's inner horizontal rule.
-pub fn rule(buf: &mut Buffer, area: Rect, y: u16, color: Color) {
-    hline(buf, area.x + 1, y, area.width - 2, theme::border());
-    let s = Style::default().bg(theme::panel()).fg(color);
-    put(buf, area.x, y, area.right(), "├", s);
-    put(buf, area.right() - 1, y, area.right(), "┤", s);
-    // restore the rule's background to the modal's own
-    for x in area.x + 1..area.right() - 1 {
-        if let Some(cell) = buf.cell_mut((x, y)) {
-            cell.set_bg(theme::panel());
         }
     }
 }

@@ -4,13 +4,14 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 
-use super::overlay::{centered, frame, rule, scrim};
-use super::{fill, put, put_right, put_trunc};
+use super::overlay::scrim;
 use crate::actions::Prompt;
 use crate::app::App;
 use crate::data::MERGE_METHODS;
 use crate::data::ReviewState;
 use crate::theme;
+use crate::tui::{centered, frame, rule};
+use crate::tui::{fill, put, put_right, put_trunc};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     // Dispatching is not about a pull request, so it does not fit the layout
@@ -258,7 +259,7 @@ fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
     // a preview that only ever shows the boilerplate proves nothing about what
     // is actually being sent.
     const PREVIEW: usize = 14;
-    let all = super::wrap(text, width.saturating_sub(6) as usize);
+    let all = crate::tui::wrap(text, width.saturating_sub(6) as usize);
     let preview: Vec<String> = all.iter().take(PREVIEW).cloned().collect();
     let modal = centered(area, width, preview.len() as u16 + 9);
     frame(buf, modal, accent);
