@@ -2062,6 +2062,59 @@ mod editing {
     }
 
     #[test]
+    fn pressing_edit_before_the_disk_is_walked_asks_for_the_walk() {
+        // The deadlock this exists for: it used to report that it was looking
+        // for a checkout while nothing had asked anything to look.
+        let mut app = at_file("Cargo.toml");
+        app.clones.clear();
+        app.clones_state = Load::Loading;
+
+        app.open_in_editor();
+        assert!(app.wants_edit, "the intent is remembered");
+        assert!(app.edit_request.is_none(), "nothing to open yet");
+    }
+
+    #[test]
+    fn the_editor_opens_once_the_walk_comes_back() {
+        use crate::service::Response;
+
+        let mut app = at_file("Cargo.toml");
+        let repo = app.repo_key();
+        app.clones.clear();
+        app.clones_state = Load::Idle;
+        app.open_in_editor();
+        assert!(app.wants_edit);
+
+        let mut index = crate::clones::Index::new();
+        index.insert(repo, std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+        app.apply(Response::Scanned { index });
+
+        assert!(
+            app.edit_request.is_some(),
+            "the keypress should not have been swallowed"
+        );
+        assert!(!app.wants_edit, "and the intent is spent");
+    }
+
+    #[test]
+    fn a_walk_that_finds_nothing_offers_to_clone_rather_than_waiting_forever() {
+        use crate::service::Response;
+
+        let mut app = at_file("Cargo.toml");
+        app.clones.clear();
+        app.clones_state = Load::Idle;
+        app.open_in_editor();
+
+        app.apply(Response::Scanned {
+            index: crate::clones::Index::new(),
+        });
+        assert!(
+            matches!(app.prompt, Some(crate::actions::Prompt::Clone { .. })),
+            "the second attempt reaches a real answer"
+        );
+    }
+
+    #[test]
     fn editing_does_nothing_outside_the_file_tab() {
         let mut app = at_file("Cargo.toml");
         app.tab = 0;
@@ -2095,5 +2148,153 @@ mod editing {
         app.file_sel = 40;
         app.select_in(Pane::FileTree, 0);
         assert_eq!(app.file_sel, 0);
+    }
+}
+
+// -------------------------------------------------- what the last frame left
+//
+// A pane that does not paint every cell it owns leaves the previous frame's
+// text showing through. It is invisible in a single snapshot and obvious the
+// moment two frames differ, so these draw twice into the same terminal.
+
+mod residue {
+    use super::*;
+    use crate::data::TreeEntry;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn entry(path: &str, size: u64) -> TreeEntry {
+        TreeEntry {
+            path: path.into(),
+            is_dir: false,
+            size,
+        }
+    }
+
+    /// Two files: one with lines that reach the right edge, one with short
+    /// ones. Switching between them is what exposes an unpainted cell.
+    fn app_with_files() -> App {
+        let mut app = demo();
+        app.source = Source::Live;
+        app.tab = crate::data::FILES_TAB;
+        app.view = View::List;
+        app.pane = Pane::FileTree;
+
+        let key = app.repo_key();
+        app.trees.insert(
+            key.clone(),
+            vec![entry("long.txt", 400), entry("short.txt", 40)],
+        );
+        app.trees_state.insert(key.clone(), Load::Ready);
+
+        let long = (0..40)
+            .map(|i| format!("{i} DISTINCTIVE_MARKER_TEXT_THAT_REACHES_THE_RIGHT_EDGE_OF_THE_PANE"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.file_text.insert((key.clone(), "long.txt".into()), long);
+        app.file_state
+            .insert((key.clone(), "long.txt".into()), Load::Ready);
+
+        let short = (0..40).map(|_| "x").collect::<Vec<_>>().join("\n");
+        app.file_text
+            .insert((key.clone(), "short.txt".into()), short);
+        app.file_state
+            .insert((key, "short.txt".into()), Load::Ready);
+        app
+    }
+
+    /// Everything on screen, as one string per row.
+    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
+        let buf = term.backend().buffer();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_shorter_file_does_not_leave_the_longer_one_showing_through() {
+        let mut term = Terminal::new(TestBackend::new(120, 24)).unwrap();
+        let mut app = app_with_files();
+
+        app.fs_sel = 0; // the long one
+        term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+        assert!(
+            rows(&term).iter().any(|r| r.contains("DISTINCTIVE_MARKER")),
+            "the first file should be on screen at all"
+        );
+
+        app.select_in(Pane::FileTree, 1); // the short one
+        term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+
+        let after: Vec<String> = rows(&term);
+        let leftover: Vec<&String> = after
+            .iter()
+            .filter(|r| r.contains("DISTINCTIVE") || r.contains("MARKER"))
+            .collect();
+        assert!(
+            leftover.is_empty(),
+            "the previous file is still on screen:\n{}",
+            leftover
+                .iter()
+                .map(|r| format!("  {}", r.trim_end()))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+
+    #[test]
+    fn a_forced_repaint_is_the_main_loops_to_make() {
+        // Ratatui writes only what differs between two buffers, so nothing
+        // inside a frame can repaint a cell it believes is already right.
+        // `^l` therefore only raises a flag; the loop does the work.
+        let mut app = demo();
+        assert!(!app.wants_redraw);
+        app.on_key(KeyEvent {
+            code: KeyCode::Char('l'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        });
+        assert!(app.wants_redraw);
+    }
+
+    #[test]
+    fn a_plain_l_still_moves_right_rather_than_repainting() {
+        let mut app = demo_with_sidebar();
+        app.pane = Pane::Repos;
+        press(&mut app, KeyCode::Char('l'));
+        assert!(!app.wants_redraw);
+        assert_ne!(app.pane, Pane::Repos, "the pane key is untouched");
+    }
+
+    #[test]
+    fn a_file_still_loading_does_not_show_the_last_one_underneath() {
+        // the skeleton draws bars over some rows; the rest of the pane has to
+        // be painted too, or the previous file reads as this one
+        let mut term = Terminal::new(TestBackend::new(120, 24)).unwrap();
+        let mut app = app_with_files();
+
+        app.fs_sel = 0;
+        term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+
+        app.select_in(Pane::FileTree, 1);
+        let key = (app.repo_key(), "short.txt".to_string());
+        app.file_text.remove(&key);
+        app.file_state.insert(key, Load::Loading);
+        term.draw(|f| crate::ui::draw(f, &mut app)).unwrap();
+
+        let leftover: Vec<String> = rows(&term)
+            .into_iter()
+            .filter(|r| r.contains("DISTINCTIVE") || r.contains("MARKER"))
+            .collect();
+        assert!(
+            leftover.is_empty(),
+            "the previous file shows under the skeleton:\n{}",
+            leftover.join("\n")
+        );
     }
 }

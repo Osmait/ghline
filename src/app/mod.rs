@@ -329,6 +329,13 @@ pub struct App {
     /// should be able to see which line that will be.
     pub file_sel: usize,
     pub file_scroll: usize,
+    /// Set when `E` was pressed before the disk had been walked. The scan is
+    /// asked for and the editor opens when it lands.
+    pub wants_edit: bool,
+    /// Set by `^l`. Only the main loop can act on it: ratatui draws the
+    /// difference between two buffers, so nothing inside a frame can make it
+    /// repaint a cell it believes is already correct.
+    pub wants_redraw: bool,
     /// Set when `E` has been pressed: the file to open and the line to open it
     /// at. The main loop picks this up, because leaving the alternate screen
     /// and coming back is the terminal's business, not the reducer's.
@@ -455,6 +462,8 @@ impl App {
             fs_scroll: 0,
             file_sel: 0,
             file_scroll: 0,
+            wants_edit: false,
+            wants_redraw: false,
             edit_request: None,
             clones: crate::clones::Index::new(),
             clones_state: Load::Idle,

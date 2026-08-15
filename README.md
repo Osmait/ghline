@@ -194,6 +194,11 @@ in the checkout at all it says that instead of opening an empty buffer.
 It does **not** switch branches for you. Moving someone off their branch to
 satisfy a keypress is a far worse surprise than a warning.
 
+If the repository has not been located yet, `E` remembers the keypress, asks
+for the disk to be walked, and opens the file when the answer arrives. It used
+to say it was looking while nothing had been asked to look.
+
+
 Once you are in the editor, [`nvim/agent-send.nvim`](nvim/agent-send.nvim)
 closes the loop: select some lines, ask a question, and it goes to a running
 agent with the file, the range and the text. It is a separate thing that only
@@ -413,6 +418,7 @@ thing off if you would rather have it back.
 | `r` | refresh |
 | `:` | command line |
 | `?` | help |
+| `^l` | repaint the screen |
 | `ctrl-c` | quit |
 
 On a pull request:

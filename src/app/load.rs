@@ -70,7 +70,10 @@ impl App {
         // about which agent is free right now.
         // The disk is walked once, the first time somewhere to send an issue
         // is asked for. Doing it at startup would be work nobody asked for.
-        if self.dispatch_open && self.clones_state == Load::Idle {
+        // Asked for by anything that needs to know where a repository is —
+        // the picker, and `E`. Gating it on the picker alone was a deadlock:
+        // `E` reported that it was looking while nothing had been asked.
+        if (self.dispatch_open || self.wants_edit) && self.clones_state == Load::Idle {
             self.clones_state = Load::Loading;
             self.ask(Request::Scan);
         }
@@ -374,6 +377,10 @@ impl App {
             Response::Scanned { index } => {
                 self.clones = index;
                 self.clones_state = Load::Ready;
+                // somebody pressed `E` while this was still on its way
+                if self.wants_edit {
+                    self.open_in_editor();
+                }
             }
 
             Response::Agents { result } => match result {

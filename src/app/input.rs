@@ -341,9 +341,13 @@ impl App {
 
         let Some(root) = self.clone_path(&repo) else {
             if self.clones_state != Load::Ready {
-                self.flash_warn("still looking for a local checkout…");
+                // Remembered rather than refused: `ensure` sees this and asks
+                // for the walk, and the answer comes back here.
+                self.wants_edit = true;
+                self.flash_ok("looking for a local checkout…");
                 return;
             }
+            self.wants_edit = false;
             match crate::clones::clone_dir() {
                 Some(dest) => {
                     self.prompt = Some(Prompt::Clone {
@@ -356,6 +360,7 @@ impl App {
             return;
         };
 
+        self.wants_edit = false;
         let full = std::path::Path::new(&root).join(&path);
         if !full.exists() {
             self.flash_warn(format!(
@@ -705,6 +710,12 @@ impl App {
     }
 
     pub fn on_key(&mut self, ev: KeyEvent) {
+        // `^l` means redraw everywhere else; it means it here too. Ahead of the
+        // pane keys, since plain `l` already moves right.
+        if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('l') {
+            self.wants_redraw = true;
+            return;
+        }
         if ev.modifiers.contains(KeyModifiers::CONTROL) && ev.code == KeyCode::Char('b') {
             self.toggle_sidebar();
             return;

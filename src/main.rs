@@ -255,6 +255,14 @@ fn run(term: &mut TerminalGuard, source: Source) -> io::Result<()> {
             app.apply(res);
         }
 
+        // Ratatui writes only the cells that differ from the last frame, which
+        // is what makes it quick and also what makes a terminal that got out
+        // of step with it stay that way. `clear` forgets what it thought was
+        // on screen, so the next frame paints every cell.
+        if std::mem::take(&mut app.wants_redraw) {
+            term.inner().clear()?;
+        }
+
         // The editor takes the whole terminal, so this happens between frames
         // rather than inside one.
         if let Some((path, line)) = app.edit_request.take() {

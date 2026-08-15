@@ -772,6 +772,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("4", "the repo's files"),
     ("5", "agents running here"),
     ("E", "edit the file in $EDITOR"),
+    ("^l", "repaint the screen"),
     ("x", "send this to an agent"),
 ];
 
