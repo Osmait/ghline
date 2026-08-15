@@ -20,7 +20,7 @@ use ratatui::backend::CrosstermBackend;
 
 use github_tui::diffline::app::App;
 use github_tui::diffline::model::Scope;
-use github_tui::diffline::ui;
+use github_tui::diffline::view as ui;
 
 /// Cursor blink, and the beat the toast fades on.
 const BLINK: Duration = Duration::from_millis(500);

@@ -34,13 +34,10 @@ pub mod state {
     pub mod mouse;
 }
 
-pub mod view {
-    pub mod ui;
-}
+pub mod view;
 
 // The layers are how it is filed, not how it is spoken about: `diffline::app`
 // reads better at a call site than `diffline::state::app`, and the layer is
 // still there in the path on disk for anyone who wants to know.
 pub use source::{git, service, vcs};
 pub use state::{app, hit, input, keys};
-pub use view::ui;
