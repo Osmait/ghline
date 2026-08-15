@@ -550,6 +550,9 @@ pub struct Tab {
 }
 
 /// The repository's file tree.
+/// Written by hand, and checked against the table by a test: a `const` that
+/// has to agree with a position in a slice is two sources of truth, and
+/// reordering `TABS` would move the tab without moving the constant.
 pub const FILES_TAB: usize = 3;
 
 /// Index of the Agents tab, which is unlike the others: it is about this
@@ -723,6 +726,24 @@ impl MergeMethod {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tab_constants_point_at_the_tabs_they_are_named_for() {
+        // They are positions in `TABS`, written out. Reordering the table
+        // would move the tab and leave the constant behind, and the symptom
+        // would be the file explorer opening the agents pane.
+        assert_eq!(TABS[FILES_TAB].id, "files");
+        assert_eq!(TABS[AGENTS_TAB].id, "agents");
+    }
+
+    #[test]
+    fn no_two_tabs_answer_to_one_id() {
+        let mut ids: Vec<&str> = TABS.iter().map(|t| t.id).collect();
+        ids.sort_unstable();
+        let before = ids.len();
+        ids.dedup();
+        assert_eq!(before, ids.len(), "an id is how a tab is picked by name");
+    }
 
     #[test]
     fn filter_log_falls_back_to_the_job_when_the_step_is_unknown() {
