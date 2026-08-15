@@ -514,7 +514,10 @@ impl App {
             self.flash("no agent to send to — press a");
             return;
         };
-        if !agent.status.is_free() {
+        // Asked of the multiplexer, not of the status: a backend that cannot
+        // see what its agents are doing must not have every send refused on
+        // its behalf.
+        if !crate::mux::current().is_free(&agent) {
             self.flash(format!("{} is {}", agent.kind, agent.status));
             return;
         }
@@ -1377,11 +1380,11 @@ mod tests {
     #[test]
     fn picking_a_running_agent_clears_a_pending_new_one() {
         let mut a = app();
-        a.agents = vec![crate::herdr::Agent {
+        a.agents = vec![crate::mux::Agent {
             kind: "claude".into(),
             pane: "w:1".into(),
             cwd: "/tmp/r".into(),
-            status: crate::herdr::AgentStatus::Idle,
+            status: crate::mux::AgentStatus::Idle,
             title: String::new(),
             focused: false,
         }];
@@ -1906,9 +1909,9 @@ mod tests {
     #[test]
     fn a_busy_agent_is_refused_with_its_reason() {
         let mut a = app();
-        a.agents = vec![crate::herdr::Agent {
+        a.agents = vec![crate::mux::Agent {
             kind: "claude".into(),
-            status: crate::herdr::AgentStatus::Working,
+            status: crate::mux::AgentStatus::Working,
             cwd: "/tmp/r".into(),
             pane: "wA:p1".into(),
             title: String::new(),

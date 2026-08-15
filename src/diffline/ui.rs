@@ -902,10 +902,10 @@ fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
         (None, Some(a)) => (
             format!("{} · {}", a.kind, a.where_short()),
             match a.status {
-                crate::herdr::AgentStatus::Working => theme::yellow(),
-                crate::herdr::AgentStatus::Blocked => theme::red(),
-                crate::herdr::AgentStatus::Idle | crate::herdr::AgentStatus::Done => theme::green(),
-                crate::herdr::AgentStatus::Unknown => theme::dimmer(),
+                crate::mux::AgentStatus::Working => theme::yellow(),
+                crate::mux::AgentStatus::Blocked => theme::red(),
+                crate::mux::AgentStatus::Idle | crate::mux::AgentStatus::Done => theme::green(),
+                crate::mux::AgentStatus::Unknown => theme::dimmer(),
             },
         ),
         (None, None) => ("no agent — press a".into(), theme::dimmer()),
@@ -1606,10 +1606,10 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
             put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
         }
         let dot = match a.status {
-            crate::herdr::AgentStatus::Working => theme::yellow(),
-            crate::herdr::AgentStatus::Blocked => theme::red(),
-            crate::herdr::AgentStatus::Idle | crate::herdr::AgentStatus::Done => theme::green(),
-            crate::herdr::AgentStatus::Unknown => theme::dimmer(),
+            crate::mux::AgentStatus::Working => theme::yellow(),
+            crate::mux::AgentStatus::Blocked => theme::red(),
+            crate::mux::AgentStatus::Idle | crate::mux::AgentStatus::Done => theme::green(),
+            crate::mux::AgentStatus::Unknown => theme::dimmer(),
         };
         put(buf, m.x + 3, y, m.right(), "●", s.fg(dot));
         put(

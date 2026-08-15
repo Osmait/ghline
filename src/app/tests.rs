@@ -1364,7 +1364,7 @@ mod all_repos {
 mod dispatch {
     use super::*;
     use crate::app::Dest;
-    use crate::herdr::{Agent, AgentStatus};
+    use crate::mux::{Agent, AgentStatus};
 
     fn agent(kind: &str, status: AgentStatus, focused: bool) -> Agent {
         Agent {
@@ -2306,12 +2306,12 @@ mod residue {
 
 mod note {
     use super::*;
-    use crate::herdr::AgentStatus;
+    use crate::mux::AgentStatus;
 
     fn open_picker() -> App {
         let mut app = demo();
         app.source = Source::Live;
-        app.agents = vec![crate::herdr::Agent {
+        app.agents = vec![crate::mux::Agent {
             kind: "claude".into(),
             status: AgentStatus::Idle,
             cwd: "/home/x/orca/thing".into(),

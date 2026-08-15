@@ -11,7 +11,7 @@ use std::thread;
 use super::git;
 use super::model::{ChangedFile, Row, Scope};
 use crate::error::{Error, Result as Res};
-use crate::herdr::Agent;
+use crate::mux::Agent;
 
 pub enum Request {
     /// Which files a scope touches.
@@ -164,9 +164,9 @@ fn handle(req: Request) -> Response {
             path,
         },
 
-        Request::Agents => Response::Agents(crate::herdr::agents()),
+        Request::Agents => Response::Agents(crate::mux::current().agents()),
 
-        Request::Send { pane, text } => Response::Sent(crate::herdr::prompt(&pane, &text)),
+        Request::Send { pane, text } => Response::Sent(crate::mux::current().prompt(&pane, &text)),
 
         Request::Write(what) => Response::Wrote(match what {
             Write::Theme(t) => {
@@ -188,7 +188,7 @@ fn handle(req: Request) -> Response {
             label,
             kind,
             text,
-        } => Response::Sent(crate::herdr::dispatch(&repo, None, &label, &kind, &text)),
+        } => Response::Sent(crate::mux::current().dispatch(&repo, None, &label, &kind, &text)),
     }
 }
 

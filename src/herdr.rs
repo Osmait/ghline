@@ -16,6 +16,58 @@ use serde_json::Value;
 
 pub use crate::error::{Error, Result as Res};
 
+use crate::mux::{Agent, AgentStatus, Multiplexer};
+
+/// herdr, the multiplexer this was written against.
+///
+/// A unit struct: there is nothing to configure and nothing to hold open — a
+/// call is a process, and the state lives in herdr rather than here.
+pub struct Herdr;
+
+impl Multiplexer for Herdr {
+    fn name(&self) -> &'static str {
+        "herdr"
+    }
+
+    fn available(&self) -> bool {
+        available()
+    }
+
+    fn agents(&self) -> Res<Vec<Agent>> {
+        agents()
+    }
+
+    fn prompt(&self, pane: &str, text: &str) -> Res<()> {
+        prompt(pane, text)
+    }
+
+    fn create_workspace(&self, cwd: &str, label: &str) -> Res<String> {
+        create_workspace(cwd, label)
+    }
+
+    fn create_worktree(&self, repo_root: &str, branch: &str, label: &str) -> Res<String> {
+        create_worktree(repo_root, branch, label)
+    }
+
+    fn close_workspace(&self, pane: &str) -> Res<()> {
+        close_workspace(pane)
+    }
+
+    fn remove_worktree(&self, pane: &str) -> Res<()> {
+        remove_worktree(pane)
+    }
+
+    fn start_agent(&self, pane: &str, kind: &str) -> Res<()> {
+        start_agent(pane, kind)
+    }
+
+    // herdr watches its panes, so the status it reports is a real one — the
+    // whole reason this is a capability rather than an assumption.
+    fn detects_status(&self) -> bool {
+        true
+    }
+}
+
 /// The leading arguments identify the call in error messages.
 /// How a failed call is named in an error. Includes the program, because
 /// three of them share one error type and "`pr list` failed" does not say
@@ -30,95 +82,6 @@ fn label(args: &[&str]) -> String {
         )
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-// --- what herdr reports -----------------------------------------------------
-//
-// These live here rather than in `data` because they are herdr's vocabulary,
-// not GitHub's: an agent working in a pane on this machine has nothing to do
-// with issues or pull requests. Having them there made this module — shared by
-// both programs — depend on one program's own, and diffline reach through it
-// for a type it gets from here anyway.
-
-/// What a coding agent is doing, as herdr reports it.
-///
-/// Kept apart from `Status` even though `working` and `running` rhyme: an
-/// agent waiting for you to answer a permission prompt has no equivalent in
-/// the issue/PR/CI vocabulary, and conflating the two would lose exactly the
-/// state you most want to see.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum AgentStatus {
-    /// Busy on a task.
-    Working,
-    /// Waiting for something to do.
-    Idle,
-    /// Stopped on a question — a permission prompt, a choice.
-    Blocked,
-    /// Finished what it was asked.
-    Done,
-    #[default]
-    Unknown,
-}
-
-impl AgentStatus {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Working => "working",
-            Self::Idle => "idle",
-            Self::Blocked => "blocked",
-            Self::Done => "done",
-            Self::Unknown => "unknown",
-        }
-    }
-
-    pub fn parse(raw: &str) -> Self {
-        match raw {
-            "working" => Self::Working,
-            "idle" => Self::Idle,
-            "blocked" => Self::Blocked,
-            "done" => Self::Done,
-            _ => Self::Unknown,
-        }
-    }
-
-    /// Can it be given something new to do?
-    ///
-    /// Typing into an agent mid-task is how you lose its context, and one
-    /// stopped on a permission prompt would read the prompt as the answer.
-    pub fn is_free(self) -> bool {
-        matches!(self, Self::Idle | Self::Done)
-    }
-}
-
-impl std::fmt::Display for AgentStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.label())
-    }
-}
-
-/// A coding agent herdr is running.
-#[derive(Clone)]
-pub struct Agent {
-    /// `claude`, `codex`, `pi` — what is running, not what it is called.
-    pub kind: String,
-    pub status: AgentStatus,
-    /// Where it is working. The only clue to which repository it is in.
-    pub cwd: String,
-    /// `wK:p1`. This is the dispatch target; herdr does not accept names.
-    pub pane: String,
-    /// The terminal title, which for most agents is a summary of the task.
-    pub title: String,
-    /// True for the pane the reader is looking at — which, when this program
-    /// is run from inside herdr, is this program.
-    pub focused: bool,
-}
-
-impl Agent {
-    /// The last segment of `cwd`, which is the repository often enough to be
-    /// worth showing and never worth trusting.
-    pub fn where_short(&self) -> &str {
-        self.cwd.rsplit('/').next().unwrap_or(&self.cwd)
-    }
 }
 
 /// Runs `herdr` and returns whatever its envelope carried in `result`.
@@ -313,46 +276,6 @@ pub fn remove_worktree(pane: &str) -> Res<()> {
     // a pane id is `<workspace>:<pane>`, and removal takes the workspace
     let workspace = pane.split(':').next().unwrap_or(pane);
     call(&["worktree", "remove", "--workspace", workspace, "--force"]).map(|_| ())
-}
-
-/// A workspace, an agent in it, and the prompt — undoing the workspace if
-/// either of the last two fails.
-///
-/// Leaving a half-built workspace behind would be worse than the failure: the
-/// next dispatch would offer a branch that already exists, and the reader
-/// would have a workspace they did not ask for and did not see appear.
-pub fn dispatch(
-    repo_root: &str,
-    branch: Option<&str>,
-    label: &str,
-    kind: &str,
-    text: &str,
-) -> Res<()> {
-    // The only difference between the two: one makes a branch and a checkout,
-    // the other opens on the one that is already there.
-    let pane = match branch {
-        Some(b) => create_worktree(repo_root, b, label)?,
-        None => create_workspace(repo_root, label)?,
-    };
-    // Undoing a worktree deletes what was just made; undoing a workspace only
-    // closes a window. Neither ever touches the reader's own checkout.
-    let undo = |pane: &str| {
-        let _ = if branch.is_some() {
-            remove_worktree(pane)
-        } else {
-            close_workspace(pane)
-        };
-    };
-
-    if let Err(e) = start_agent(&pane, kind) {
-        undo(&pane);
-        return Err(e);
-    }
-    if let Err(e) = prompt(&pane, text) {
-        undo(&pane);
-        return Err(e);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -117,7 +117,7 @@ pub enum Request {
 pub enum Response {
     Accounts(Result<Vec<Account>, Error>),
     Agents {
-        result: Result<Vec<crate::herdr::Agent>, Error>,
+        result: Result<Vec<crate::mux::Agent>, Error>,
     },
     Dispatched {
         result: Result<(), Error>,
@@ -254,7 +254,7 @@ fn handle(req: Request) -> Response {
         }
 
         Request::Dispatch { pane, text } => Response::Dispatched {
-            result: crate::herdr::prompt(&pane, &text),
+            result: crate::mux::current().prompt(&pane, &text),
         },
 
         Request::DispatchFresh {
@@ -264,7 +264,13 @@ fn handle(req: Request) -> Response {
             kind,
             text,
         } => Response::Dispatched {
-            result: crate::herdr::dispatch(&repo_root, branch.as_deref(), &label, &kind, &text),
+            result: crate::mux::current().dispatch(
+                &repo_root,
+                branch.as_deref(),
+                &label,
+                &kind,
+                &text,
+            ),
         },
 
         Request::Clone { repo, dest } => Response::Cloned {
@@ -295,7 +301,7 @@ fn handle(req: Request) -> Response {
         },
 
         Request::Agents => Response::Agents {
-            result: crate::herdr::agents(),
+            result: crate::mux::current().agents(),
         },
 
         Request::AllRuns { key, repos } => Response::List {

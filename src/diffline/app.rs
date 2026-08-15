@@ -8,7 +8,7 @@ use crate::error::Error;
 
 use super::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
 use super::service::{Request, Response, Service};
-use crate::herdr::Agent;
+use crate::mux::Agent;
 
 /// Load state of one piece of data.
 #[derive(Clone, Debug, Default)]
@@ -948,7 +948,7 @@ mod tests {
         let mut a = app();
         a.agents = vec![Agent {
             kind: "claude".into(),
-            status: crate::herdr::AgentStatus::Idle,
+            status: crate::mux::AgentStatus::Idle,
             cwd: "/tmp/x".into(),
             pane: "wA:p1".into(),
             title: String::new(),

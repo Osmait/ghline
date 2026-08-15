@@ -93,7 +93,7 @@ pub enum Pane {
 #[derive(Clone)]
 pub enum Dest {
     /// An agent already running, addressed by the pane it lives in.
-    Running(crate::herdr::Agent),
+    Running(crate::mux::Agent),
     /// A new agent on a local clone.
     ///
     /// Either in a worktree branched off it, or in the checkout itself. The
@@ -164,7 +164,7 @@ impl Dest {
             Self::Running(a) if a.focused => {
                 Some("this window — it is the one showing you this list".into())
             }
-            Self::Running(a) if !a.status.is_free() => Some(format!(
+            Self::Running(a) if !crate::mux::current().is_free(a) => Some(format!(
                 "{} — interrupting would lose its context",
                 a.status
             )),
@@ -306,7 +306,7 @@ pub struct App {
     pub detail_height: u16,
     /// Every agent herdr is running, and whether we have asked yet. Not keyed
     /// by repository: agents belong to the machine, not to a repo.
-    pub agents: Vec<crate::herdr::Agent>,
+    pub agents: Vec<crate::mux::Agent>,
     pub agents_state: Load,
     /// A repository's file tree, keyed by `owner/repo`.
     pub trees: HashMap<String, Vec<crate::data::TreeEntry>>,

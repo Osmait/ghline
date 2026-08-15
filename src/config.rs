@@ -152,6 +152,13 @@ pub fn render_prompt(
         .replace("{context}", context)
 }
 
+const MUX: &str = "multiplexer";
+
+/// Which multiplexer to talk to. Unset means "whichever is here".
+pub fn multiplexer() -> String {
+    load().get(MUX).cloned().unwrap_or_default()
+}
+
 const AGENTS: &str = "agents";
 
 /// The agents offered for a fresh worktree.
