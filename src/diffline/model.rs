@@ -70,6 +70,17 @@ impl Status {
         }
     }
 
+    /// The word, for a place with room for one — an agent reads "added"
+    /// more readily than it reads "A".
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Added => "added",
+            Self::Modified => "modified",
+            Self::Deleted => "deleted",
+            Self::Renamed => "renamed",
+        }
+    }
+
     pub fn parse(raw: &str) -> Self {
         match raw.chars().next() {
             Some('A') => Self::Added,
@@ -203,7 +214,13 @@ pub enum State {
 /// A note attached to one line or a run of them.
 #[derive(Clone, Debug)]
 pub struct Comment {
+    /// The lines it is about. Empty when the note is about the file as a
+    /// whole — "why is this here at all" is a question about a file, and
+    /// there is no line to pin it to.
     pub anchors: Vec<Anchor>,
+    /// The file it is about, always. The anchors, when there are any, agree
+    /// with it; this is what survives when there are none.
+    pub file: String,
     /// The first line of what it is about, for the queue to show.
     pub snippet: String,
     pub body: String,
@@ -212,7 +229,12 @@ pub struct Comment {
 
 impl Comment {
     pub fn path(&self) -> &str {
-        self.anchors.first().map_or("", |a| a.path.as_str())
+        &self.file
+    }
+
+    /// True for a note about the file rather than about any line in it.
+    pub fn is_file_note(&self) -> bool {
+        self.anchors.is_empty()
     }
 
     pub fn lines(&self) -> usize {
@@ -221,8 +243,9 @@ impl Comment {
 
     /// `router.ts:31-44`, or `router.ts:31` for a single line.
     pub fn where_label(&self) -> String {
+        let name = self.file.rsplit('/').next().unwrap_or(&self.file);
         let Some(first) = self.anchors.first() else {
-            return "—".into();
+            return format!("{name} · the file");
         };
         let name = first.path.rsplit('/').next().unwrap_or(&first.path);
         let lo = self.anchors.iter().map(|a| a.line).min().unwrap_or(0);
@@ -233,6 +256,69 @@ impl Comment {
             format!("{name}:{lo}-{hi}")
         }
     }
+}
+
+/// One line of a side-by-side view: what is on the left, what is on the
+/// right, or a header that spans both.
+///
+/// The fields are indices into the row list rather than rows, so that
+/// everything anchored to a row index — the cursor, the selection, the
+/// comment badges — keeps working without knowing this view exists.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct Pair {
+    pub left: Option<usize>,
+    pub right: Option<usize>,
+    pub header: Option<usize>,
+}
+
+/// Folds a unified diff into side-by-side lines.
+///
+/// A run of deletions followed by a run of additions is the shape of an edit,
+/// so the two runs are zipped: the first line removed sits beside the first
+/// line added. When the runs are uneven the surplus gets a blank opposite it,
+/// which is the honest answer — nothing was there.
+pub fn pair_rows(rows: &[Row]) -> Vec<Pair> {
+    let mut out = Vec::with_capacity(rows.len());
+    let mut i = 0;
+    while i < rows.len() {
+        match rows[i].kind {
+            Kind::Header => {
+                out.push(Pair {
+                    header: Some(i),
+                    ..Pair::default()
+                });
+                i += 1;
+            }
+            Kind::Context => {
+                out.push(Pair {
+                    left: Some(i),
+                    right: Some(i),
+                    ..Pair::default()
+                });
+                i += 1;
+            }
+            Kind::Deleted | Kind::Added => {
+                let del_from = i;
+                while i < rows.len() && rows[i].kind == Kind::Deleted {
+                    i += 1;
+                }
+                let add_from = i;
+                while i < rows.len() && rows[i].kind == Kind::Added {
+                    i += 1;
+                }
+                let dels = del_from..add_from;
+                let adds = add_from..i;
+                for k in 0..dels.len().max(adds.len()) {
+                    out.push(Pair {
+                        left: dels.clone().nth(k),
+                        right: adds.clone().nth(k),
+                        ..Pair::default()
+                    });
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -361,10 +447,123 @@ mod tests {
         assert_eq!(before, after);
     }
 
+    // --- pairing ---
+
+    fn rows_of(spec: &[Kind]) -> Vec<Row> {
+        let (mut o, mut n) = (0, 0);
+        spec.iter()
+            .map(|k| {
+                let (old, new) = match k {
+                    Kind::Header => (None, None),
+                    Kind::Deleted => {
+                        o += 1;
+                        (Some(o), None)
+                    }
+                    Kind::Added => {
+                        n += 1;
+                        (None, Some(n))
+                    }
+                    Kind::Context => {
+                        o += 1;
+                        n += 1;
+                        (Some(o), Some(n))
+                    }
+                };
+                Row {
+                    kind: *k,
+                    old,
+                    new,
+                    text: format!("{k:?}"),
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_edit_puts_what_went_beside_what_came() {
+        // two lines removed and two added is one edit, not four events
+        let rows = rows_of(&[Kind::Deleted, Kind::Deleted, Kind::Added, Kind::Added]);
+        let pairs = pair_rows(&rows);
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(
+            pairs[0],
+            Pair {
+                left: Some(0),
+                right: Some(2),
+                header: None
+            }
+        );
+        assert_eq!(
+            pairs[1],
+            Pair {
+                left: Some(1),
+                right: Some(3),
+                header: None
+            }
+        );
+    }
+
+    #[test]
+    fn an_uneven_edit_leaves_the_short_side_blank() {
+        // one removed, three added: the two extra lines came from nowhere,
+        // and saying so is the point of the empty half
+        let rows = rows_of(&[Kind::Deleted, Kind::Added, Kind::Added, Kind::Added]);
+        let pairs = pair_rows(&rows);
+        assert_eq!(pairs.len(), 3);
+        assert_eq!(pairs[0].left, Some(0));
+        assert_eq!(pairs[1].left, None);
+        assert_eq!(pairs[2].left, None);
+        assert_eq!(
+            pairs.iter().filter_map(|p| p.right).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+    }
+
+    #[test]
+    fn context_stands_on_both_sides_and_a_header_on_neither() {
+        let rows = rows_of(&[Kind::Header, Kind::Context]);
+        let pairs = pair_rows(&rows);
+        assert_eq!(pairs[0].header, Some(0));
+        assert_eq!((pairs[0].left, pairs[0].right), (None, None));
+        assert_eq!((pairs[1].left, pairs[1].right), (Some(1), Some(1)));
+    }
+
+    #[test]
+    fn every_row_appears_exactly_once() {
+        // The cursor is a row index. A row that the split view never draws is
+        // a row you can select and not see; one drawn twice is a line you can
+        // comment on from two places and queue twice.
+        let rows = rows_of(&[
+            Kind::Header,
+            Kind::Context,
+            Kind::Deleted,
+            Kind::Added,
+            Kind::Added,
+            Kind::Context,
+            Kind::Deleted,
+        ]);
+        let mut seen = vec![0usize; rows.len()];
+        for p in pair_rows(&rows) {
+            for i in [p.left, p.right, p.header].into_iter().flatten() {
+                seen[i] += 1;
+            }
+        }
+        // context counts twice on purpose: it is the same line on both sides
+        for (i, r) in rows.iter().enumerate() {
+            let want = if r.kind == Kind::Context { 2 } else { 1 };
+            assert_eq!(
+                seen[i], want,
+                "row {i} ({:?}) appeared {} times",
+                r.kind, seen[i]
+            );
+        }
+    }
+
     // --- comments ---
 
     fn comment(lines: &[u32]) -> Comment {
         Comment {
+            file: "src/server/router.ts".into(),
             anchors: lines
                 .iter()
                 .map(|n| Anchor {
@@ -397,14 +596,18 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_with_no_anchor_says_so_rather_than_panicking() {
+    fn a_note_with_no_anchor_is_about_the_file() {
+        // Not a degenerate case any more: this is what `c` in the tree makes,
+        // for asking about a file rather than about a line in it.
         let c = Comment {
+            file: "src/server/router.ts".into(),
             anchors: Vec::new(),
             snippet: String::new(),
             body: String::new(),
             state: State::Queued,
         };
-        assert_eq!(c.where_label(), "—");
-        assert_eq!(c.path(), "");
+        assert!(c.is_file_note());
+        assert_eq!(c.where_label(), "router.ts · the file");
+        assert_eq!(c.path(), "src/server/router.ts");
     }
 }

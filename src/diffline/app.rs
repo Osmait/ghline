@@ -125,6 +125,12 @@ pub struct App {
     pub new_kind: Option<String>,
     /// Whether the file tree is on screen. Open to begin with: which files
     /// changed is the first question a review asks.
+    /// The comment being drafted is about the file, not about any line in
+    /// it. Set when `c` is pressed with the tree in focus.
+    /// Side by side rather than one column: old on the left, new on the
+    /// right. `s` switches.
+    pub split: bool,
+    pub about_file: bool,
     pub tree_shown: bool,
     /// Whether the review queue is on screen. Closed to begin with: it is
     /// empty until there is something to put in it, and until then it is a
@@ -185,6 +191,8 @@ impl App {
             agents_state: Load::Idle,
             agent_idx: 0,
             new_kind: None,
+            split: false,
+            about_file: false,
             tree_shown: true,
             queue_shown: false,
             hscroll: 0,
@@ -660,6 +668,7 @@ mod tests {
         let anchors = a.selected_anchors();
         a.comments.push(Comment {
             anchors,
+            file: "src/a.rs".into(),
             snippet: "one".into(),
             body: "look at this".into(),
             state: State::Queued,
@@ -705,6 +714,7 @@ mod tests {
     fn a_send_that_failed_puts_the_queue_back() {
         let mut a = app();
         a.comments.push(Comment {
+            file: "src/a.rs".into(),
             anchors: vec![Anchor {
                 path: "src/a.rs".into(),
                 side: super::super::model::Side::New,
@@ -741,6 +751,7 @@ mod tests {
             focused: false,
         }];
         a.comments.push(Comment {
+            file: "src/a.rs".into(),
             anchors: vec![Anchor {
                 path: "src/a.rs".into(),
                 side: super::super::model::Side::New,

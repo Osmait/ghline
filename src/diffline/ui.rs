@@ -434,6 +434,11 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
+    if app.split {
+        draw_split(buf, body, app, &rows);
+        return;
+    }
+
     let height = body.height as usize;
     scroll_into_view(&mut app.diff_scroll, app.cursor, height, rows.len());
 
@@ -536,6 +541,161 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
                 skip: app.hscroll,
             },
         );
+    }
+}
+
+/// Side by side: what the file said on the left, what it says on the right.
+///
+/// The cursor is still an index into the unified rows — this only changes
+/// where a row is drawn, never what it is — so selecting, commenting and the
+/// anchors all work here without knowing about it.
+fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App, rows: &[super::model::Row]) {
+    let pairs = super::model::pair_rows(rows);
+
+    // Which line the cursor is on, in this view's units.
+    let at = pairs
+        .iter()
+        .position(|p| {
+            p.left == Some(app.cursor)
+                || p.right == Some(app.cursor)
+                || p.header == Some(app.cursor)
+        })
+        .unwrap_or(0);
+    let height = body.height as usize;
+    scroll_into_view(&mut app.diff_scroll, at, height, pairs.len());
+
+    let (lo, hi) = app.span();
+    let visual = app.visual();
+    let spans = app.spans.get(app.path()).cloned().unwrap_or_default();
+    let focused = app.pane == Pane::Diff;
+
+    // Half each, and a rule down the middle so the eye knows which side it is
+    // reading without counting columns.
+    let half = body.width / 2;
+    let mid = body.x + half;
+    vline(buf, mid, body.y, body.height, theme::border_soft());
+
+    for (n, pair) in pairs.iter().enumerate().skip(app.diff_scroll) {
+        let y = body.y + (n - app.diff_scroll) as u16;
+        if y >= body.bottom() {
+            break;
+        }
+
+        if let Some(i) = pair.header {
+            let row = &rows[i];
+            fill(
+                buf,
+                Rect {
+                    x: body.x,
+                    y,
+                    width: body.width,
+                    height: 1,
+                },
+                theme::panel(),
+            );
+            put_trunc(
+                buf,
+                body.x + 1,
+                y,
+                body.right(),
+                &row.text,
+                Style::default().bg(theme::panel()).fg(theme::cyan_soft()),
+            );
+            continue;
+        }
+
+        for (side, at_x, width, is_left) in [
+            (pair.left, body.x, half, true),
+            (pair.right, mid + 1, body.right() - mid - 1, false),
+        ] {
+            let Some(i) = side else {
+                // Nothing was here. Painted rather than left as background so
+                // the gap reads as part of the diff and not as the end of it.
+                fill(
+                    buf,
+                    Rect {
+                        x: at_x,
+                        y,
+                        width,
+                        height: 1,
+                    },
+                    theme::panel_alt(),
+                );
+                continue;
+            };
+            let row = &rows[i];
+            let on_cursor = i == app.cursor;
+            let in_sel = visual && i >= lo && i <= hi;
+
+            let (mut bg, fg) = match row.kind {
+                Kind::Added => (theme::diff_add_bg(), theme::green()),
+                Kind::Deleted => (theme::diff_del_bg(), theme::red()),
+                _ => (theme::bg(), theme::fg()),
+            };
+            if in_sel {
+                bg = theme::sel();
+            }
+            if on_cursor {
+                bg = theme::sel_mark_idle();
+            }
+            fill(
+                buf,
+                Rect {
+                    x: at_x,
+                    y,
+                    width,
+                    height: 1,
+                },
+                bg,
+            );
+            let base = Style::default().bg(bg);
+
+            if on_cursor || in_sel {
+                let mark = if visual {
+                    theme::purple()
+                } else if focused {
+                    theme::yellow()
+                } else {
+                    theme::sel_mark_idle()
+                };
+                put(buf, at_x, y, at_x + 1, "▌", base.fg(mark));
+            }
+
+            // One gutter per side, and each side shows its own number: a
+            // context line is line 5 on the left and line 6 on the right once
+            // something above it has been added, and saying 5 twice would
+            // quietly misreport where the new file's line actually is.
+            let num = if is_left { row.old } else { row.new }
+                .map(|v| v.to_string())
+                .unwrap_or_default();
+            put_right(buf, at_x + 6, y, &num, base.fg(theme::dimmer()));
+
+            let badge = app.comment_head_at(row);
+            let end = if badge > 0 {
+                put_right(
+                    buf,
+                    at_x + width,
+                    y,
+                    &format!(" ● {badge} "),
+                    base.fg(theme::yellow()),
+                )
+            } else {
+                at_x + width
+            };
+
+            draw_code(
+                buf,
+                at_x + 7,
+                y,
+                end,
+                Code {
+                    text: &row.text,
+                    spans: spans.get(i),
+                    plain: base.fg(fg),
+                    skip: app.hscroll,
+                },
+            );
+        }
     }
 }
 
@@ -904,7 +1064,7 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
     let hint = if app.visual() {
         "j/k extend · c comment on range · esc cancel"
     } else {
-        "j/k move · h/l scroll · ␣e/␣c pane · V range · c comment · a agent · S send · ? help"
+        "j/k move · h/l scroll · s split · ␣e/␣c pane · c comment · a agent · S send · ? help"
     };
     let toast = format!(" {} ", app.toast);
     let tx = put_right(
@@ -1690,6 +1850,7 @@ mod layout_tests {
 
         a.comments.push(super::super::model::Comment {
             anchors: vec![],
+            file: "src/a.rs".into(),
             snippet: "fn main() {".into(),
             body: "look at this".into(),
             state: State::Queued,
@@ -1705,6 +1866,58 @@ mod layout_tests {
         term.draw(|f| draw(f, &mut a)).unwrap();
         let screen = rows(&term).join("\n");
         assert!(!screen.contains("queued · "), "{screen}");
+    }
+
+    #[test]
+    fn each_side_of_the_split_numbers_its_own_file() {
+        // A context line below an insertion is line 2 on the left and 3 on
+        // the right. Showing the old number on both sides would misreport
+        // where the new file's line actually is — and a reader writing a
+        // comment off that number would anchor it to the wrong line.
+        let mut a = app();
+        a.split = true;
+        a.rows.insert(
+            "src/a.rs".into(),
+            vec![
+                Row {
+                    kind: Kind::Context,
+                    old: Some(1),
+                    new: Some(1),
+                    text: "fn main() {".into(),
+                },
+                Row {
+                    kind: Kind::Added,
+                    old: None,
+                    new: Some(2),
+                    text: "    added();".into(),
+                },
+                Row {
+                    kind: Kind::Context,
+                    old: Some(2),
+                    new: Some(3),
+                    text: "CLOSING".into(),
+                },
+            ],
+        );
+
+        let mut term = Terminal::new(TestBackend::new(150, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let screen = rows(&term);
+        let rendered = screen.join("\n");
+
+        let row = screen
+            .iter()
+            .find(|r| r.matches("CLOSING").count() == 2)
+            .unwrap_or_else(|| panic!("the line should be drawn on both sides:\n{rendered}"));
+        let half = row.len() / 2;
+        assert!(
+            row[..half].contains('2'),
+            "the left half should carry the old number 2:\n  {row}"
+        );
+        assert!(
+            row[half..].contains('3'),
+            "the right half should carry the new number 3:\n  {row}"
+        );
     }
 
     #[test]

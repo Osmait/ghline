@@ -42,6 +42,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("x", "delete comment"),
     ("a", "pick target agent"),
     ("S", "send whole queue"),
+    ("s", "split / unified view"),
     ("b", "inline blame"),
     ("d", "blast radius"),
     ("+ / -", "expand / collapse context"),
@@ -85,10 +86,16 @@ impl App {
             Pane::Queue => &mut self.queue_shown,
             Pane::Diff => return,
         };
-        *shown = !*shown;
-        if *shown {
+        // Three states, not two. Hidden means show it and go there; shown but
+        // not focused means go there — hiding a pane you were only looking at
+        // is never what the key was for; shown and focused means put it away.
+        if !*shown {
+            *shown = true;
             self.pane = which;
-        } else if self.pane == which {
+        } else if self.pane != which {
+            self.pane = which;
+        } else {
+            *shown = false;
             self.pane = Pane::Diff;
         }
     }
@@ -208,10 +215,21 @@ impl App {
     // --- comments ---
 
     /// `c`: opens the note editor over whatever is selected.
+    /// `c`. In the tree this is a note about the file itself; in the diff it
+    /// is a note about the selected lines.
     pub fn open_comment(&mut self) {
-        if self.selected_anchors().is_empty() {
-            self.flash("move to a code line first");
-            return;
+        if self.pane == Pane::Tree {
+            if self.path().is_empty() {
+                self.flash("no file to ask about");
+                return;
+            }
+            self.about_file = true;
+        } else {
+            if self.selected_anchors().is_empty() {
+                self.flash("move to a code line first");
+                return;
+            }
+            self.about_file = false;
         }
         self.modal = Some(Modal::Comment);
         self.draft.clear();
@@ -220,31 +238,46 @@ impl App {
     /// Saves the draft against the selection.
     pub fn save_comment(&mut self) {
         let body = self.draft.trim().to_string();
-        let anchors = self.selected_anchors();
+        let about_file = std::mem::take(&mut self.about_file);
+        let anchors = if about_file {
+            Vec::new()
+        } else {
+            self.selected_anchors()
+        };
+        let file = self.path().to_string();
         self.modal = None;
         self.draft.clear();
 
-        if body.is_empty() || anchors.is_empty() {
+        if body.is_empty() || file.is_empty() || (!about_file && anchors.is_empty()) {
             return;
         }
         let n = anchors.len();
-        let snippet = self
-            .diff_rows()
-            .get(self.span().0)
-            .map(|r| r.text.trim().chars().take(60).collect::<String>())
-            .unwrap_or_default();
+        let snippet = if about_file {
+            // What the file is, rather than a line of it: enough for the
+            // agent to know which one is meant without opening it.
+            let f = self.file();
+            f.map(|f| format!("{} · +{} −{}", f.status.label(), f.add, f.del))
+                .unwrap_or_default()
+        } else {
+            self.diff_rows()
+                .get(self.span().0)
+                .map(|r| r.text.trim().chars().take(60).collect::<String>())
+                .unwrap_or_default()
+        };
 
         self.comments.push(Comment {
             anchors,
+            file,
             snippet,
             body,
             state: State::Queued,
         });
         self.anchor = None;
-        self.flash(format!(
-            "comment queued · {n} line{}",
-            if n == 1 { "" } else { "s" }
-        ));
+        self.flash(if about_file {
+            "queued · about the whole file".to_string()
+        } else {
+            format!("comment queued · {n} line{}", if n == 1 { "" } else { "s" })
+        });
     }
 
     /// `x`: drops whatever comment covers the cursor.
@@ -616,6 +649,17 @@ impl App {
             KeyCode::Char('a') => self.open_agents(),
             KeyCode::Char('S') => self.send_queue(),
             KeyCode::Char('b') => self.toggle_blame(),
+            KeyCode::Char('s') => {
+                self.split = !self.split;
+                // The columns halve, so wherever the code was scrolled to
+                // means something else now.
+                self.hscroll = 0;
+                self.flash(if self.split {
+                    "split view [s]"
+                } else {
+                    "unified view [s]"
+                });
+            }
             KeyCode::Char('d') => self.modal = Some(Modal::Deps),
             KeyCode::Char('r') => {
                 self.refresh();
@@ -839,6 +883,61 @@ mod tests {
     }
 
     #[test]
+    fn c_in_the_tree_asks_about_the_file_rather_than_a_line() {
+        let mut a = app();
+        a.pane = Pane::Tree;
+        press(&mut a, KeyCode::Char('c'));
+        assert_eq!(a.modal, Some(Modal::Comment));
+        typed(&mut a, "why is this here?");
+        press(&mut a, KeyCode::Enter);
+
+        assert_eq!(a.comments.len(), 1);
+        let c = &a.comments[0];
+        assert!(c.is_file_note(), "no line was selected, and none is meant");
+        assert_eq!(c.path(), "src/a.rs");
+        assert_eq!(c.body, "why is this here?");
+        // and it says which file in the message the agent gets
+        assert!(
+            a.render_queue().contains("a.rs · the file"),
+            "{}",
+            a.render_queue()
+        );
+    }
+
+    #[test]
+    fn a_file_note_does_not_take_the_lines_the_cursor_happened_to_be_on() {
+        // The cursor is still somewhere in the diff while the tree has focus.
+        // A note about the file must not quietly pick that up.
+        let mut a = app();
+        a.pane = Pane::Diff;
+        a.cursor = 1;
+        a.anchor = Some(3);
+        assert!(
+            !a.selected_anchors().is_empty(),
+            "the fixture needs a selection"
+        );
+
+        a.pane = Pane::Tree;
+        press(&mut a, KeyCode::Char('c'));
+        typed(&mut a, "about the file");
+        press(&mut a, KeyCode::Enter);
+        assert!(a.comments[0].anchors.is_empty());
+    }
+
+    #[test]
+    fn the_toggle_focuses_before_it_hides() {
+        // Hiding a pane you were only looking at is never what the key meant.
+        let mut a = app();
+        a.pane = Pane::Diff;
+        assert!(a.tree_shown);
+        leader(&mut a, 'e');
+        assert!(a.tree_shown, "still there");
+        assert_eq!(a.pane, Pane::Tree, "and now you are in it");
+        leader(&mut a, 'e');
+        assert!(!a.tree_shown, "a second press puts it away");
+    }
+
+    #[test]
     fn the_queue_starts_away_and_the_tree_starts_open() {
         let a = app();
         assert!(a.tree_shown, "which files changed is the first question");
@@ -861,6 +960,10 @@ mod tests {
         assert!(!a.queue_shown);
         assert_eq!(a.pane, Pane::Diff, "focus must not stay on what is gone");
 
+        // the tree is already on screen, so the first press goes to it and
+        // the second is the one that puts it away
+        leader(&mut a, 'e');
+        assert!(a.tree_shown);
         leader(&mut a, 'e');
         assert!(!a.tree_shown);
         leader(&mut a, 'd');
