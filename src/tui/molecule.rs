@@ -16,6 +16,7 @@ use ratatui::style::{Color, Style};
 use super::atom::{clear, hline, put, put_right, put_trunc, skel_bar};
 use super::geom::pct;
 use super::theme;
+use crate::shared::mux::AgentStatus;
 
 /// A single-line frame in the modal's accent colour.
 ///
@@ -137,6 +138,23 @@ pub fn query_line(buf: &mut Buffer, m: Rect, y: u16, q: &Query<'_>) {
         // is the text caret, in four of the five places one is drawn. This
         // was the fifth.
         put(buf, end, y, m.right() - 2, "█", base.fg(accent));
+    }
+}
+
+/// How an agent's state looks: a glyph and a colour.
+///
+/// One answer, where there were two. github-tui drew a distinct glyph per
+/// status and painted `Idle` grey; diffline drew `●` for every status and
+/// painted `Idle` and `Done` alike in green. Nothing about a status is a
+/// property of the program looking at it, so the pair that carries the most
+/// information wins: five glyphs, and `Idle` told apart from `Done`.
+pub fn agent_status(s: AgentStatus) -> (&'static str, Color) {
+    match s {
+        AgentStatus::Working => ("◐", theme::yellow()),
+        AgentStatus::Idle => ("○", theme::dimmer()),
+        AgentStatus::Blocked => ("◼", theme::red()),
+        AgentStatus::Done => ("●", theme::green()),
+        AgentStatus::Unknown => ("·", theme::dimmer()),
     }
 }
 

@@ -14,12 +14,13 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 
-use super::atom::{fill, hline, put, put_right, scrim};
+use super::atom::{fill, hline, put, put_right, put_trunc, scrim};
 use super::geom::{centered, centered_over};
-use super::molecule::{Query, modal_head, query_line};
+use super::molecule::{Query, agent_status, modal_head, query_line};
 use super::theme;
+use crate::shared::mux::AgentStatus;
 
 /// One row of a list, as laid out.
 #[derive(Clone, Copy, Debug)]
@@ -196,6 +197,142 @@ impl<'a> Dialog<'a> {
                 height: self.footer,
             },
         }
+    }
+}
+
+/// One agent, as both programs draw one.
+///
+/// Two lines: what it is on the first, where it is or why it cannot be used
+/// on the second.
+///
+/// ```text
+///   ▌ ◐ ✳ claude       rewriting the reducer                   working
+///   ▌     /home/you/work/tuikit                                wK:p1
+///   │ │ │ │           │                                        │
+///   0 2 4 6           19                        right-aligned ─┘
+/// ```
+///
+/// The columns are the component's, which is the point: they were `+0 +2 +4
+/// +6` in github-tui's pane and `+1 +3 +5 +7` in diffline's modal, one column
+/// apart for no reason either file could give.
+pub struct AgentRow<'a> {
+    /// What is running — `claude`, `codex`.
+    pub kind: &'a str,
+    /// The glyph for that kind. Passed in rather than looked up, so this
+    /// stays out of the settings file: `shared::config::agent_icon` is what
+    /// both callers use.
+    pub icon: &'a str,
+    pub status: AgentStatus,
+    /// The rest of the first line, after the kind. Empty draws nothing —
+    /// diffline's modal has no room for it and github-tui's pane does.
+    pub title: &'a str,
+    /// The second line: a working directory, or why this agent cannot be sent
+    /// to. Whichever the caller thinks is worth the row.
+    pub detail: &'a str,
+    /// The right of the second line — github-tui puts the multiplexer's own
+    /// name for the pane there. Empty draws nothing.
+    pub trailing: &'a str,
+    /// Paints the row's ground as selected, and brightens its text.
+    pub selected: bool,
+    /// The mark down the left edge, when the caller wants one. `None` draws
+    /// no mark: a modal marks the agent the queue would go to, a pane marks
+    /// the row the cursor is on, and they are not always the same row.
+    pub mark: Option<Color>,
+    /// What the row sits on when it is not selected — a pane's background or
+    /// a modal's panel.
+    pub ground: Color,
+}
+
+/// Draws one into the two lines at the top of `area`.
+pub fn agent_row(buf: &mut Buffer, area: Rect, r: &AgentRow<'_>) {
+    let bg = if r.selected { theme::sel() } else { r.ground };
+    fill(
+        buf,
+        Rect {
+            height: 2.min(area.height),
+            ..area
+        },
+        bg,
+    );
+    let base = Style::default().bg(bg);
+    let y = area.y;
+
+    if let Some(mark) = r.mark {
+        put(buf, area.x, y, area.right(), "▌", base.fg(mark));
+        if area.height > 1 {
+            put(buf, area.x, y + 1, area.right(), "▌", base.fg(mark));
+        }
+    }
+
+    let (glyph, colour) = agent_status(r.status);
+    put(buf, area.x + 2, y, area.right(), glyph, base.fg(colour));
+    // Two marks, two meanings: the one to the left is what it is doing and is
+    // coloured by state, this one is who it is and never changes.
+    put(
+        buf,
+        area.x + 4,
+        y,
+        area.right(),
+        r.icon,
+        base.fg(theme::purple()),
+    );
+    put_trunc(
+        buf,
+        area.x + 6,
+        y,
+        area.right().saturating_sub(12),
+        r.kind,
+        base.fg(theme::cyan_soft()).add_modifier(Modifier::BOLD),
+    );
+    let state_x = put_right(
+        buf,
+        area.right().saturating_sub(2),
+        y,
+        r.status.label(),
+        base.fg(colour),
+    );
+    if !r.title.is_empty() {
+        put_trunc(
+            buf,
+            area.x + 19,
+            y,
+            state_x.saturating_sub(2),
+            r.title,
+            base.fg(if r.selected {
+                theme::bright()
+            } else {
+                theme::fg()
+            }),
+        );
+    }
+
+    if area.height > 1 {
+        // The right of the second line is laid out first, because where it
+        // starts is where the detail has to stop.
+        let end = if r.trailing.is_empty() {
+            area.right().saturating_sub(2)
+        } else {
+            put_right(
+                buf,
+                area.right().saturating_sub(2),
+                y + 1,
+                r.trailing,
+                base.fg(theme::dimmer()),
+            )
+            .saturating_sub(2)
+        };
+        put_trunc(
+            buf,
+            area.x + 6,
+            y + 1,
+            end,
+            r.detail,
+            base.fg(if r.selected {
+                theme::bright()
+            } else {
+                theme::dimmer()
+            }),
+        );
     }
 }
 
@@ -560,6 +697,118 @@ mod tests {
             corner(&lit),
             corner(&dimmed),
             "the scrim changed the ground"
+        );
+    }
+    /// Every column the doc comment claims, checked against a drawn row.
+    ///
+    /// This is the test the two hand-written copies could not have: one lived
+    /// in a modal and the other in a pane, and reaching either meant building
+    /// an entire application first.
+    #[test]
+    fn an_agent_row_puts_each_field_in_its_column() {
+        let mut buf = buffer(70, 2);
+        agent_row(
+            &mut buf,
+            Rect::new(0, 0, 70, 2),
+            &AgentRow {
+                kind: "claude",
+                icon: "✳",
+                status: AgentStatus::Working,
+                title: "rewriting the reducer",
+                detail: "/home/you/work/tuikit",
+                trailing: "wK:p1",
+                selected: false,
+                mark: Some(theme::cyan()),
+                ground: theme::bg(),
+            },
+        );
+        let first = row(&buf, 0);
+        assert!(
+            first.starts_with("▌ ◐ ✳ claude"),
+            "the mark is at the row's own left edge, then the columns: {first}"
+        );
+        assert!(first.contains("rewriting the reducer"), "{first}");
+        assert!(first.trim_end().ends_with("working"), "{first}");
+
+        let second = row(&buf, 1);
+        assert!(
+            second.starts_with("▌     /home/you/work/tuikit"),
+            "{second}"
+        );
+        assert!(second.trim_end().ends_with("wK:p1"), "{second}");
+    }
+
+    /// The two fields diffline has no room for, left out rather than blanked.
+    #[test]
+    fn an_agent_row_without_a_title_or_a_pane_draws_neither() {
+        let mut buf = buffer(70, 2);
+        agent_row(
+            &mut buf,
+            Rect::new(0, 0, 70, 2),
+            &AgentRow {
+                kind: "codex",
+                icon: "◆",
+                status: AgentStatus::Idle,
+                title: "",
+                detail: "/demo/other",
+                trailing: "",
+                selected: false,
+                mark: None,
+                ground: theme::bg(),
+            },
+        );
+        assert_eq!(
+            row(&buf, 0),
+            "  ○ ◆ codex".to_string() + &" ".repeat(53) + "idle"
+        );
+        assert_eq!(row(&buf, 1).trim_end(), "      /demo/other");
+    }
+
+    /// A one-line slot is what a pane with an odd number of rows left hands
+    /// out. The second line has to be dropped rather than drawn over whatever
+    /// is below.
+    #[test]
+    fn an_agent_row_in_a_single_line_keeps_to_it() {
+        let mut buf = buffer(70, 2);
+        agent_row(
+            &mut buf,
+            Rect::new(0, 0, 70, 1),
+            &AgentRow {
+                kind: "claude",
+                icon: "✳",
+                status: AgentStatus::Done,
+                title: "",
+                detail: "/home/you/work/tuikit",
+                trailing: "wK:p1",
+                selected: false,
+                mark: Some(theme::cyan()),
+                ground: theme::bg(),
+            },
+        );
+        assert!(row(&buf, 0).contains("claude"));
+        assert_eq!(row(&buf, 1), "", "nothing below the row it was given");
+    }
+
+    /// The status glyph and its colour are one decision, taken in one place.
+    #[test]
+    fn every_status_has_its_own_glyph() {
+        let glyphs: Vec<&str> = [
+            AgentStatus::Working,
+            AgentStatus::Idle,
+            AgentStatus::Blocked,
+            AgentStatus::Done,
+            AgentStatus::Unknown,
+        ]
+        .iter()
+        .map(|s| agent_status(*s).0)
+        .collect();
+        let mut seen = glyphs.clone();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(
+            seen.len(),
+            glyphs.len(),
+            "two states drawn alike: {glyphs:?}"
         );
     }
 }

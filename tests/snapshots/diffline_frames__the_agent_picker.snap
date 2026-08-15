@@ -19,9 +19,9 @@ expression: "frame(\" a\")?"
                                 │         ┌──────────────────────────────────────────────────────────────────────────┐                                          
                                 │         │ AGENTS ON THIS MACHINE                                         via herdr │                                          
                                 │         ├──────────────────────────────────────────────────────────────────────────┤                                          
-                                │         │▌ ● ✳ claude                                                         idle │                                          
-                                │         │      /demo/tuikit                                                        │                                          
-                                │         │  ● ◆ codex                                                       working │                                          
+                                │         │▌ ○ ✳ claude                                                        idle  │                                          
+                                │         │▌     /demo/tuikit                                                        │                                          
+                                │         │  ◐ ◆ codex                                                      working  │                                          
                                 │         │      working — interrupting would lose its context                       │                                          
                                 │         ├── start a new one here ──────────────────────────────────────────────────┤                                          
                                 │         │  + ✳ claude                                                              │                                          

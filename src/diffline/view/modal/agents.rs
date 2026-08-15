@@ -6,7 +6,9 @@ use ratatui::style::Style;
 
 use crate::diffline::app::App;
 use crate::tui::theme;
-use crate::tui::{centered_over as centered, fill, frame, put, put_right, put_trunc, rule};
+use crate::tui::{
+    AgentRow, agent_row, centered_over as centered, fill, frame, put, put_right, put_trunc, rule,
+};
 
 pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
     let kinds = app.agent_choices().len() - app.agents.len();
@@ -56,9 +58,15 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
         if y + 1 >= m.bottom() - 1 {
             break;
         }
-        let sel = i == app.sel;
-        let bg = if sel { theme::sel() } else { theme::panel() };
-        fill(
+        // The mark is on the agent the queue would go to, which is not the
+        // row the cursor is on: `sel` moves as you look, `agent_idx` is what
+        // was chosen.
+        let mark = (i == app.agent_idx && app.new_kind.is_none()).then(theme::yellow);
+        // Why it cannot be used, where its directory would go: the directory
+        // is what you read to tell agents apart, and the refusal is what you
+        // read to find out why nothing is happening.
+        let refusal = app.refusal(a);
+        agent_row(
             buf,
             Rect {
                 x: m.x + 1,
@@ -66,59 +74,18 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
                 width: m.width - 2,
                 height: 2,
             },
-            bg,
+            &AgentRow {
+                kind: &a.kind,
+                icon: &crate::shared::config::agent_icon(&a.kind),
+                status: a.status,
+                title: "",
+                detail: refusal.as_deref().unwrap_or(&a.cwd),
+                trailing: "",
+                selected: i == app.sel,
+                mark,
+                ground: theme::panel(),
+            },
         );
-        let s = Style::default().bg(bg);
-        if i == app.agent_idx && app.new_kind.is_none() {
-            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
-        }
-        let dot = match a.status {
-            crate::shared::mux::AgentStatus::Working => theme::yellow(),
-            crate::shared::mux::AgentStatus::Blocked => theme::red(),
-            crate::shared::mux::AgentStatus::Idle | crate::shared::mux::AgentStatus::Done => {
-                theme::green()
-            }
-            crate::shared::mux::AgentStatus::Unknown => theme::dimmer(),
-        };
-        put(buf, m.x + 3, y, m.right(), "●", s.fg(dot));
-        put(
-            buf,
-            m.x + 5,
-            y,
-            m.right(),
-            &crate::shared::config::agent_icon(&a.kind),
-            s.fg(theme::purple()),
-        );
-        put_trunc(
-            buf,
-            m.x + 7,
-            y,
-            m.right() - 14,
-            &a.kind,
-            s.fg(theme::bright()),
-        );
-        put_right(buf, m.right() - 2, y, a.status.label(), s.fg(dot));
-        // Why it cannot be used, where its directory would go: the directory
-        // is what you read to tell agents apart, and the refusal is what you
-        // read to find out why nothing is happening.
-        match app.refusal(a) {
-            Some(why) => put_trunc(
-                buf,
-                m.x + 7,
-                y + 1,
-                m.right() - 2,
-                &why,
-                s.fg(theme::dimmer()),
-            ),
-            None => put_trunc(
-                buf,
-                m.x + 7,
-                y + 1,
-                m.right() - 2,
-                &a.cwd,
-                s.fg(theme::dimmer()),
-            ),
-        };
         y += 2;
     }
 

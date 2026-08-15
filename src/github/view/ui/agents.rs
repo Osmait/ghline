@@ -7,36 +7,12 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::Style;
 
 use crate::github::app::hit::{Region, Target};
 use crate::github::app::{App, Pane};
-use crate::shared::mux::AgentStatus;
 use crate::tui::theme;
-use crate::tui::{fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
-
-/// A colour per state, borrowed from the CI vocabulary because it means the
-/// same thing to a reader: something is happening, something finished,
-/// something wants you.
-fn status_color(s: AgentStatus) -> ratatui::style::Color {
-    match s {
-        AgentStatus::Working => theme::yellow(),
-        AgentStatus::Idle => theme::dimmer(),
-        AgentStatus::Blocked => theme::red(),
-        AgentStatus::Done => theme::green(),
-        AgentStatus::Unknown => theme::dimmer(),
-    }
-}
-
-fn status_icon(s: AgentStatus) -> &'static str {
-    match s {
-        AgentStatus::Working => "◐",
-        AgentStatus::Idle => "○",
-        AgentStatus::Blocked => "◼",
-        AgentStatus::Done => "●",
-        AgentStatus::Unknown => "·",
-    }
-}
+use crate::tui::{AgentRow, agent_row, fill, pct, put_trunc, scroll_into_view, skel_bar};
 
 pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let rows = (area.height / 2) as usize;
@@ -118,49 +94,17 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             bg,
         );
 
-        let base = Style::default().bg(bg);
-        if selected {
-            let mark = if app.pane == Pane::Agents {
+        // Two marks, two meanings: the one this passes as `mark` is where
+        // the cursor is, and the row's own status glyph is what the agent is
+        // doing. The mark dims when the pane is not focused, so a selection
+        // you left behind does not read as the one you are moving.
+        let mark = selected.then(|| {
+            if app.pane == Pane::Agents {
                 theme::cyan()
             } else {
                 theme::sel_mark_idle()
-            };
-            put(buf, area.x, y, area.right(), "▌", base.fg(mark));
-            put(buf, area.x, y + 1, area.right(), "▌", base.fg(mark));
-        }
-
-        let color = status_color(a.status);
-        put(
-            buf,
-            area.x + 2,
-            y,
-            area.right(),
-            status_icon(a.status),
-            base.fg(color),
-        );
-
-        // Two marks, two meanings: the one on the left is what it is doing
-        // and is coloured by state, this one is who it is and never changes.
-        let text_x = area.x + 4;
-        put(
-            buf,
-            text_x,
-            y,
-            area.right(),
-            &crate::shared::config::agent_icon(&a.kind),
-            base.fg(theme::purple()),
-        );
-        let kind_end = put_trunc(
-            buf,
-            text_x + 2,
-            y,
-            text_x + 12,
-            &a.kind,
-            base.fg(theme::cyan_soft()).add_modifier(Modifier::BOLD),
-        );
-
-        let state_x = put_right(buf, area.right() - 2, y, a.status.label(), base.fg(color));
-
+            }
+        });
         // This program is in the list like anything else. Saying so is the
         // cheapest way to stop someone dispatching an issue to the agent that
         // is drawing the row they clicked.
@@ -169,35 +113,25 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         } else {
             a.title.clone()
         };
-        let fg = if selected {
-            theme::bright()
-        } else {
-            theme::fg()
-        };
-        put_trunc(
+        agent_row(
             buf,
-            kind_end.max(text_x + 11),
-            y,
-            state_x.saturating_sub(2),
-            &title,
-            base.fg(fg),
-        );
-
-        // where it is working, plus the pane herdr would address it by
-        let pane_x = put_right(
-            buf,
-            area.right() - 2,
-            y + 1,
-            &a.pane,
-            base.fg(theme::dimmer()),
-        );
-        put_trunc(
-            buf,
-            text_x + 11,
-            y + 1,
-            pane_x.saturating_sub(2),
-            &a.cwd,
-            base.fg(theme::dimmer()),
+            Rect {
+                x: area.x,
+                y,
+                width: area.width,
+                height: 2,
+            },
+            &AgentRow {
+                kind: &a.kind,
+                icon: &crate::shared::config::agent_icon(&a.kind),
+                status: a.status,
+                title: &title,
+                detail: &a.cwd,
+                trailing: &a.pane,
+                selected,
+                mark,
+                ground: theme::bg(),
+            },
         );
     }
 }
