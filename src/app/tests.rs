@@ -557,7 +557,7 @@ fn the_picker_does_not_run_off_either_end() {
     for _ in 0..10 {
         ch(&mut app, 'j');
     }
-    assert_eq!(app.theme_sel, Theme::ALL.len() - 1);
+    assert_eq!(app.theme_sel, Theme::all().len() - 1);
     for _ in 0..10 {
         ch(&mut app, 'k');
     }
@@ -1119,7 +1119,7 @@ mod mouse {
 
         click_row(&mut app, Target::Themes, 1);
         assert_eq!(app.theme_sel, 1);
-        assert_eq!(crate::theme::current(), crate::theme::Theme::ALL[1]);
+        assert_eq!(crate::theme::current(), crate::theme::Theme::all()[1]);
 
         // put it back: the theme is process-wide state
         crate::theme::set(app.theme_before);

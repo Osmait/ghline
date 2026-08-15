@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn every_theme_survives_a_round_trip_through_its_key() {
-        for t in Theme::ALL {
+        for t in Theme::all() {
             assert_eq!(Theme::from_key(t.key()), Some(t), "{}", t.name());
         }
     }

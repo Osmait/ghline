@@ -127,6 +127,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         Some(Modal::Palette) => palette(buf, area, app),
         Some(Modal::Comment) => comment(buf, area, app),
         Some(Modal::Agents) => agents(buf, area, app),
+        Some(Modal::Themes) => themes(buf, area, app),
         Some(Modal::Deps) => deps(buf, area, app),
         Some(Modal::Help) => help(buf, area),
         None => {}
@@ -1690,6 +1691,85 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
         );
         put_trunc(buf, m.x + 7, y, m.right() - 2, kind, s.fg(theme::bright()));
         y += 1;
+    }
+}
+
+/// The theme picker. Small on purpose — it sits over the diff, and the diff
+/// is what you are actually judging the colours against.
+fn themes(buf: &mut Buffer, area: Rect, app: &App) {
+    let all = crate::theme::Theme::all();
+    let m = centered(area, 60, (all.len() as u16 * 2 + 5).min(area.height - 2));
+    frame(buf, m, theme::cyan());
+    let base = Style::default().bg(theme::panel());
+    put(
+        buf,
+        m.x + 2,
+        m.y + 1,
+        m.right() - 2,
+        "THEME",
+        base.fg(theme::yellow()),
+    );
+    put_right(
+        buf,
+        m.right() - 2,
+        m.y + 1,
+        "⏎ keep · esc undo",
+        base.fg(theme::dimmer()),
+    );
+    rule(buf, m, m.y + 2, theme::border());
+
+    for (i, t) in all.iter().enumerate() {
+        let y = m.y + 3 + i as u16 * 2;
+        if y + 1 >= m.bottom() {
+            break;
+        }
+        let bg = if i == app.sel {
+            theme::sel()
+        } else {
+            theme::panel()
+        };
+        fill(
+            buf,
+            Rect {
+                x: m.x + 1,
+                y,
+                width: m.width - 2,
+                height: 2,
+            },
+            bg,
+        );
+        let s = Style::default().bg(bg);
+        if i == app.sel {
+            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
+        }
+        put_trunc(
+            buf,
+            m.x + 3,
+            y,
+            m.right() - 14,
+            t.name(),
+            s.fg(theme::bright()),
+        );
+        put_trunc(
+            buf,
+            m.x + 3,
+            y + 1,
+            m.right() - 2,
+            t.about(),
+            s.fg(theme::dimmer()),
+        );
+        // A row of the accents, so the list shows the theme rather than
+        // naming it — the picker is already painted in whichever is selected.
+        let mut x = m.right() - 12;
+        for c in [
+            theme::green(),
+            theme::yellow(),
+            theme::red(),
+            theme::cyan(),
+            theme::purple(),
+        ] {
+            x = put(buf, x, y, m.right() - 2, "██", s.fg(c));
+        }
     }
 }
 

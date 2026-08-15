@@ -464,7 +464,7 @@ thing off if you would rather have it back.
 | `enter` | enter the pane / open |
 | `esc` `q` | back one level |
 | `a` | switch account |
-| `t` | switch theme |
+| `t` | switch theme (`␣t` in diffline) |
 | `b` `^b` | hide / show the repository pane |
 | `[` `]` | previous / next repository |
 | `p` `^p` | the finder |
@@ -534,11 +534,33 @@ version survives an older one. A theme that cannot be written is still applied,
 and says so — silently forgetting looks like a bug. The headless render modes
 deliberately ignore it, so a snapshot is the same frame on any machine.
 
-Two ship for now: the design's own palette, and Catppuccin Mocha. A theme is a
-whole `Palette` and switching one in is a single store, so the change lands on
-the very next frame. Adding a third is a `Palette` literal and one line in
-`Theme::ALL`; a test walks every theme and fails if a role is left undefined,
-which would otherwise show up as an invisible pane.
+Two ship: the design's own palette, and Catppuccin Mocha. A theme is a whole
+`Palette` and switching one in is a single store, so the change lands on the
+very next frame. A test walks every theme and fails if a role is left
+undefined, which would otherwise show up as an invisible pane.
+
+### Writing your own
+
+Anything in `~/.config/github-tui/themes/*.theme` joins the picker, named after
+the file. `:write a theme to start from` writes the palette you are looking at
+into `themes/mine.theme` with every role listed and commented, which beats
+guessing at role names:
+
+```
+bg     = #1e1e2e   # the terminal's own background
+green  = #a6e3a1   # added, passing, approved
+red    = #f38ba8   # deleted, failing, refused
+```
+
+`#rrggbb`, `rrggbb` and `#rgb` all read. A `#` starts a comment at the start of
+a line or after a value — not inside one, since every value begins with one.
+Roles you leave out keep what Mocha gives them, so a theme can be three colours
+and a working interface rather than three colours and twenty-six holes; a line
+that is not a colour, or names a role that does not exist, is skipped rather
+than taking the theme down with it.
+
+The files are read once at startup, so a colour you change shows up on the next
+run.
 
 Mocha is mapped by the role each colour plays rather than by name: the design
 keeps its panels a shade *lighter* than the background, so mantle is the ground

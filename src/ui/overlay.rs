@@ -187,7 +187,7 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
 pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     use crate::theme::Theme;
 
-    let rows = Theme::ALL.len() as u16 * 2;
+    let rows = Theme::all().len() as u16 * 2;
     let modal = centered(area, 60, rows + 7);
     frame(buf, modal, theme::purple());
 
@@ -222,10 +222,10 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
         },
         2,
         0,
-        Theme::ALL.len(),
+        Theme::all().len(),
     ));
 
-    for (i, t) in Theme::ALL.iter().enumerate() {
+    for (i, t) in Theme::all().iter().enumerate() {
         let y = modal.y + 3 + i as u16 * 2;
         let sel = i == app.theme_sel;
         let bg = if sel { theme::sel() } else { theme::panel() };

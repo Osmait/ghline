@@ -59,6 +59,8 @@ pub enum Modal {
     Finder,
     /// The `:` command list.
     Palette,
+    /// The theme picker.
+    Themes,
     /// Writing a note against the selection.
     Comment,
     /// Which agent gets the queue.

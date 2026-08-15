@@ -22,6 +22,8 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("next scope", "]s"),
     ("prev scope", "[s"),
     ("split view", "␣v"),
+    ("pick a theme", "␣t"),
+    ("write a theme to start from", ""),
     ("refresh", "␣r"),
     ("open help", "␣?"),
     ("quit", "␣q"),
@@ -56,6 +58,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("␣v / ␣b", "split view / inline blame"),
     ("␣g", "blast radius"),
     ("␣+ / ␣-", "expand / collapse context"),
+    ("␣t", "pick a theme"),
     ("␣r / ␣? / ␣q", "refresh / help / quit"),
     (":", "everything else"),
 ];
@@ -685,7 +688,13 @@ impl App {
 
     /// Runs a palette entry. The key each is also on is what actually does the
     /// work, so this is one match rather than a second implementation.
-    pub fn run_command(&mut self, label: &str) {
+    /// Runs a palette entry, and says whether it knew how.
+    ///
+    /// The answer is what the test uses. It used to compare against a second
+    /// copy of the label list kept in the test, which drifted every time a
+    /// command was added — three times, each caught by a failure rather than
+    /// by the guard doing its job.
+    pub fn run_command(&mut self, label: &str) -> bool {
         self.modal = None;
         self.query.clear();
         match label {
@@ -706,6 +715,11 @@ impl App {
             }
             "next scope" => self.step_scope(1),
             "prev scope" => self.step_scope(-1),
+            "pick a theme" => self.open_themes(),
+            "write a theme to start from" => match crate::theme::write_template("mine") {
+                Ok(p) => self.flash(format!("wrote {}", p.display())),
+                Err(e) => self.flash(format!("could not write it: {e}")),
+            },
             "split view" => {
                 self.split = !self.split;
                 self.hscroll = 0;
@@ -716,8 +730,9 @@ impl App {
             }
             "open help" => self.modal = Some(Modal::Help),
             "quit" => self.should_quit = true,
-            _ => {}
+            _ => return false,
         }
+        true
     }
 
     fn toggle_blame(&mut self) {
@@ -727,6 +742,15 @@ impl App {
         } else {
             "blame off"
         });
+    }
+
+    fn open_themes(&mut self) {
+        self.modal = Some(Modal::Themes);
+        let now = crate::theme::current();
+        self.sel = crate::theme::Theme::all()
+            .iter()
+            .position(|t| *t == now)
+            .unwrap_or(0);
     }
 
     fn open_agents(&mut self) {
@@ -978,6 +1002,7 @@ impl App {
                 self.refresh();
                 self.flash("refreshing…");
             }
+            KeyCode::Char('t') => self.open_themes(),
             KeyCode::Char('?') => self.modal = Some(Modal::Help),
             KeyCode::Char('q') => self.should_quit = true,
             _ => {}
@@ -1012,6 +1037,7 @@ impl App {
 
         let len = match m {
             Modal::Agents => self.agent_choices().len(),
+            Modal::Themes => crate::theme::Theme::all().len(),
             Modal::Palette => self.palette_hits().len(),
             _ => self.hits().len(),
         };
@@ -1020,6 +1046,35 @@ impl App {
         // The agent picker has no query to type into, so it is the one modal
         // where the letters are free to be movement. Everywhere else they are
         // the search, and `j` has to stay a `j`.
+        if m == Modal::Themes {
+            let all = crate::theme::Theme::all();
+            match ev.code {
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.sel = (self.sel + 1).min(all.len().saturating_sub(1));
+                }
+                KeyCode::Char('k') | KeyCode::Up => self.sel = self.sel.saturating_sub(1),
+                KeyCode::Enter => {
+                    if let Some(t) = all.get(self.sel).copied() {
+                        crate::theme::set(t);
+                        // Saved here rather than on exit: a theme you picked
+                        // and liked should survive a crash too.
+                        match crate::config::save_theme(t) {
+                            Ok(()) => self.flash(format!("theme → {}", t.name())),
+                            Err(e) => self.flash(format!("theme set, not saved: {e}")),
+                        }
+                    }
+                    self.modal = None;
+                }
+                _ => {}
+            }
+            // Live: moving through the list repaints in that theme, because
+            // the only way to judge one is to see it on the diff behind it.
+            if let Some(t) = all.get(self.sel).copied() {
+                crate::theme::set(t);
+            }
+            return;
+        }
+
         if m == Modal::Agents {
             match ev.code {
                 KeyCode::Char('j') | KeyCode::Down => self.sel = (self.sel + 1).min(last),
@@ -1070,7 +1125,7 @@ impl App {
             Modal::Palette => {
                 let hits = self.palette_hits();
                 if let Some(label) = hits.get(self.sel).cloned() {
-                    self.run_command(&label);
+                    let _ = self.run_command(&label);
                 } else {
                     self.modal = None;
                 }
@@ -1943,28 +1998,10 @@ mod tests {
     fn every_palette_entry_is_something_run_command_handles() {
         // the guard against a command that looks available and does nothing
         for (label, _) in COMMANDS {
+            let mut a = app();
             assert!(
-                matches!(
-                    *label,
-                    "toggle blame"
-                        | "toggle blast radius"
-                        | "prev scope"
-                        | "split view"
-                        | "expand context"
-                        | "collapse context"
-                        | "next file"
-                        | "prev file"
-                        | "add comment"
-                        | "delete comment under cursor"
-                        | "pick agent"
-                        | "send queue to agent"
-                        | "clear queue"
-                        | "next scope"
-                        | "refresh"
-                        | "open help"
-                        | "quit"
-                ),
-                "{label} is offered but not implemented"
+                a.run_command(label),
+                "{label} is offered in the palette but nothing runs it"
             );
         }
     }

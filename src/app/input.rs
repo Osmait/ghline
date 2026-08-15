@@ -385,7 +385,7 @@ impl App {
     pub fn open_themes(&mut self) {
         let current = crate::theme::current();
         self.theme_before = current;
-        self.theme_sel = crate::theme::Theme::ALL
+        self.theme_sel = crate::theme::Theme::all()
             .iter()
             .position(|t| *t == current)
             .unwrap_or(0);
@@ -395,7 +395,7 @@ impl App {
     /// Applies the highlighted theme straight away: the point of the picker is
     /// to see the interface in it, not to read its name.
     pub(super) fn preview_theme(&mut self) {
-        if let Some(t) = crate::theme::Theme::ALL.get(self.theme_sel) {
+        if let Some(t) = crate::theme::Theme::all().get(self.theme_sel) {
             crate::theme::set(*t);
         }
     }
@@ -815,7 +815,7 @@ impl App {
         }
 
         if self.themes_open {
-            let last = crate::theme::Theme::ALL.len() - 1;
+            let last = crate::theme::Theme::all().len() - 1;
             match ev.code {
                 KeyCode::Char('j') | KeyCode::Down => {
                     self.theme_sel = (self.theme_sel + 1).min(last);

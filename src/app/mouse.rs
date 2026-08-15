@@ -167,7 +167,7 @@ impl App {
                 self.finder_sel = step_sel(self.finder_sel, d, self.finder_len());
             }
             Target::Themes => {
-                self.theme_sel = step_sel(self.theme_sel, d, crate::theme::Theme::ALL.len());
+                self.theme_sel = step_sel(self.theme_sel, d, crate::theme::Theme::all().len());
                 self.preview_theme();
             }
             Target::Accounts => {
