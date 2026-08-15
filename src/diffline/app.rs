@@ -123,6 +123,14 @@ pub struct App {
     /// Set when the queue is bound for an agent that is not running yet: the
     /// kind to start. `None` means send to `agent_idx`, one already up.
     pub new_kind: Option<String>,
+    /// Whether the file tree is on screen. Open to begin with: which files
+    /// changed is the first question a review asks.
+    pub tree_shown: bool,
+    /// Whether the review queue is on screen. Closed to begin with: it is
+    /// empty until there is something to put in it, and until then it is a
+    /// third of the width spent on nothing. The floating tab keeps the count
+    /// visible while it is away.
+    pub queue_shown: bool,
     /// Columns the code is scrolled right by. The gutters do not move with
     /// it: a line number that scrolled away would leave the pane unreadable
     /// exactly when you are furthest from the start of the line.
@@ -177,6 +185,8 @@ impl App {
             agents_state: Load::Idle,
             agent_idx: 0,
             new_kind: None,
+            tree_shown: true,
+            queue_shown: false,
             hscroll: 0,
             pane: Pane::Diff,
             modal: None,

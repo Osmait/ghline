@@ -30,7 +30,8 @@ pub const HELP: &[(&str, &str)] = &[
     ("gg / G", "top / bottom"),
     ("h / l", "scroll code left / right"),
     ("0", "back to the start of the line"),
-    ("␣e / ␣c / ␣d", "tree / comments / code"),
+    ("␣e / ␣c", "show or hide tree / comments"),
+    ("␣d", "back to the code"),
     ("⇥ / ⇧⇥", "next / previous pane"),
     ("n / p", "next / prev file"),
     ("/", "fuzzy finder"),
@@ -53,15 +54,43 @@ pub const HELP: &[(&str, &str)] = &[
 impl App {
     // --- moving ---
 
-    fn panes(&self) -> [Pane; 3] {
-        [Pane::Tree, Pane::Diff, Pane::Queue]
+    /// The panes you can actually walk to. A pane that is not on screen is
+    /// not one of them.
+    fn panes(&self) -> Vec<Pane> {
+        let mut v = vec![Pane::Diff];
+        if self.tree_shown {
+            v.insert(0, Pane::Tree);
+        }
+        if self.queue_shown {
+            v.push(Pane::Queue);
+        }
+        v
     }
 
     fn focus_by(&mut self, d: i64) {
         let panes = self.panes();
-        let i = panes.iter().position(|p| *p == self.pane).unwrap_or(1) as i64;
+        let i = panes.iter().position(|p| *p == self.pane).unwrap_or(0) as i64;
         let j = (i + d).clamp(0, panes.len() as i64 - 1) as usize;
         self.pane = panes[j];
+    }
+
+    /// Opens or closes a side pane.
+    ///
+    /// Opening moves focus into it, because that is what asking for it meant.
+    /// Closing hands focus back to the code rather than leaving it on a pane
+    /// that is no longer drawn.
+    fn toggle_pane(&mut self, which: Pane) {
+        let shown = match which {
+            Pane::Tree => &mut self.tree_shown,
+            Pane::Queue => &mut self.queue_shown,
+            Pane::Diff => return,
+        };
+        *shown = !*shown;
+        if *shown {
+            self.pane = which;
+        } else if self.pane == which {
+            self.pane = Pane::Diff;
+        }
     }
 
     /// `j`/`k` on whichever pane has focus.
@@ -509,8 +538,8 @@ impl App {
         // around inside the code rather than out of it.
         if std::mem::take(&mut self.pending_leader) {
             match ev.code {
-                KeyCode::Char('e') => self.pane = Pane::Tree,
-                KeyCode::Char('c') => self.pane = Pane::Queue,
+                KeyCode::Char('e') => self.toggle_pane(Pane::Tree),
+                KeyCode::Char('c') => self.toggle_pane(Pane::Queue),
                 KeyCode::Char('d') => self.pane = Pane::Diff,
                 _ => {}
             }
@@ -804,20 +833,53 @@ mod tests {
         );
     }
 
+    fn leader(a: &mut App, c: char) {
+        press(a, KeyCode::Char(' '));
+        press(a, KeyCode::Char(c));
+    }
+
     #[test]
-    fn the_leader_jumps_to_a_pane() {
+    fn the_queue_starts_away_and_the_tree_starts_open() {
+        let a = app();
+        assert!(a.tree_shown, "which files changed is the first question");
+        assert!(
+            !a.queue_shown,
+            "empty until there is something to put in it"
+        );
+    }
+
+    #[test]
+    fn the_leader_shows_and_hides_a_side_pane() {
         let mut a = app();
         a.pane = Pane::Diff;
-        press(&mut a, KeyCode::Char(' '));
-        press(&mut a, KeyCode::Char('e'));
-        assert_eq!(a.pane, Pane::Tree);
 
-        press(&mut a, KeyCode::Char(' '));
-        press(&mut a, KeyCode::Char('c'));
-        assert_eq!(a.pane, Pane::Queue);
+        leader(&mut a, 'c');
+        assert!(a.queue_shown);
+        assert_eq!(a.pane, Pane::Queue, "asking for it means going to it");
 
-        press(&mut a, KeyCode::Char(' '));
-        press(&mut a, KeyCode::Char('d'));
+        leader(&mut a, 'c');
+        assert!(!a.queue_shown);
+        assert_eq!(a.pane, Pane::Diff, "focus must not stay on what is gone");
+
+        leader(&mut a, 'e');
+        assert!(!a.tree_shown);
+        leader(&mut a, 'd');
+        assert_eq!(a.pane, Pane::Diff);
+    }
+
+    #[test]
+    fn focus_cannot_walk_onto_a_pane_that_is_not_drawn() {
+        // The whole reason `panes()` is computed rather than fixed: `h` from
+        // the code with the tree hidden used to land on a pane with nothing
+        // on screen, and every key after that went somewhere invisible.
+        let mut a = app();
+        a.tree_shown = false;
+        a.queue_shown = false;
+        a.pane = Pane::Diff;
+        a.hscroll = 0;
+        press(&mut a, KeyCode::Char('h'));
+        assert_eq!(a.pane, Pane::Diff);
+        press(&mut a, KeyCode::Tab);
         assert_eq!(a.pane, Pane::Diff);
     }
 

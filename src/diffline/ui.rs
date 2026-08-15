@@ -62,8 +62,16 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
 
     // The side panes give way on a narrow terminal rather than squeezing the
     // diff into nothing: reading the change is the job.
-    let tree_w = if area.width >= 110 { TREE_W } else { 0 };
-    let queue_w = if area.width >= 150 { QUEUE_W } else { 0 };
+    let tree_w = if app.tree_shown && area.width >= 110 {
+        TREE_W
+    } else {
+        0
+    };
+    let queue_w = if app.queue_shown && area.width >= 150 {
+        QUEUE_W
+    } else {
+        0
+    };
     let body = Rect {
         y: body.y + 1,
         height: body.height - 1,
@@ -106,6 +114,12 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         app,
     );
 
+    // Drawn last of the body, over the diff's top edge: while the queue is
+    // away this is the only thing saying how much is in it.
+    if queue_w == 0 {
+        queue_tab(buf, area, app);
+    }
+
     status_bar(buf, status, app);
 
     match app.modal {
@@ -117,6 +131,31 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         Some(Modal::Help) => help(buf, area),
         None => {}
     }
+}
+
+/// The count of queued comments, as a tab hanging off the top edge.
+///
+/// Only while the queue itself is hidden. It names its own key, because a
+/// pane you cannot see is a pane you have to be told how to open.
+fn queue_tab(buf: &mut Buffer, area: Rect, app: &App) {
+    let n = app.comments.len();
+    let label = if n == 0 {
+        " no comments · ␣c ".to_string()
+    } else {
+        format!(" ● {n} queued · ␣c ")
+    };
+    let w = label.width() as u16;
+    if w + 4 > area.width {
+        return;
+    }
+    // On the rule under the header, right-aligned: out of the way of the code
+    // and of the file names, and on the one row that is already a border.
+    let style = Style::default().fg(theme::panel()).bg(if n == 0 {
+        theme::dimmer()
+    } else {
+        theme::yellow()
+    });
+    put(buf, area.width - w - 2, 1, area.width, &label, style);
 }
 
 // ------------------------------------------------------------------ header
@@ -1619,6 +1658,9 @@ mod layout_tests {
         // top of the queue, which is drawn before it.
         for width in [150u16, 160, 170, 200, 240] {
             let mut a = app();
+            // The invariant is about overwriting the queue, so there has to be
+            // one: it is hidden until asked for now.
+            a.queue_shown = true;
             let mut term = Terminal::new(TestBackend::new(width, 20)).unwrap();
             term.draw(|f| draw(f, &mut a)).unwrap();
 
@@ -1633,6 +1675,36 @@ mod layout_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_tab_says_how_many_are_queued_while_the_queue_is_away() {
+        // The queue is hidden to begin with, so this count is the only thing
+        // saying there is anything in it at all.
+        let mut a = app();
+        a.queue_shown = false;
+        let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let screen = rows(&term).join("\n");
+        assert!(screen.contains("no comments"), "{screen}");
+
+        a.comments.push(super::super::model::Comment {
+            anchors: vec![],
+            snippet: "fn main() {".into(),
+            body: "look at this".into(),
+            state: State::Queued,
+        });
+        let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let screen = rows(&term).join("\n");
+        assert!(screen.contains("1 queued"), "{screen}");
+
+        // and it gets out of the way once the queue itself is on screen
+        a.queue_shown = true;
+        let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let screen = rows(&term).join("\n");
+        assert!(!screen.contains("queued · "), "{screen}");
     }
 
     #[test]
