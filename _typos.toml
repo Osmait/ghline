@@ -1,0 +1,31 @@
+# What the spell checker is allowed to be wrong about.
+#
+# The comments in this crate are prose, and there is a lot of them — that is
+# the reason to run a spell checker at all, and also the reason it needs a
+# list of things that only look like mistakes. Every entry below is one the
+# checker got wrong, not one we decided to keep.
+
+[files]
+# Golden frames, written by insta rather than by anybody. They are terminal
+# output truncated to a column, so words end mid-letter by design: the finder
+# frame contains "a negativ…" because the pane is that wide. Checking them
+# would be checking the fixture text twice — once where it is written, and
+# once where it was cut in half.
+extend-exclude = ["tests/snapshots/"]
+
+[default]
+extend-ignore-re = [
+    # Nerd Font code points, `"\u{e7ba}"` and its neighbours in icons.rs. The
+    # hex digits spell words often enough to be worth ruling out entirely.
+    '\\u\{[0-9a-fA-F]+\}',
+]
+
+[default.extend-words]
+# The framework. Suggested as "ratatouille", which is where the name comes
+# from and not what the dependency is called.
+ratatui = "ratatui"
+# From "mis-colour", in a comment about a pane drawing the wrong span.
+mis = "mis"
+# From "`C`opied and `T`ype-changed" in model.rs, where the backtick marking
+# the key to press splits the word and leaves "ype" behind.
+ype = "ype"

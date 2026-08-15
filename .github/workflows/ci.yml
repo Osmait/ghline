@@ -8,6 +8,21 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Read, and nothing else. Without this block a job runs with whatever the
+# repository's default happens to be — which for a repository created before
+# 2023 is read *and write*, so every step here, and every dependency of every
+# step, holds a token that can push to main. None of these jobs write
+# anything; the one workflow that does asks for it where it asks.
+#
+# Jobs that need even less than read say so themselves.
+permissions:
+  contents: read
+
+# Actions are pinned to a commit rather than to `@v4`, which is a tag and
+# therefore a name its owner can point somewhere else at any time. The version
+# is in the comment so the next reader knows what they are looking at, and
+# dependabot rewrites both together.
+
 jobs:
   check:
     name: fmt · clippy · test (${{ matrix.os }})
@@ -25,15 +40,29 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14]
     steps:
-      - uses: actions/checkout@v4
+      # `persist-credentials: false` on every checkout: the default leaves a
+      # token in .git/config for the rest of the job, where anything that
+      # reads the working tree can read it too. Nothing here pushes.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
 
       # No `rustup toolchain install` step: rust-toolchain.toml names the
       # exact version and the components, and rustup installs it on the first
       # cargo call. Naming a channel here as well would only be a second
       # answer to the same question, free to disagree with the first.
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      # the same three commands the project is developed against
+      # nextest rather than libtest: one line per test with what it cost, a
+      # summary that is the same shape whether one failed or none did, and
+      # failures printed at the end rather than interleaved with the runs
+      # that passed. It is the runner jj, atuin and gitui all moved to.
+      - name: Install the test runner
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-nextest
+
+      # the same commands the project is developed against
       - name: Formatting
         run: cargo fmt --all --check
 
@@ -43,7 +72,7 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Tests
-        run: cargo test --all-targets --locked
+        run: cargo nextest run --all-targets --locked
 
       # The rustdoc lints are denied in Cargo.toml, so this is the step that
       # makes them fire: `cargo doc` is not part of anybody's edit loop, and a
@@ -53,17 +82,58 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cargo doc --no-deps --locked
 
+      # There are no doctests today — every fence in the crate is ```text, and
+      # a diagram is not a test. This is here because neither of the two
+      # commands above would run one if there were: `--all-targets` excludes
+      # doctests, and nextest cannot run them at all. The first ```rust block
+      # anybody writes would otherwise be checked by nothing.
+      - name: Doctests
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --doc --locked
+
+  # Not a gate. rust-toolchain.toml pins an exact compiler on purpose, and
+  # that is the version the other jobs speak for — but a pin means the day
+  # rustc or clippy changes under us is the day somebody raises it, months of
+  # lints later. This job is that news arriving on time. It is allowed to
+  # fail: a lint added in a compiler nobody is using yet is not a broken
+  # pull request.
+  stable:
+    name: stable (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      # The one place a toolchain is named rather than taken from
+      # rust-toolchain.toml — that file is what this job exists to look past.
+      - name: Install stable
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: stable
+
+      - name: Lints
+        run: cargo +stable clippy --all-targets --locked -- -D warnings
+
+      - name: Tests
+        run: cargo +stable test --all-targets --locked
+
   deps:
     name: dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       # Prebuilt binaries. `cargo install` compiled both of these from source
       # on every run, which cost more than everything they check.
       - name: Install the auditors
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
         with:
           tool: cargo-machete,cargo-deny
 
@@ -78,3 +148,32 @@ jobs:
       # where its crates were fetched from, which audit never did.
       - name: Advisories, licences, sources
         run: cargo deny --locked check
+
+  # Two checks that read files and run nothing, so they need no token at all.
+  lint:
+    name: spelling · workflows
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+
+      # The comments here are prose and there are thirty thousand lines of
+      # them. What the checker is allowed to be wrong about is in _typos.toml,
+      # entry by entry.
+      - name: Spelling
+        uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f # v1.49.0
+
+      # The linter for the files in this directory. It is what says the
+      # actions above should be pinned to a commit, that a checkout leaves a
+      # token behind, and that a job with no `permissions:` block gets more
+      # than it needs — the three things this workflow was changed for.
+      #
+      # `advanced-security: false` prints the findings here instead of
+      # uploading them to code scanning, which this repository does not have
+      # switched on. That is also why the job can hold no permissions.
+      - name: Workflows
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false

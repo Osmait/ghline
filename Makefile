@@ -45,6 +45,10 @@ diff: ## Run diffline on this repository
 demo: ## Run on the design's fixture, no network needed
 	cargo run --release -- --demo
 
+# CI runs these through `cargo nextest`, which reports the same pass or fail
+# in a form that is easier to read when one of six hundred goes red. Plain
+# `cargo test` is what is here because it needs nothing installed — install
+# nextest and `cargo nextest run --all-targets` if you want CI's output.
 test: ## The test suite
 	cargo test
 
@@ -59,9 +63,14 @@ lint: ## Formatting and lints, exactly as CI runs them
 	cargo clippy --all-targets -- -D warnings
 	cargo doc --no-deps
 
-audit: ## Advisories, licences and sources (needs cargo-deny and cargo-machete)
+# The last two are not cargo crates, and `uvx` runs them without installing
+# anything permanently — the same versions CI pins actions to. Everything
+# here is what the `deps` and `lint` jobs run.
+audit: ## Advisories, licences, sources, spelling and workflows
 	cargo machete
 	cargo deny --locked check
+	uvx typos
+	uvx zizmor --no-online-audits .github/workflows/
 
 fmt: ## Apply the formatter
 	cargo fmt --all

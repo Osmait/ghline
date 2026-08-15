@@ -12,11 +12,15 @@ on:
         description: "Existing v* tag to build and upload"
         required: true
 
-permissions:
-  contents: write
+# Nothing at the workflow level. `contents: write` is real power — it can
+# create releases and move what is on them — and a token granted here is a
+# token every future job in this file inherits without asking. The one job
+# that publishes asks for it itself.
 
 jobs:
   build:
+    permissions:
+      contents: write
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -37,19 +41,26 @@ jobs:
             runner: macos-14
 
     steps:
+      # Pinned to a commit, not to the `v4` tag its owner can move. The
+      # checkout's own token is dropped afterwards — the publishing step
+      # below hands `gh` a token through the environment instead, so nothing
+      # here needs one sitting in .git/config while a build runs.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           ref: ${{ inputs.tag || github.ref }}
+          persist-credentials: false
 
       # rust-toolchain.toml pins the channel; this only adds the target for it.
       - name: Install the toolchain
         run: rustup target add ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
+      # No build cache here, deliberately — this is the difference between
+      # this workflow and CI. A cache entry is a file written by an earlier
+      # run and trusted by this one, and what this run does with it is publish
+      # it under a version number for other people to download. Cutting a
+      # release happens a few times a year; paying a cold build for it is
+      # cheaper than a supply chain that includes last week's cache.
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
 
