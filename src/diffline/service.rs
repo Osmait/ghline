@@ -29,6 +29,15 @@ pub enum Request {
     Agents,
     /// Hand the queue to one of them.
     Send { pane: String, text: String },
+    /// Start one that is not running yet, in this repository, and hand it the
+    /// queue. Everything the reader wants to say is already written by the
+    /// time they decide who should hear it.
+    Spawn {
+        repo: String,
+        label: String,
+        kind: String,
+        text: String,
+    },
 }
 
 pub enum Response {
@@ -119,6 +128,16 @@ fn handle(req: Request) -> Response {
         Request::Agents => Response::Agents(crate::herdr::agents()),
 
         Request::Send { pane, text } => Response::Sent(crate::herdr::prompt(&pane, &text)),
+
+        // `None` for the branch: the review is of what is in this checkout, so
+        // a fresh worktree on a new branch would open the agent on a tree that
+        // does not contain what the comments are about.
+        Request::Spawn {
+            repo,
+            label,
+            kind,
+            text,
+        } => Response::Sent(crate::herdr::dispatch(&repo, None, &label, &kind, &text)),
     }
 }
 

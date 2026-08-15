@@ -485,7 +485,18 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
             area.right()
         };
 
-        draw_code(buf, cx, y, end, &row.text, spans.get(i), base.fg(fg));
+        draw_code(
+            buf,
+            cx,
+            y,
+            end,
+            Code {
+                text: &row.text,
+                spans: spans.get(i),
+                plain: base.fg(fg),
+                skip: app.hscroll,
+            },
+        );
     }
 }
 
@@ -494,24 +505,38 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
 /// A line too long for the pane is cut and *marked*. Without the mark a cut
 /// line reads as a line that ends there, which is a different program's code —
 /// and there is no horizontal scroll here to reveal the rest.
-fn draw_code(
-    buf: &mut Buffer,
-    x: u16,
-    y: u16,
-    max: u16,
-    text: &str,
-    spans: Option<&Vec<crate::syntax::Span>>,
+/// What one line of code needs to draw itself, which is more than a signature
+/// wants to carry loose.
+#[derive(Clone, Copy)]
+struct Code<'a> {
+    text: &'a str,
+    spans: Option<&'a Vec<crate::syntax::Span>>,
     plain: Style,
-) {
+    /// Columns the pane is scrolled right by.
+    skip: usize,
+}
+
+fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
+    let Code {
+        text,
+        spans,
+        plain,
+        skip,
+    } = code;
+    // Where the visible part of the line starts. Everything below counts in
+    // bytes from the start of the whole line, not of the visible part, because
+    // that is what the colour spans are written in.
+    let start = skip_cols(text, skip);
+
     let Some(spans) = spans.filter(|s| !s.is_empty()) else {
-        put_trunc(buf, x, y, max, text, plain);
+        put_trunc(buf, x, y, max, &text[start..], plain);
         return;
     };
 
     // One column is held back for the mark when there is more than fits.
     let room = max.saturating_sub(x) as usize;
-    let cut = cut_at(text, room.saturating_sub(1));
-    let end = cut.unwrap_or(text.len());
+    let cut = cut_at(&text[start..], room.saturating_sub(1));
+    let end = start + cut.unwrap_or(text.len() - start);
     let limit = if cut.is_some() {
         max.saturating_sub(1)
     } else {
@@ -519,7 +544,9 @@ fn draw_code(
     };
 
     let mut cx = x;
-    let mut at = 0usize;
+    // Starting at `start` rather than 0 is what drops the scrolled-off spans:
+    // one that ends before it collapses to an empty range below.
+    let mut at = start;
     for s in spans {
         if s.from >= end {
             break;
@@ -556,6 +583,24 @@ fn draw_code(
 /// A byte index rather than a character count because the colour spans are
 /// written in bytes, and a cut landing inside a character would slice a string
 /// Rust will not slice.
+/// The byte index `cols` columns into `text`, or its end if it is shorter.
+///
+/// The counterpart of `cut_at`: that one finds where to stop, this one finds
+/// where to start.
+fn skip_cols(text: &str, cols: usize) -> usize {
+    if cols == 0 {
+        return 0;
+    }
+    let mut used = 0usize;
+    for (i, c) in text.char_indices() {
+        if used >= cols {
+            return i;
+        }
+        used += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+    }
+    text.len()
+}
+
 fn cut_at(text: &str, cols: usize) -> Option<usize> {
     let mut used = 0usize;
     for (i, c) in text.char_indices() {
@@ -607,8 +652,12 @@ fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
     let foot_y = area.bottom() - 2;
     hline(buf, area.x, foot_y - 1, area.width, theme::border_soft());
     let fs = Style::default().bg(theme::panel_alt());
-    let (who, dot) = match app.agent() {
-        Some(a) => (
+    // A pending new agent wins over the running one: it is what sending would
+    // actually reach, and a footer naming the other would be a lie at exactly
+    // the moment it is being read.
+    let (who, dot) = match (&app.new_kind, app.agent()) {
+        (Some(kind), _) => (format!("a new {kind} · here"), theme::green()),
+        (None, Some(a)) => (
             format!("{} · {}", a.kind, a.where_short()),
             match a.status {
                 crate::data::AgentStatus::Working => theme::yellow(),
@@ -617,7 +666,7 @@ fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
                 crate::data::AgentStatus::Unknown => theme::dimmer(),
             },
         ),
-        None => ("no agent — press a".into(), theme::dimmer()),
+        (None, None) => ("no agent — press a".into(), theme::dimmer()),
     };
     put(buf, area.x + 1, foot_y, area.right(), "●", fs.fg(dot));
     put_trunc(
@@ -816,7 +865,7 @@ fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
     let hint = if app.visual() {
         "j/k extend · c comment on range · esc cancel"
     } else {
-        "j/k move · V range · c comment · a agent · S send · / find · : cmd · ? help"
+        "j/k move · h/l scroll · ␣e/␣c pane · V range · c comment · a agent · S send · ? help"
     };
     let toast = format!(" {} ", app.toast);
     let tx = put_right(
@@ -1224,7 +1273,9 @@ fn short_path(p: &str) -> &str {
 }
 
 fn agents(buf: &mut Buffer, area: Rect, app: &App) {
-    let h = (app.agents.len() as u16 * 2 + 6).min(area.height.saturating_sub(4));
+    let kinds = app.agent_choices().len() - app.agents.len();
+    let rows = app.agents.len() as u16 * 2 + kinds as u16 + 1;
+    let h = (rows + 6).min(area.height.saturating_sub(4));
     let m = centered(area, 76, h.max(7));
     frame(buf, m, theme::cyan());
     let base = Style::default().bg(theme::panel());
@@ -1246,25 +1297,26 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
     );
     rule(buf, m, m.y + 2, theme::border());
 
+    let mut y = m.y + 3;
+
     if app.agents.is_empty() {
         let msg = match app.agents_state.error() {
             Some(e) => e.to_string(),
             None if app.agents_state.is_loading() => "looking…".into(),
-            None => "none running — start one in herdr".into(),
+            None => "none running yet".into(),
         };
         put_trunc(
             buf,
             m.x + 3,
-            m.y + 3,
+            y,
             m.right() - 2,
             &msg,
             base.fg(theme::dimmer()),
         );
-        return;
+        y += 2;
     }
 
     for (i, a) in app.agents.iter().enumerate() {
-        let y = m.y + 3 + (i as u16) * 2;
         if y + 1 >= m.bottom() - 1 {
             break;
         }
@@ -1281,7 +1333,7 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
             bg,
         );
         let s = Style::default().bg(bg);
-        if i == app.agent_idx {
+        if i == app.agent_idx && app.new_kind.is_none() {
             put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
         }
         let dot = match a.status {
@@ -1316,6 +1368,60 @@ fn agents(buf: &mut Buffer, area: Rect, app: &App) {
             &a.cwd,
             s.fg(theme::dimmer()),
         );
+        y += 2;
+    }
+
+    // Below the line, the ones that are not running: picking one of these
+    // starts it in this repository when the queue is sent, so an agent is
+    // never opened for a review that then does not happen.
+    if y + 1 < m.bottom() - 1 {
+        rule(buf, m, y, theme::border());
+        put(
+            buf,
+            m.x + 3,
+            y,
+            m.right() - 2,
+            " start a new one here ",
+            base.fg(theme::dimmer()),
+        );
+        y += 1;
+    }
+
+    let running = app.agents.len();
+    for (i, (kind, _)) in app.agent_choices().iter().enumerate().skip(running) {
+        if y >= m.bottom() - 1 {
+            break;
+        }
+        let bg = if i == app.sel {
+            theme::sel()
+        } else {
+            theme::panel()
+        };
+        fill(
+            buf,
+            Rect {
+                x: m.x + 1,
+                y,
+                width: m.width - 2,
+                height: 1,
+            },
+            bg,
+        );
+        let s = Style::default().bg(bg);
+        if app.new_kind.as_deref() == Some(kind.as_str()) {
+            put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));
+        }
+        put(buf, m.x + 3, y, m.right(), "+", s.fg(theme::green()));
+        put(
+            buf,
+            m.x + 5,
+            y,
+            m.right(),
+            &crate::config::agent_icon(kind),
+            s.fg(theme::purple()),
+        );
+        put_trunc(buf, m.x + 7, y, m.right() - 2, kind, s.fg(theme::bright()));
+        y += 1;
     }
 }
 

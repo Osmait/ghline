@@ -28,7 +28,10 @@ pub const COMMANDS: &[(&str, &str)] = &[
 pub const HELP: &[(&str, &str)] = &[
     ("j / k", "move cursor"),
     ("gg / G", "top / bottom"),
-    ("h / l", "pane left / right"),
+    ("h / l", "scroll code left / right"),
+    ("0", "back to the start of the line"),
+    ("␣e / ␣c / ␣d", "tree / comments / code"),
+    ("⇥ / ⇧⇥", "next / previous pane"),
     ("n / p", "next / prev file"),
     ("/", "fuzzy finder"),
     (":", "command palette"),
@@ -111,6 +114,8 @@ impl App {
         self.cursor = first_code(self.diff_rows(), 0);
         self.anchor = None;
         self.diff_scroll = 0;
+        // A new file starts at the left, the way opening one in an editor does
+        self.hscroll = 0;
     }
 
     /// `n` / `p`: round the files, so the last leads back to the first.
@@ -233,6 +238,18 @@ impl App {
             self.flash("queue is empty");
             return;
         }
+        let text = self.render_queue();
+
+        if let Some(kind) = self.new_kind.clone() {
+            for c in &mut self.comments {
+                c.state = State::Sending;
+            }
+            self.busy = true;
+            self.flash(format!("starting a {kind}…"));
+            self.ask_spawn(kind, text);
+            return;
+        }
+
         let Some(agent) = self.agent().cloned() else {
             self.flash("no agent to send to — press a");
             return;
@@ -242,13 +259,36 @@ impl App {
             return;
         }
 
-        let text = self.render_queue();
         for c in &mut self.comments {
             c.state = State::Sending;
         }
         self.busy = true;
         self.flash(format!("sending to {}…", agent.kind));
         self.ask_send(agent.pane, text);
+    }
+
+    /// Starts an agent for this repository and hands it the queue.
+    ///
+    /// The label names where it came from, so the workspace is recognisable in
+    /// herdr next to whatever else is running.
+    fn ask_spawn(&mut self, kind: String, text: String) -> bool {
+        let label = format!("review {}", self.path());
+        let sent = self.service.as_ref().is_some_and(|s| {
+            s.send(Request::Spawn {
+                repo: self.repo.clone(),
+                label,
+                kind,
+                text,
+            })
+        });
+        if !sent {
+            self.busy = false;
+            for c in &mut self.comments {
+                c.state = State::Queued;
+            }
+            self.flash("the worker is gone — nothing was sent");
+        }
+        sent
     }
 
     fn ask_send(&mut self, pane: String, text: String) -> bool {
@@ -425,7 +465,16 @@ impl App {
         // agent is free right now.
         self.agents_state = Load::Idle;
         self.modal = Some(Modal::Agents);
-        self.sel = self.agent_idx;
+        self.sel = match &self.new_kind {
+            // land on the entry that is already the target, whichever half of
+            // the list it is in
+            Some(kind) => self
+                .agent_choices()
+                .iter()
+                .position(|(k, is_new)| *is_new && k == kind)
+                .unwrap_or(self.agent_idx),
+            None => self.agent_idx,
+        };
     }
 
     // --- the keymap ---
@@ -456,9 +505,39 @@ impl App {
             return;
         }
 
+        // `space` leads to a pane, which is what frees `h` and `l` to move
+        // around inside the code rather than out of it.
+        if std::mem::take(&mut self.pending_leader) {
+            match ev.code {
+                KeyCode::Char('e') => self.pane = Pane::Tree,
+                KeyCode::Char('c') => self.pane = Pane::Queue,
+                KeyCode::Char('d') => self.pane = Pane::Diff,
+                _ => {}
+            }
+            self.pending_g = false;
+            return;
+        }
+        if ev.code == KeyCode::Char(' ') {
+            self.pending_leader = true;
+            self.pending_g = false;
+            return;
+        }
+
         match ev.code {
             KeyCode::Char('j') | KeyCode::Down => self.move_by(1),
             KeyCode::Char('k') | KeyCode::Up => self.move_by(-1),
+            KeyCode::Tab => self.focus_by(1),
+            KeyCode::BackTab => self.focus_by(-1),
+
+            // Inside the code these scroll it; anywhere else there is nothing
+            // to scroll, so they keep moving between panes.
+            KeyCode::Char('l') | KeyCode::Right if self.pane == Pane::Diff => {
+                self.hscroll = (self.hscroll + 4).min(self.longest_line());
+            }
+            KeyCode::Char('h') | KeyCode::Left if self.pane == Pane::Diff && self.hscroll > 0 => {
+                self.hscroll = self.hscroll.saturating_sub(4);
+            }
+            KeyCode::Char('0') if self.pane == Pane::Diff => self.hscroll = 0,
             KeyCode::Char('h') | KeyCode::Left => self.focus_by(-1),
             KeyCode::Char('l') | KeyCode::Right => self.focus_by(1),
             KeyCode::PageDown => self.move_by(20),
@@ -550,11 +629,26 @@ impl App {
         }
 
         let len = match m {
-            Modal::Agents => self.agents.len(),
+            Modal::Agents => self.agent_choices().len(),
             Modal::Palette => self.palette_hits().len(),
             _ => self.hits().len(),
         };
         let last = len.saturating_sub(1);
+
+        // The agent picker has no query to type into, so it is the one modal
+        // where the letters are free to be movement. Everywhere else they are
+        // the search, and `j` has to stay a `j`.
+        if m == Modal::Agents {
+            match ev.code {
+                KeyCode::Char('j') | KeyCode::Down => self.sel = (self.sel + 1).min(last),
+                KeyCode::Char('k') | KeyCode::Up => self.sel = self.sel.saturating_sub(1),
+                KeyCode::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
+                KeyCode::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
+                KeyCode::Enter => self.accept(m),
+                _ => {}
+            }
+            return;
+        }
 
         match ev.code {
             KeyCode::Down => self.sel = (self.sel + 1).min(last),
@@ -594,10 +688,16 @@ impl App {
                 }
             }
             Modal::Agents => {
-                if self.sel < self.agents.len() {
-                    self.agent_idx = self.sel;
-                    let who = self.agents[self.sel].kind.clone();
-                    self.flash(format!("target → {who}"));
+                let choices = self.agent_choices();
+                if let Some((kind, is_new)) = choices.get(self.sel).cloned() {
+                    if is_new {
+                        self.new_kind = Some(kind.clone());
+                        self.flash(format!("target → a new {kind}"));
+                    } else {
+                        self.agent_idx = self.sel;
+                        self.new_kind = None;
+                        self.flash(format!("target → {kind}"));
+                    }
                 }
                 self.modal = None;
             }
@@ -662,6 +762,136 @@ mod tests {
         assert!(looks_like_a_definition("func main() {"));
         assert!(!looks_like_a_definition("  return parse(x);"));
         assert!(!looks_like_a_definition(""));
+    }
+
+    #[test]
+    fn h_and_l_move_the_code_rather_than_the_focus() {
+        // The complaint this answers: `l` inside the diff walked out to the
+        // comment pane, so there was no way to reach the right-hand end of a
+        // line that had been cut off.
+        let mut a = app();
+        a.pane = Pane::Diff;
+        press(&mut a, KeyCode::Char('l'));
+        assert_eq!(a.pane, Pane::Diff, "focus should not have moved");
+        assert!(a.hscroll > 0, "the code should have scrolled");
+
+        press(&mut a, KeyCode::Char('0'));
+        assert_eq!(a.hscroll, 0, "0 returns to the start of the line");
+    }
+
+    #[test]
+    fn h_at_the_start_of_the_line_still_leaves_for_the_tree() {
+        // Scrolled all the way back there is nothing left to scroll, so the
+        // old habit keeps working rather than silently doing nothing.
+        let mut a = app();
+        a.pane = Pane::Diff;
+        a.hscroll = 0;
+        press(&mut a, KeyCode::Char('h'));
+        assert_eq!(a.pane, Pane::Tree);
+    }
+
+    #[test]
+    fn the_code_does_not_scroll_past_its_longest_line() {
+        let mut a = app();
+        a.pane = Pane::Diff;
+        for _ in 0..200 {
+            press(&mut a, KeyCode::Char('l'));
+        }
+        assert_eq!(
+            a.hscroll,
+            a.longest_line(),
+            "a pane of blank columns reads as a broken program"
+        );
+    }
+
+    #[test]
+    fn the_leader_jumps_to_a_pane() {
+        let mut a = app();
+        a.pane = Pane::Diff;
+        press(&mut a, KeyCode::Char(' '));
+        press(&mut a, KeyCode::Char('e'));
+        assert_eq!(a.pane, Pane::Tree);
+
+        press(&mut a, KeyCode::Char(' '));
+        press(&mut a, KeyCode::Char('c'));
+        assert_eq!(a.pane, Pane::Queue);
+
+        press(&mut a, KeyCode::Char(' '));
+        press(&mut a, KeyCode::Char('d'));
+        assert_eq!(a.pane, Pane::Diff);
+    }
+
+    #[test]
+    fn a_leader_that_leads_nowhere_does_nothing_and_lets_go() {
+        let mut a = app();
+        a.pane = Pane::Diff;
+        press(&mut a, KeyCode::Char(' '));
+        press(&mut a, KeyCode::Char('z'));
+        assert_eq!(a.pane, Pane::Diff);
+        assert!(!a.pending_leader, "the leader must not stay held");
+        // and the very next key is a plain key again
+        press(&mut a, KeyCode::Char('l'));
+        assert!(a.hscroll > 0);
+    }
+
+    #[test]
+    fn a_new_agent_can_be_the_target_when_none_is_running() {
+        // The complaint this answers: the queue could only go to an agent that
+        // was already up, so a review with nothing running had nowhere to go.
+        let mut a = app();
+        assert!(a.agents.is_empty());
+        let choices = a.agent_choices();
+        assert!(
+            !choices.is_empty(),
+            "with nothing running there must still be something to pick"
+        );
+        assert!(choices.iter().all(|(_, is_new)| *is_new));
+
+        a.sel = 0;
+        let kind = choices[0].0.clone();
+        a.modal = Some(Modal::Agents);
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(a.new_kind.as_deref(), Some(kind.as_str()));
+    }
+
+    #[test]
+    fn j_and_k_move_in_the_agent_picker() {
+        // They did not: the picker has no query, but `j` fell through to the
+        // branch that types into one, which also reset the selection — so the
+        // list could only be walked with the arrow keys, and every letter
+        // silently sent you back to the top.
+        let mut a = app();
+        a.modal = Some(Modal::Agents);
+        a.sel = 0;
+        press(&mut a, KeyCode::Char('j'));
+        assert_eq!(a.sel, 1);
+        press(&mut a, KeyCode::Char('k'));
+        assert_eq!(a.sel, 0);
+        press(&mut a, KeyCode::Char('z'));
+        assert_eq!(a.sel, 0, "a letter with nothing to do must not move it");
+        assert!(a.query.is_empty(), "there is no query here to type into");
+    }
+
+    #[test]
+    fn picking_a_running_agent_clears_a_pending_new_one() {
+        let mut a = app();
+        a.agents = vec![crate::data::Agent {
+            kind: "claude".into(),
+            pane: "w:1".into(),
+            cwd: "/tmp/r".into(),
+            status: crate::data::AgentStatus::Idle,
+            title: String::new(),
+            focused: false,
+        }];
+        a.new_kind = Some("pi".into());
+        a.modal = Some(Modal::Agents);
+        a.sel = 0;
+        press(&mut a, KeyCode::Enter);
+        assert_eq!(a.agent_idx, 0);
+        assert!(
+            a.new_kind.is_none(),
+            "two targets at once would send the queue twice or nowhere"
+        );
     }
 
     #[test]

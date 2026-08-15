@@ -218,6 +218,46 @@ pub fn remove_worktree(pane: &str) -> Res<()> {
     call(&["worktree", "remove", "--workspace", workspace, "--force"]).map(|_| ())
 }
 
+/// A workspace, an agent in it, and the prompt — undoing the workspace if
+/// either of the last two fails.
+///
+/// Leaving a half-built workspace behind would be worse than the failure: the
+/// next dispatch would offer a branch that already exists, and the reader
+/// would have a workspace they did not ask for and did not see appear.
+pub fn dispatch(
+    repo_root: &str,
+    branch: Option<&str>,
+    label: &str,
+    kind: &str,
+    text: &str,
+) -> Res<()> {
+    // The only difference between the two: one makes a branch and a checkout,
+    // the other opens on the one that is already there.
+    let pane = match branch {
+        Some(b) => create_worktree(repo_root, b, label)?,
+        None => create_workspace(repo_root, label)?,
+    };
+    // Undoing a worktree deletes what was just made; undoing a workspace only
+    // closes a window. Neither ever touches the reader's own checkout.
+    let undo = |pane: &str| {
+        let _ = if branch.is_some() {
+            remove_worktree(pane)
+        } else {
+            close_workspace(pane)
+        };
+    };
+
+    if let Err(e) = start_agent(&pane, kind) {
+        undo(&pane);
+        return Err(e);
+    }
+    if let Err(e) = prompt(&pane, text) {
+        undo(&pane);
+        return Err(e);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

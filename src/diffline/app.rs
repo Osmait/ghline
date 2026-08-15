@@ -120,6 +120,13 @@ pub struct App {
     pub agents: Vec<Agent>,
     pub agents_state: Load,
     pub agent_idx: usize,
+    /// Set when the queue is bound for an agent that is not running yet: the
+    /// kind to start. `None` means send to `agent_idx`, one already up.
+    pub new_kind: Option<String>,
+    /// Columns the code is scrolled right by. The gutters do not move with
+    /// it: a line number that scrolled away would leave the pane unreadable
+    /// exactly when you are furthest from the start of the line.
+    pub hscroll: usize,
 
     // --- interface ---
     pub pane: Pane,
@@ -137,6 +144,9 @@ pub struct App {
     pub wants_redraw: bool,
     /// Half of a `gg`. Cleared by any other key, so `g` then `j` is a `j`.
     pub pending_g: bool,
+    /// Space was pressed and is waiting for the key it leads to, the way a
+    /// leader works in the editor most of this keymap is borrowed from.
+    pub pending_leader: bool,
 }
 
 impl App {
@@ -166,6 +176,8 @@ impl App {
             agents: Vec::new(),
             agents_state: Load::Idle,
             agent_idx: 0,
+            new_kind: None,
+            hscroll: 0,
             pane: Pane::Diff,
             modal: None,
             finder_tab: FinderTab::Files,
@@ -180,6 +192,7 @@ impl App {
             should_quit: false,
             wants_redraw: false,
             pending_g: false,
+            pending_leader: false,
         }
     }
 
@@ -252,6 +265,35 @@ impl App {
             .iter()
             .filter(|c| c.anchors.first() == Some(&a))
             .count()
+    }
+
+    /// What the agent picker offers: the agents that are up, then one entry
+    /// per kind that could be started for this repository.
+    ///
+    /// Both in one list because the reader is answering one question — who
+    /// gets this — and splitting it into two would make them ask it twice.
+    pub fn agent_choices(&self) -> Vec<(String, bool)> {
+        let mut out: Vec<(String, bool)> = self
+            .agents
+            .iter()
+            .map(|a| (a.kind.clone(), false))
+            .collect();
+        out.extend(crate::config::agent_kinds().into_iter().map(|k| (k, true)));
+        out
+    }
+
+    /// The widest line in the file being shown, in columns.
+    ///
+    /// The cap on how far right the code can scroll: past this there is
+    /// nothing to see, and a pane of blank columns reads as a broken program
+    /// rather than as the end of the text.
+    pub fn longest_line(&self) -> usize {
+        use unicode_width::UnicodeWidthStr;
+        self.diff_rows()
+            .iter()
+            .map(|r| r.text.width())
+            .max()
+            .unwrap_or(0)
     }
 
     pub fn agent(&self) -> Option<&Agent> {
