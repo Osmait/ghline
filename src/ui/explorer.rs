@@ -13,7 +13,9 @@ use crate::app::hit::{Region, Target};
 use crate::app::{App, Load, Pane};
 use crate::icons::{file as icon_file, folder};
 use crate::theme;
-use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
+use crate::tui::{
+    Section, fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline,
+};
 
 /// Width of the tree pane. Wide enough for a nested path, narrow enough that
 /// the file still gets most of the screen — which is what you came to read.
@@ -77,26 +79,12 @@ fn human(bytes: u64) -> String {
 
 fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());
-    let head = Rect {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: 1,
-    };
-    fill(buf, head, theme::panel());
-    let hs = Style::default().bg(theme::panel()).fg(theme::dim());
-    put(buf, area.x + 1, area.y, area.right(), "FILES", hs);
-
     let state = app.tree_state();
     let rows = app.fs_rows().len();
-    put_right(
-        buf,
-        area.right() - 1,
-        area.y,
-        &format!("{rows}"),
-        hs.fg(theme::dimmer()),
-    );
-    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+    Section::new("FILES")
+        .count(rows)
+        .ground(theme::panel_alt())
+        .open(buf, area);
 
     let list_h = area.height.saturating_sub(2) as usize;
     let sel = app.fs_idx();

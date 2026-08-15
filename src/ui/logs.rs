@@ -10,7 +10,7 @@ use crate::data::LogKind;
 use crate::data::Status;
 use crate::theme;
 use crate::tui::{
-    fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap,
+    Section, fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline, wrap,
 };
 
 const TREE_W: u16 = 38;
@@ -49,22 +49,9 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
 fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());
-    let head = Rect {
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: 1,
-    };
-    fill(buf, head, theme::panel());
-    put(
-        buf,
-        area.x + 1,
-        area.y,
-        area.right(),
-        "JOBS & STEPS",
-        Style::default().bg(theme::panel()).fg(theme::dim()),
-    );
-    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+    Section::new("JOBS & STEPS")
+        .ground(theme::panel_alt())
+        .open(buf, area);
 
     let nodes = app.flat_tree();
     let sel = app.tree_sel_idx(nodes.len());

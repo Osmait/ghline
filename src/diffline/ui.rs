@@ -904,26 +904,10 @@ fn kind_color(kind: crate::syntax::Kind) -> ratatui::style::Color {
 // ------------------------------------------------------------------- queue
 
 fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
-    fill(buf, area, theme::panel_alt());
-    let head = Rect { height: 1, ..area };
-    fill(buf, head, theme::panel());
-    let hs = Style::default().bg(theme::panel());
-    put(
-        buf,
-        area.x + 1,
-        area.y,
-        area.right(),
-        "REVIEW QUEUE",
-        hs.fg(theme::yellow()),
-    );
-    put_right(
-        buf,
-        area.right() - 1,
-        area.y,
-        &app.comments.len().to_string(),
-        hs.fg(theme::dimmer()),
-    );
-    hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
+    Section::new("REVIEW QUEUE")
+        .count(app.comments.len())
+        .focused(app.pane == Pane::Queue)
+        .open(buf, area);
 
     // The footer names the target and what sending would do.
     let foot_y = area.bottom() - 2;
