@@ -1,25 +1,5 @@
 //! gh-tui — a GitHub TUI built from the `GitHub TUI.dc.html` design.
 
-mod actions;
-mod app;
-mod clones;
-mod config;
-mod data;
-mod demo;
-mod demo_diffs;
-mod error;
-mod finder;
-mod fuzzy;
-mod gh;
-mod herdr;
-mod icons;
-mod service;
-mod snapshot;
-mod subject;
-mod syntax;
-mod theme;
-mod ui;
-
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -33,7 +13,8 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use app::{App, Source};
+use github_tui::app::{App, Source};
+use github_tui::{config, gh, snapshot, ui};
 
 /// Heartbeat for the log stream (the design's 1400 ms `setInterval`).
 const TICK: Duration = Duration::from_millis(1400);

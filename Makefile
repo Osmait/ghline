@@ -3,6 +3,12 @@
 
 BIN := github-tui
 
+
+
+
+
+
+
 .DEFAULT_GOAL := help
 .PHONY: help install uninstall build run demo test test-nvim lint fmt check clean
 

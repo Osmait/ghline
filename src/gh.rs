@@ -83,6 +83,14 @@ fn ago(iso: &str) -> String {
     let Some(then) = parse_iso(iso) else {
         return String::new();
     };
+    ago_epoch(then)
+}
+
+/// How long ago a unix timestamp was, in the wording the lists use.
+///
+/// Public because blame needs the same phrasing: "3 weeks" beside a diff line
+/// should read the same as "3 weeks" beside a pull request.
+pub fn ago_epoch(then: i64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
