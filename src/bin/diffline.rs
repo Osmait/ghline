@@ -18,7 +18,7 @@ use ratatui::backend::CrosstermBackend;
 
 use github_tui::diffline::app::App;
 use github_tui::diffline::model::Scope;
-use github_tui::diffline::{git, ui};
+use github_tui::diffline::ui;
 
 /// Cursor blink, and the beat the toast fades on.
 const BLINK: Duration = Duration::from_millis(500);
@@ -52,10 +52,12 @@ fn main() -> io::Result<()> {
         .map(|p| p.to_string_lossy().into_owned())
         .unwrap_or(repo);
 
-    if !git::is_repo(&repo) {
-        eprintln!("diffline: {repo} is not a git repository");
+    // Which backend owns this directory, asked once. Nothing below here knows
+    // it was git rather than something else.
+    let Some(vcs) = github_tui::diffline::vcs::of(&repo) else {
+        eprintln!("diffline: {repo} is not a repository anything here can read");
         return Ok(());
-    }
+    };
 
     github_tui::config::apply_theme();
 
@@ -64,8 +66,8 @@ fn main() -> io::Result<()> {
     // something a test can hold.
     let svg = args.iter().position(|a| a == "--svg");
 
-    let base = git::base_branch(&repo);
-    let head = git::head_branch(&repo).unwrap_or_else(|| "HEAD".into());
+    let base = vcs.base_branch(&repo);
+    let head = vcs.head_branch(&repo).unwrap_or_else(|| "HEAD".into());
 
     // Three scopes, widening: what is not committed, what this branch has
     // that base does not, and the last commit on its own.
@@ -80,7 +82,7 @@ fn main() -> io::Result<()> {
     let opening = scopes
         .iter()
         .find(|s| {
-            git::changed_files(&repo, s)
+            vcs.changed_files(&repo, s)
                 .map(|f| !f.is_empty())
                 .unwrap_or(false)
         })

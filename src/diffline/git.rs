@@ -35,6 +35,48 @@ fn run(repo: &str, args: &[&str]) -> Res<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// git, the version control this was written against.
+///
+/// A unit struct: a call is a process, and every bit of state lives in the
+/// repository rather than here.
+pub struct Git;
+
+impl super::vcs::Vcs for Git {
+    fn name(&self) -> &'static str {
+        "git"
+    }
+
+    fn is_repo(&self, dir: &str) -> bool {
+        is_repo(dir)
+    }
+
+    fn head_branch(&self, repo: &str) -> Option<String> {
+        head_branch(repo)
+    }
+
+    fn base_branch(&self, repo: &str) -> String {
+        base_branch(repo)
+    }
+
+    fn changed_files(&self, repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
+        changed_files(repo, scope)
+    }
+
+    fn file_diff(&self, repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>> {
+        file_diff(repo, scope, path, context)
+    }
+
+    // `git blame` is exactly this question, which is why the trait has it at
+    // all — a backend that could not answer would say so here instead.
+    fn has_blame(&self) -> bool {
+        true
+    }
+
+    fn blame(&self, repo: &str, path: &str) -> Res<Vec<String>> {
+        blame(repo, path)
+    }
+}
+
 /// Is this a git repository at all?
 pub fn is_repo(dir: &str) -> bool {
     run(dir, &["rev-parse", "--git-dir"]).is_ok()

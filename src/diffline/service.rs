@@ -8,7 +8,6 @@
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::thread;
 
-use super::git;
 use super::model::{ChangedFile, Row, Scope};
 use crate::error::{Error, Result as Res};
 use crate::mux::Agent;
@@ -133,9 +132,13 @@ impl Service {
 }
 
 fn handle(req: Request) -> Response {
+    // Chosen per request rather than held: the repository is in the request,
+    // and which backend owns it is a fact about that repository.
+    let vcs = |repo: &str| super::vcs::of(repo).unwrap_or(&super::git::Git);
+
     match req {
         Request::Files { repo, scope } => Response::Files {
-            result: git::changed_files(&repo, &scope),
+            result: vcs(&repo).changed_files(&repo, &scope),
             scope,
         },
 
@@ -148,10 +151,12 @@ fn handle(req: Request) -> Response {
             // Lexed here rather than when the answer lands: a large file takes
             // long enough to be a dropped frame, and this thread exists so the
             // interface never has to wait.
-            let result = git::file_diff(&repo, &scope, &path, context).map(|rows| {
-                let spans = highlight_rows(&path, &rows);
-                (rows, spans)
-            });
+            let result = vcs(&repo)
+                .file_diff(&repo, &scope, &path, context)
+                .map(|rows| {
+                    let spans = highlight_rows(&path, &rows);
+                    (rows, spans)
+                });
             Response::Diff {
                 path,
                 context,
@@ -160,7 +165,13 @@ fn handle(req: Request) -> Response {
         }
 
         Request::Blame { repo, path } => Response::Blame {
-            result: git::blame(&repo, &path),
+            // Only asked of a backend that says it can: an empty list from
+            // one that cannot would read as "nobody wrote this".
+            result: if vcs(&repo).has_blame() {
+                vcs(&repo).blame(&repo, &path)
+            } else {
+                Ok(Vec::new())
+            },
             path,
         },
 

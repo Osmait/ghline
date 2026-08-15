@@ -14,3 +14,4 @@ pub mod keys;
 pub mod model;
 pub mod service;
 pub mod ui;
+pub mod vcs;
