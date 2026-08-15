@@ -37,7 +37,7 @@ pub fn roots() -> Vec<PathBuf> {
     let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else {
         return Vec::new();
     };
-    match crate::shared::config::load().get("clone-roots") {
+    match crate::shared::settings::current().get("clone-roots") {
         Some(list) if !list.trim().is_empty() => list
             .split(',')
             .map(str::trim)

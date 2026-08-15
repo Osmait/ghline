@@ -17,6 +17,7 @@ pub mod icons;
 pub mod key;
 pub mod mux;
 pub mod nav;
+pub mod settings;
 pub mod syntax;
 pub mod text;
 

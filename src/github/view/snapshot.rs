@@ -173,6 +173,11 @@ fn build_live(keys: &str, ticks: usize) -> App {
 }
 
 pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+    // A snapshot has to be the same frame on any machine, so it reads
+    // nobody's config.
+    let _ = crate::shared::settings::use_store(Box::new(
+        crate::shared::settings::Memory::default(),
+    ));
     let mut app = build_live(keys, ticks);
     let mut term = Terminal::new(TestBackend::new(width, height))?;
     term.draw(|f| ui::draw(f, &mut app))?;
@@ -183,6 +188,11 @@ pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::R
 /// Renders the demo with every pane held in its loading state, which is the
 /// only way to look at the skeletons without racing the network.
 pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::Result<()> {
+    // A snapshot has to be the same frame on any machine, so it reads
+    // nobody's config.
+    let _ = crate::shared::settings::use_store(Box::new(
+        crate::shared::settings::Memory::default(),
+    ));
     let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
@@ -196,6 +206,11 @@ pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::
 }
 
 pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+    // A snapshot has to be the same frame on any machine, so it reads
+    // nobody's config.
+    let _ = crate::shared::settings::use_store(Box::new(
+        crate::shared::settings::Memory::default(),
+    ));
     let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
@@ -212,6 +227,11 @@ pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result
 }
 
 pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+    // A snapshot has to be the same frame on any machine, so it reads
+    // nobody's config.
+    let _ = crate::shared::settings::use_store(Box::new(
+        crate::shared::settings::Memory::default(),
+    ));
     let mut app = App::new(Source::Demo, None);
     for k in parse_keys(keys) {
         app.on_key(k);
