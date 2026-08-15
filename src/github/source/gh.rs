@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::github::data::{
     Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
-    Repo, Review, ReviewState, RunDetail, Status, Step, TreeEntry,
+    Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, TreeEntry,
 };
 use crate::github::data::{Kind, LogKind};
 
@@ -812,16 +812,6 @@ pub fn search_commits(owner: &str, query: &str) -> Res<Vec<SearchHit>> {
             }
         })
         .collect())
-}
-
-/// A row as the search API returns it, before the finder shapes it.
-pub struct SearchHit {
-    pub title: String,
-    pub repo: String,
-    pub num: i64,
-    pub state: Status,
-    pub when: String,
-    pub sha: String,
 }
 
 // -------------------------------------------------------------------- acciones

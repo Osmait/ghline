@@ -377,7 +377,10 @@ impl App {
 
         // Said before the editor takes the screen, so it is on the status bar
         // when they come back rather than lost behind it.
-        if let Some(branch) = crate::shared::clones::current().head_branch(&root) {
+        // From what the worker found, not read here: the reducer runs
+        // between a keystroke and the frame that answers it, and that is not
+        // where a file gets opened.
+        if let Some(branch) = self.head_branches.get(&root) {
             self.flash_warn(format!("editing the copy on {branch}"));
         }
         self.edit_request = Some((full, self.file_sel + 1));

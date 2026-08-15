@@ -12,7 +12,6 @@ use crate::github::data::Kind;
 use crate::github::data::MergeMethod;
 use crate::github::data::Source as FinderSource;
 use crate::github::data::{Account, Comment, FileChange, Hunk, Item, Job, RawLog, Repo, Review};
-use crate::github::gh;
 use crate::shared::error::Error;
 
 pub enum Request {
@@ -174,7 +173,7 @@ pub enum Response {
     Search {
         query: String,
         source: FinderSource,
-        result: Result<Vec<gh::SearchHit>, Error>,
+        result: Result<Vec<crate::github::data::SearchHit>, Error>,
     },
     RunJobs {
         repo: String,
@@ -241,10 +240,10 @@ impl Worker<Request, Response> for Service {
 
 fn handle(req: Request) -> Response {
     match req {
-        Request::Accounts => Response::Accounts(gh::accounts()),
+        Request::Accounts => Response::Accounts(crate::github::forge::current().accounts()),
 
         Request::Repos { login } => {
-            let result = gh::repos(&login);
+            let result = crate::github::forge::current().repos(&login);
             Response::Repos { login, result }
         }
 
@@ -254,15 +253,15 @@ fn handle(req: Request) -> Response {
             // stays one request on one thread, skeleton and all.
             let all = repo.strip_suffix('*').and_then(|o| o.strip_suffix('/'));
             let result = match (all, tab) {
-                (Some(owner), 0) => gh::all_issues(owner),
-                (Some(owner), 1) => gh::all_prs(owner),
+                (Some(owner), 0) => crate::github::forge::current().all_issues(owner),
+                (Some(owner), 1) => crate::github::forge::current().all_prs(owner),
                 // Runs never reach here: there is no cross-repository
                 // Actions API, so they travel as their own request carrying
                 // the repositories worth asking.
                 (Some(_), _) => Ok(Vec::new()),
-                (None, 0) => gh::issues(&repo),
-                (None, 1) => gh::prs(&repo),
-                (None, _) => gh::runs(&repo),
+                (None, 0) => crate::github::forge::current().issues(&repo),
+                (None, 1) => crate::github::forge::current().prs(&repo),
+                (None, _) => crate::github::forge::current().runs(&repo),
             };
             Response::List { repo, tab, result }
         }
@@ -288,12 +287,12 @@ fn handle(req: Request) -> Response {
         },
 
         Request::Clone { repo, dest } => Response::Cloned {
-            result: crate::github::gh::clone(&repo, &dest),
+            result: crate::github::forge::current().clone(&repo, &dest),
             repo,
         },
 
         Request::Tree { repo } => Response::Tree {
-            result: crate::github::gh::repo_tree(&repo),
+            result: crate::github::forge::current().repo_tree(&repo),
             repo,
         },
 
@@ -301,12 +300,14 @@ fn handle(req: Request) -> Response {
             // Lexed here rather than when the answer lands: half a megabyte
             // takes long enough to be a dropped frame, and this thread exists
             // so the interface never has to wait for anything.
-            let result = crate::github::gh::file_content(&repo, &path).map(|text| {
-                let spans = crate::shared::syntax::of_path(&path)
-                    .map(|lang| crate::shared::syntax::highlight(lang, &text))
-                    .unwrap_or_default();
-                (text, spans)
-            });
+            let result = crate::github::forge::current()
+                .file_content(&repo, &path)
+                .map(|text| {
+                    let spans = crate::shared::syntax::of_path(&path)
+                        .map(|lang| crate::shared::syntax::highlight(lang, &text))
+                        .unwrap_or_default();
+                    (text, spans)
+                });
             Response::FileText { result, repo, path }
         }
 
@@ -330,21 +331,21 @@ fn handle(req: Request) -> Response {
         Request::AllRuns { key, repos } => Response::List {
             repo: key,
             tab: 2,
-            result: gh::all_runs(&repos),
+            result: crate::github::forge::current().all_runs(&repos),
         },
 
         Request::IssueDetail { repo, num } => {
-            let result = gh::issue_detail(&repo, num);
+            let result = crate::github::forge::current().issue_detail(&repo, num);
             Response::IssueDetail { repo, num, result }
         }
 
         Request::PrDetail { repo, num } => {
-            let result = gh::pr_detail(&repo, num);
+            let result = crate::github::forge::current().pr_detail(&repo, num);
             Response::PrDetail { repo, num, result }
         }
 
         Request::PrDiff { repo, num } => {
-            let result = gh::pr_diff(&repo, num);
+            let result = crate::github::forge::current().pr_diff(&repo, num);
             Response::PrDiff { repo, num, result }
         }
 
@@ -354,9 +355,13 @@ fn handle(req: Request) -> Response {
             source,
         } => {
             let result = match source {
-                FinderSource::Commits => gh::search_commits(&owner, &query),
-                FinderSource::Prs => gh::search_issues(&owner, &query, Kind::Pr),
-                _ => gh::search_issues(&owner, &query, Kind::Issue),
+                FinderSource::Commits => {
+                    crate::github::forge::current().search_commits(&owner, &query)
+                }
+                FinderSource::Prs => {
+                    crate::github::forge::current().search_issues(&owner, &query, Kind::Pr)
+                }
+                _ => crate::github::forge::current().search_issues(&owner, &query, Kind::Issue),
             };
             Response::Search {
                 query,
@@ -366,7 +371,7 @@ fn handle(req: Request) -> Response {
         }
 
         Request::RunJobs { repo, run_id } => {
-            let result = gh::run_jobs(&repo, run_id);
+            let result = crate::github::forge::current().run_jobs(&repo, run_id);
             Response::RunJobs {
                 repo,
                 run_id,
@@ -379,7 +384,7 @@ fn handle(req: Request) -> Response {
             run_id,
             finished,
         } => {
-            let result = gh::run_log(&repo, run_id, finished);
+            let result = crate::github::forge::current().run_log(&repo, run_id, finished);
             Response::RunLog {
                 repo,
                 run_id,
@@ -393,7 +398,8 @@ fn handle(req: Request) -> Response {
             method,
             branch,
         } => {
-            let result = gh::merge(&repo, num, method.short())
+            let result = crate::github::forge::current()
+                .merge(&repo, num, method.short())
                 .map(|_| format!("#{num} merged via {}", method.short()));
             let merged_branch = result.is_ok().then_some(branch).filter(|b| !b.is_empty());
             Response::Action {
@@ -405,7 +411,9 @@ fn handle(req: Request) -> Response {
         }
 
         Request::Close { repo, num } => {
-            let result = gh::close(&repo, num).map(|_| format!("#{num} closed"));
+            let result = crate::github::forge::current()
+                .close(&repo, num)
+                .map(|_| format!("#{num} closed"));
             Response::Action {
                 repo,
                 num,
@@ -415,7 +423,9 @@ fn handle(req: Request) -> Response {
         }
 
         Request::Reopen { repo, num } => {
-            let result = gh::reopen(&repo, num).map(|_| format!("#{num} reopened"));
+            let result = crate::github::forge::current()
+                .reopen(&repo, num)
+                .map(|_| format!("#{num} reopened"));
             Response::Action {
                 repo,
                 num,
@@ -425,8 +435,9 @@ fn handle(req: Request) -> Response {
         }
 
         Request::DeleteBranch { repo, branch } => {
-            let result =
-                gh::delete_branch(&repo, &branch).map(|_| format!("deleted branch {branch}"));
+            let result = crate::github::forge::current()
+                .delete_branch(&repo, &branch)
+                .map(|_| format!("deleted branch {branch}"));
             Response::Action {
                 repo,
                 num: 0,

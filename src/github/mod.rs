@@ -28,6 +28,7 @@ pub mod subject;
 pub mod source {
     pub mod demo;
     pub mod demo_diffs;
+    pub mod forge;
     pub mod gh;
     pub mod service;
 }
@@ -44,6 +45,6 @@ pub mod view {
 }
 
 // Filed by layer, spoken about by name.
-pub use source::{demo, demo_diffs, gh, service};
+pub use source::{demo, demo_diffs, forge, gh, service};
 pub use state::{actions, app, finder};
 pub use view::{snapshot, ui};

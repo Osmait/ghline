@@ -766,6 +766,22 @@ impl Tally {
     }
 }
 
+// --- what a search comes back with ---
+//
+// Here rather than with `gh` because it is what a *forge* answers, and
+// the trait that asks must not name one implementation to describe the
+// shape of the answer.
+
+/// A row as the search API returns it, before the finder shapes it.
+pub struct SearchHit {
+    pub title: String,
+    pub repo: String,
+    pub num: i64,
+    pub state: Status,
+    pub when: String,
+    pub sha: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
