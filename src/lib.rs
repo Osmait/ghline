@@ -10,33 +10,15 @@
 //! Splitting them this way rather than growing one binary two heads keeps each
 //! one's state about its own subject. The shared modules below are the seam.
 
-// --- shared by both ---
-pub mod ago;
-pub mod clones;
-pub mod config;
-pub mod error;
-pub mod fuzzy;
-pub mod herdr;
-pub mod icons;
-pub mod mux;
-pub mod nav;
-pub mod syntax;
-pub mod text;
-pub mod theme;
+// The three directories are the three answers to "whose is this?": `shared`
+// belongs to neither program, `tui` is the drawing toolkit both use, and the
+// other two are one program each. It used to be twenty-four modules in a row
+// with nothing to say which was which — two of them called `service`, two
+// called `ui`, two called `hit`, told apart only by a path that named no
+// program.
+
+pub mod shared;
 pub mod tui;
 
-// --- diffline ---
 pub mod diffline;
-
-// --- github-tui ---
-pub mod actions;
-pub mod app;
-pub mod data;
-pub mod demo;
-pub mod demo_diffs;
-pub mod finder;
-pub mod gh;
-pub mod service;
-pub mod snapshot;
-pub mod subject;
-pub mod ui;
+pub mod github;

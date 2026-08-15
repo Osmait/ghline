@@ -19,7 +19,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use unicode_width::UnicodeWidthStr;
 
-use crate::theme;
+use crate::shared::theme;
 
 pub fn fill(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
     for y in area.top()..area.bottom() {
@@ -52,7 +52,7 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Styl
     }
     for g in unicode_segmentation(text) {
         // A backstop, not the fix: text is expanded where it is read, in
-        // `crate::text`. But this is the one place every string in either
+        // `crate::shared::text`. But this is the one place every string in either
         // program passes through on its way to a cell, and a control
         // character reaching one moves the terminal's cursor somewhere the
         // layout did not account for — which is how a diff line ends up

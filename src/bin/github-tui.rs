@@ -17,8 +17,9 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use github_tui::app::{App, Source};
-use github_tui::{config, gh, snapshot, ui};
+use github_tui::github::app::{App, Source};
+use github_tui::github::{gh, snapshot, ui};
+use github_tui::shared::config;
 
 fn usage() {
     println!("github-tui — repositories, issues, pull requests and Actions, over the gh CLI");

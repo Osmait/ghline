@@ -61,7 +61,7 @@ fn main() -> io::Result<()> {
         return Ok(());
     };
 
-    github_tui::config::apply_theme();
+    github_tui::shared::config::apply_theme();
 
     // `--svg <keys> <w> <h>` draws one frame and exits. The same headless
     // check the other program has, and for the same reason: a terminal is not
@@ -241,7 +241,7 @@ fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
     use ratatui::backend::TestBackend;
 
     settle(app);
-    for key in github_tui::snapshot::parse_keys(keys) {
+    for key in github_tui::github::snapshot::parse_keys(keys) {
         app.on_key(key);
         settle(app);
     }
@@ -250,7 +250,7 @@ fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
     term.draw(|f| ui::draw(f, app))?;
     print!(
         "{}",
-        github_tui::snapshot::to_svg(term.backend().buffer(), w, h)
+        github_tui::github::snapshot::to_svg(term.backend().buffer(), w, h)
     );
     Ok(())
 }
