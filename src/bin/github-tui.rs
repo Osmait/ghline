@@ -1,4 +1,8 @@
 //! gh-tui — a GitHub TUI built from the `GitHub TUI.dc.html` design.
+//!
+//! Usage and `--version` write to stdout, which is what stdout is for in a
+//! program with a command line; the lint against it guards the library.
+#![allow(clippy::print_stdout, reason = "usage and --version are stdout's job")]
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -15,6 +19,17 @@ use ratatui::backend::CrosstermBackend;
 
 use github_tui::app::{App, Source};
 use github_tui::{config, gh, snapshot, ui};
+
+fn usage() {
+    println!("github-tui — repositories, issues, pull requests and Actions, over the gh CLI");
+    println!();
+    println!("  github-tui            read real GitHub through `gh`");
+    println!("  --demo                the design's fixture, no network needed");
+    println!("  --no-mouse            leave the terminal's own click-to-select alone");
+    println!("  --version             print the version and exit");
+    println!();
+    println!("  ?                     every key, once you are inside");
+}
 
 /// Heartbeat for the log stream (the design's 1400 ms `setInterval`).
 const TICK: Duration = Duration::from_millis(1400);
@@ -44,6 +59,15 @@ fn main() -> io::Result<()> {
             "--svg-loading" => snapshot::svg_loading(&keys, w, h, ticks as u64),
             _ => snapshot::run(&keys, w, h, ticks),
         };
+    }
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        usage();
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("github-tui {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
     }
 
     // Deliberately after the headless modes: a snapshot has to render the same

@@ -1138,12 +1138,6 @@ pub fn file_content(repo: &str, path: &str) -> Res<String> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
 

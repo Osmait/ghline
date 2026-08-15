@@ -33,6 +33,12 @@ fn main() -> io::Result<()> {
         usage();
         return Ok(());
     }
+    // Before the repository check below: `--version` has to answer from
+    // anywhere, including the release runner's checkout and a bug report.
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("diffline {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
 
     // The repository is where you are unless you say otherwise, because that
     // is almost always the one whose diff you meant.
@@ -104,6 +110,7 @@ fn usage() {
     println!("diffline — review a diff, and hand notes to a coding agent");
     println!();
     println!("  diffline [path]     the repository to read, default the current directory");
+    println!("  --version           print the version and exit");
     println!();
     println!("  [ ]   working tree · this branch · the last commit");
     println!("  V c   select a range, comment on it");

@@ -10,7 +10,7 @@ BIN := github-tui
 
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall build run diff demo test test-nvim lint fmt check clean
+.PHONY: help install uninstall hooks build run diff demo test test-nvim lint fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -28,6 +28,10 @@ install: ## Build optimised and put it on the PATH (~/.cargo/bin)
 
 uninstall: ## Take it off the PATH again
 	cargo uninstall $(BIN)
+
+hooks: ## Run `make check` on every push (git config core.hooksPath)
+	git config core.hooksPath .githooks
+	@echo "  pre-push now runs fmt, clippy and tests — skip once with --no-verify"
 
 build: ## Optimised build, left in target/release
 	cargo build --release

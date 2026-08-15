@@ -540,12 +540,6 @@ fn split_rows(rows: &[DiffRow]) -> Vec<SplitPair> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
 

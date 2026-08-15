@@ -1,0 +1,19 @@
+# Nothing here updates itself otherwise: the actions below are pinned to major
+# tags that never move on their own, and cargo only sees a new version when
+# someone runs `cargo update`.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    # A pull request per crate for a tree this size is noise; ratatui and
+    # crossterm move together anyway.
+    groups:
+      all:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

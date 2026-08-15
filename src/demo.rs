@@ -832,12 +832,6 @@ pub fn step_log(name: &str) -> Option<Vec<(String, &'static str)>> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
 

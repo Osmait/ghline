@@ -351,12 +351,6 @@ pub const PRIVATE_MARK: &str = "";
 pub const PUBLIC_MARK: &str = "";
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 pub(crate) mod tests {
     use super::*;
 

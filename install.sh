@@ -1,15 +1,15 @@
 #!/bin/sh
-# Install github-tui.
+# Install github-tui and diffline.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh | sh
 #
-# Downloads the release binary for this machine, checks it against the
-# published SHA-256, and puts it in ~/.local/bin. Nothing is built, nothing
+# Downloads the release binaries for this machine, checks them against the
+# published SHA-256, and puts them in ~/.local/bin. Nothing is built, nothing
 # needs root, and nothing outside the install directory is touched.
 #
 # Knobs, all optional:
 #   GITHUB_TUI_VERSION      tag to install, e.g. v0.1.0 (default: latest)
-#   GITHUB_TUI_INSTALL_DIR  where to put the binary (default: ~/.local/bin)
+#   GITHUB_TUI_INSTALL_DIR  where to put the binaries (default: ~/.local/bin)
 #
 # Plain POSIX sh on purpose: macOS still ships bash 3.2, and this has to run
 # before the user has installed anything at all.
@@ -17,7 +17,10 @@
 set -eu
 
 REPO="Osmait/github-tui"
+# The archive is still named after the first one, because that is the name
+# install.sh builds the download URL from.
 BIN="github-tui"
+BINS="github-tui diffline"
 
 INSTALL_DIR="${GITHUB_TUI_INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -96,21 +99,28 @@ main() {
     verify "$tmp" "$archive"
 
     tar -xzf "$tmp/$archive" -C "$tmp"
-    [ -f "$tmp/$BIN" ] || die "$archive did not contain $BIN"
 
     mkdir -p "$INSTALL_DIR"
-    # Moved into place from the same directory, so a half-written binary can
-    # never end up on PATH — and so replacing a copy that is currently running
-    # works instead of failing with "text file busy".
-    chmod +x "$tmp/$BIN"
-    mv "$tmp/$BIN" "$INSTALL_DIR/$BIN.new"
-    mv "$INSTALL_DIR/$BIN.new" "$INSTALL_DIR/$BIN"
+    for bin in $BINS; do
+        # Releases before diffline shipped carry one binary. Installing what
+        # is there beats refusing the whole thing over the one that is not.
+        [ -f "$tmp/$bin" ] || { say "note: $tag has no $bin"; continue; }
 
-    say "Installed to $INSTALL_DIR/$BIN"
+        # Moved into place from the same directory, so a half-written binary
+        # can never end up on PATH — and so replacing a copy that is currently
+        # running works instead of failing with "text file busy".
+        chmod +x "$tmp/$bin"
+        mv "$tmp/$bin" "$INSTALL_DIR/$bin.new"
+        mv "$INSTALL_DIR/$bin.new" "$INSTALL_DIR/$bin"
+        say "Installed to $INSTALL_DIR/$bin"
+    done
+
+    [ -f "$INSTALL_DIR/$BIN" ] || die "$archive did not contain $BIN"
+
     check_path
     check_gh
     say ""
-    say "Run \`$BIN\` to start."
+    say "Run \`$BIN\` to start, or \`diffline\` in a repository to review its diff."
 }
 
 # Checksums are published as `<sha>  <name>`, the format both tools read.

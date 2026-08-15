@@ -1,5 +1,7 @@
-# Pinned so that a formatting or lint difference between machines is a real
-# finding rather than a version gap.
+# An exact version, not `stable`: the point of pinning is that a formatting
+# or lint difference between two machines is a real finding rather than a
+# version gap, and `stable` rolls forward underneath you. Raising this is a
+# deliberate commit — expect new clippy lints to fire when you do.
 [toolchain]
-channel = "stable"
+channel = "1.96.0"
 components = ["rustfmt", "clippy"]

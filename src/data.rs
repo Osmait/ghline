@@ -208,7 +208,6 @@ pub struct Repo {
     pub lang: String,
     pub issues: u32,
     pub prs: u32,
-    #[allow(dead_code)]
     pub star: String,
     /// Whether the default branch has a `.github/workflows` directory.
     ///
@@ -817,12 +816,6 @@ impl MergeMethod {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
 

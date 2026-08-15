@@ -21,7 +21,6 @@ pub fn since(then: i64) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, reason = "assertions")]
 mod tests {
     use super::*;
 

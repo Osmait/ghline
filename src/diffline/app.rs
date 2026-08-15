@@ -485,12 +485,6 @@ pub fn first_code(rows: &[Row], from: usize) -> usize {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
     use crate::diffline::model::Kind;

@@ -1,0 +1,7 @@
+# Test code asserts by unwrapping — that is what a failing test looks like.
+# Saying so once here is what the twenty-three copies of
+# `#[allow(clippy::unwrap_used, …, reason = "assertions")]` used to say, one
+# above every `mod tests` in the crate.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

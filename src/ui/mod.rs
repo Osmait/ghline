@@ -386,12 +386,6 @@ fn draw_content(buf: &mut Buffer, area: Rect, app: &mut App) {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
 

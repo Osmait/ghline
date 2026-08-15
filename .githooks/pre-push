@@ -1,0 +1,27 @@
+#!/bin/sh
+# Runs what CI runs, before the push rather than after it.
+#
+# This exists because a clippy failure has been pushed before: the lint and the
+# push were two lines of the same script, so the lint failing did not stop the
+# push. Here it does — the push is what the hook can refuse.
+#
+# Enable with `make hooks`. Skip once with `git push --no-verify`.
+
+set -e
+
+printf 'pre-push: fmt · clippy · test\n'
+
+if ! cargo fmt --all --check; then
+    printf '\npre-push: formatting differs — run `make fmt`\n' >&2
+    exit 1
+fi
+
+if ! cargo clippy --all-targets --locked -- -D warnings; then
+    printf '\npre-push: clippy found something\n' >&2
+    exit 1
+fi
+
+if ! cargo test --all-targets --locked; then
+    printf '\npre-push: tests failed\n' >&2
+    exit 1
+fi

@@ -1399,12 +1399,6 @@ fn help(buf: &mut Buffer, area: Rect) {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod layout_tests {
     use super::*;
     use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};

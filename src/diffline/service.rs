@@ -151,12 +151,6 @@ pub fn brief(e: &Error) -> String {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    reason = "assertions"
-)]
 mod tests {
     use super::*;
     use crate::diffline::model::Kind;

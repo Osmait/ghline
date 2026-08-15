@@ -56,12 +56,16 @@ jobs:
       # Named without a version so install.sh can build the URL from the tag
       # alone. The checksum rides alongside; install.sh refuses to install
       # without it.
+      #
+      # Both binaries travel together. They are one project — diffline is what
+      # github-tui hands a review to — and shipping only one meant anyone who
+      # installed from a release got half of it.
       - name: Package
         shell: bash
         run: |
           set -euo pipefail
           archive="github-tui-${{ matrix.target }}.tar.gz"
-          tar -czf "$archive" -C "target/${{ matrix.target }}/release" github-tui
+          tar -czf "$archive" -C "target/${{ matrix.target }}/release" github-tui diffline
           if command -v sha256sum >/dev/null; then
             sha256sum "$archive" > "$archive.sha256"
           else
@@ -75,7 +79,9 @@ jobs:
       # where the runner can run what it just built.
       - name: Smoke test the binary
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-apple-darwin'
-        run: ./target/${{ matrix.target }}/release/github-tui --snapshot "" 100 30 0 > /dev/null
+        run: |
+          ./target/${{ matrix.target }}/release/github-tui --snapshot "" 100 30 0 > /dev/null
+          ./target/${{ matrix.target }}/release/diffline --version > /dev/null
 
       - name: Upload to the release
         env:
