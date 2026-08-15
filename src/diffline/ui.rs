@@ -322,7 +322,7 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     let head = Rect { height: 1, ..area };
     fill(buf, head, theme::panel());
     let hs = Style::default().bg(theme::panel());
-    let mut x = put(
+    let x = put(
         buf,
         area.x + 1,
         area.y,
@@ -330,21 +330,15 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
         "DIFF",
         hs.fg(theme::yellow()),
     );
-    x = put(
-        buf,
-        x + 2,
-        area.y,
-        area.right(),
-        app.path(),
-        hs.fg(theme::bright()),
-    );
-    let _ = x;
-
     let right = format!(
-        "blame {} │ ctx ±{} ",
+        " blame {} │ ctx ±{} ",
         if app.blame_on { "on" } else { "off" },
         app.context
     );
+    // The path gives way to the right-hand label rather than running under
+    // it: knowing the blame is off matters more than the middle of a path.
+    let room = area.right().saturating_sub(right.width() as u16 + 1);
+    put_trunc(buf, x + 2, area.y, room, app.path(), hs.fg(theme::bright()));
     put_right(
         buf,
         area.right(),
@@ -496,6 +490,10 @@ fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
 }
 
 /// One line of code, coloured by the lexer where it has something to say.
+///
+/// A line too long for the pane is cut and *marked*. Without the mark a cut
+/// line reads as a line that ends there, which is a different program's code —
+/// and there is no horizontal scroll here to reveal the rest.
 fn draw_code(
     buf: &mut Buffer,
     x: u16,
@@ -509,31 +507,65 @@ fn draw_code(
         put_trunc(buf, x, y, max, text, plain);
         return;
     };
+
+    // One column is held back for the mark when there is more than fits.
+    let room = max.saturating_sub(x) as usize;
+    let cut = cut_at(text, room.saturating_sub(1));
+    let end = cut.unwrap_or(text.len());
+    let limit = if cut.is_some() {
+        max.saturating_sub(1)
+    } else {
+        max
+    };
+
     let mut cx = x;
     let mut at = 0usize;
     for s in spans {
-        if s.from >= text.len() || s.to > text.len() {
+        if s.from >= end {
             break;
         }
-        if s.from > at {
-            cx = put(buf, cx, y, max, &text[at..s.from], plain);
+        // Clamped rather than trusted: a span that started before the cursor
+        // would otherwise be drawn twice, which reads as doubled text.
+        let (from, to) = (s.from.max(at), s.to.min(end));
+        if to <= from {
+            continue;
+        }
+        if from > at {
+            cx = put(buf, cx, y, limit, &text[at..from], plain);
         }
         cx = put(
             buf,
             cx,
             y,
-            max,
-            &text[s.from..s.to],
+            limit,
+            &text[from..to],
             plain.fg(kind_color(s.kind)),
         );
-        at = s.to;
-        if cx >= max {
-            return;
+        at = to;
+    }
+    if at < end {
+        cx = put(buf, cx, y, limit, &text[at..end], plain);
+    }
+    if cut.is_some() {
+        put(buf, cx, y, max, "…", plain.fg(theme::dimmer()));
+    }
+}
+
+/// The byte index at which `text` would exceed `cols` columns, if it does.
+///
+/// A byte index rather than a character count because the colour spans are
+/// written in bytes, and a cut landing inside a character would slice a string
+/// Rust will not slice.
+fn cut_at(text: &str, cols: usize) -> Option<usize> {
+    let mut used = 0usize;
+    for (i, c) in text.char_indices() {
+        let w = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+        if used + w > cols {
+            return Some(i);
         }
+        used += w;
     }
-    if at < text.len() {
-        put_trunc(buf, cx, y, max, &text[at..], plain);
-    }
+    None
 }
 
 fn kind_color(kind: crate::syntax::Kind) -> ratatui::style::Color {
@@ -1358,4 +1390,174 @@ fn help(buf: &mut Buffer, area: Rect) {
         put_trunc(buf, x + 10, y, x + half - 1, d, base.fg(theme::dim()));
     }
     let _ = "".width();
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
+mod layout_tests {
+    use super::*;
+    use crate::diffline::model::{ChangedFile, Kind, Row, Scope, Status};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    /// A file whose lines are far longer than any pane.
+    fn app() -> App {
+        let mut a = App::new(
+            "/tmp/r".into(),
+            Scope::WorkingTree,
+            vec![Scope::WorkingTree],
+        );
+        a.service = None;
+        a.files = vec![ChangedFile {
+            path: "src/a.rs".into(),
+            status: Status::Added,
+            add: 3,
+            del: 0,
+        }];
+        a.files_state = crate::diffline::app::Load::Ready;
+        let long = "// ".to_string() + &"MARKER_".repeat(40);
+        a.rows.insert(
+            "src/a.rs".into(),
+            vec![
+                Row {
+                    kind: Kind::Header,
+                    old: None,
+                    new: None,
+                    text: "@@ -0,0 +1,3 @@".into(),
+                },
+                Row {
+                    kind: Kind::Added,
+                    old: None,
+                    new: Some(1),
+                    text: long.clone(),
+                },
+                Row {
+                    kind: Kind::Added,
+                    old: None,
+                    new: Some(2),
+                    text: long,
+                },
+            ],
+        );
+        a.rows_state
+            .insert("src/a.rs".into(), crate::diffline::app::Load::Ready);
+        // Coloured, as the real thing is: the uncoloured path and the
+        // coloured one write the line differently, and only one of them was
+        // being exercised before.
+        let rows = a.rows["src/a.rs"].clone();
+        let spans = rows
+            .iter()
+            .map(|r| {
+                crate::syntax::of_path("a.rs")
+                    .map(|l| {
+                        crate::syntax::highlight(l, &r.text)
+                            .pop()
+                            .unwrap_or_default()
+                    })
+                    .unwrap_or_default()
+            })
+            .collect();
+        a.spans.insert("src/a.rs".into(), spans);
+        a.cursor = 1;
+        a
+    }
+
+    /// Every row of the screen, as one string.
+    fn rows(term: &Terminal<TestBackend>) -> Vec<String> {
+        let buf = term.backend().buffer();
+        (0..buf.area.height)
+            .map(|y| {
+                (0..buf.area.width)
+                    .map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol()).to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_line_that_fits_is_not_cut() {
+        assert_eq!(cut_at("hello", 20), None);
+        assert_eq!(cut_at("hello", 5), None, "exactly is still fits");
+    }
+
+    #[test]
+    fn a_cut_lands_on_a_character_boundary() {
+        // slicing a string mid-character is a panic, not a display bug
+        let text = "日本語のコメントがここにある";
+        for cols in 0..30 {
+            if let Some(i) = cut_at(text, cols) {
+                assert!(text.is_char_boundary(i), "cut at {i} for {cols} columns");
+            }
+        }
+    }
+
+    #[test]
+    fn a_wide_character_is_not_half_drawn() {
+        // two columns each: three of them do not fit in five
+        assert_eq!(cut_at("漢漢漢", 5), Some("漢漢".len()));
+    }
+
+    #[test]
+    fn no_room_at_all_cuts_at_the_start() {
+        assert_eq!(cut_at("anything", 0), Some(0));
+    }
+
+    #[test]
+    fn a_long_line_never_reaches_the_queue_pane() {
+        // The bug this exists for: diff text drawn past its own pane lands on
+        // top of the queue, which is drawn before it.
+        for width in [150u16, 160, 170, 200, 240] {
+            let mut a = app();
+            let mut term = Terminal::new(TestBackend::new(width, 20)).unwrap();
+            term.draw(|f| draw(f, &mut a)).unwrap();
+
+            // the queue occupies the rightmost QUEUE_W columns
+            let queue_x = (width - QUEUE_W) as usize;
+            for (y, row) in rows(&term).iter().enumerate() {
+                let tail: String = row.chars().skip(queue_x).collect();
+                assert!(
+                    !tail.contains("MARKER"),
+                    "at width {width}, row {y} put diff text in the queue:\n  {}",
+                    row.trim_end()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_cut_line_says_it_was_cut() {
+        // Without a mark, a line that stops at the pane edge reads as a line
+        // that ends there — which is a different program's code.
+        let mut a = app();
+        let mut term = Terminal::new(TestBackend::new(160, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+
+        let cut = rows(&term)
+            .into_iter()
+            .find(|r| r.contains("MARKER"))
+            .expect("the long line should be on screen");
+        assert!(
+            cut.contains('…'),
+            "no ellipsis on a line that was cut:\n  {}",
+            cut.trim_end()
+        );
+    }
+
+    #[test]
+    fn the_panes_give_way_before_the_diff_does() {
+        // narrow enough that the side panes have to go
+        let mut a = app();
+        let mut term = Terminal::new(TestBackend::new(100, 20)).unwrap();
+        term.draw(|f| draw(f, &mut a)).unwrap();
+        let screen = rows(&term).join("\n");
+        assert!(
+            screen.contains("MARKER"),
+            "the diff is the point and should survive a narrow terminal"
+        );
+    }
 }
