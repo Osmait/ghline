@@ -12,8 +12,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ratatui::style::Color;
 
-use crate::data::{ReviewState, Status};
-
 const fn rgb(hex: u32) -> Color {
     Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
 }
@@ -562,43 +560,6 @@ pub fn lang(name: &str) -> Color {
     }
 }
 
-/// The design's `sc(status)`.
-pub fn state_color(status: Status) -> Color {
-    match status {
-        Status::Success | Status::Open => green(),
-        Status::Failure => red(),
-        Status::Running => yellow(),
-        Status::Pending | Status::Skipped => dimmer(),
-        Status::Cancelled | Status::Draft => dim(),
-        Status::Closed | Status::Merged => purple(),
-        Status::Unknown => fg(),
-    }
-}
-
-/// The design's `si(status)`.
-pub fn state_icon(status: Status) -> &'static str {
-    match status {
-        Status::Success => "✓",
-        Status::Failure => "✗",
-        Status::Running => "◐",
-        Status::Pending => "○",
-        Status::Skipped => "⊘",
-        Status::Cancelled => "⊗",
-        _ => "•",
-    }
-}
-
-/// Colour and glyph for a review state. This is the view's decision, which is
-/// why it lives here and not in the model.
-pub fn review(state: ReviewState) -> (Color, &'static str) {
-    match state {
-        ReviewState::Approved => (green(), "✓"),
-        ReviewState::ChangesRequested => (red(), "✗"),
-        ReviewState::Dismissed => (dim(), "⊘"),
-        ReviewState::Commented => (yellow(), "●"),
-    }
-}
-
 /// A label colour as it arrives from GitHub.
 pub fn label(rgb: (u8, u8, u8)) -> Color {
     Color::Rgb(rgb.0, rgb.1, rgb.2)
@@ -683,12 +644,14 @@ pub(crate) mod tests {
 
     #[test]
     fn the_derived_colours_follow_the_theme() {
+        // `lang` is the derived colour still here; the status mapping moved
+        // to `ui`, where the vocabulary it maps actually lives.
         let _g = LOCK.lock();
         set(Theme::Design);
-        let design = state_color(Status::Success);
+        let design = lang("Rust");
         set(Theme::Mocha);
-        assert_ne!(state_color(Status::Success), design);
-        assert_eq!(state_color(Status::Success), green());
+        assert_ne!(lang("Rust"), design);
+        assert_eq!(lang("Rust"), orange());
         set(Theme::Design);
     }
 

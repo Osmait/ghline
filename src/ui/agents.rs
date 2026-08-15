@@ -12,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use super::{fill, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
-use crate::data::AgentStatus;
+use crate::herdr::AgentStatus;
 use crate::theme;
 
 /// A colour per state, borrowed from the CI vocabulary because it means the
@@ -96,7 +96,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
-    let agents: Vec<crate::data::Agent> = app.agents_visible().into_iter().cloned().collect();
+    let agents: Vec<crate::herdr::Agent> = app.agents_visible().into_iter().cloned().collect();
 
     for (row, i) in (scroll..agents.len()).enumerate() {
         if row >= rows {

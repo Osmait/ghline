@@ -140,7 +140,7 @@ fn icon_for(it: &Item) -> &'static str {
             Status::Draft => "⑂",
             _ => "⇅",
         },
-        Kind::Run => theme::state_icon(it.state),
+        Kind::Run => super::state_icon(it.state),
     }
 }
 
@@ -268,7 +268,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             y,
             area.right(),
             icon_for(it),
-            base.fg(theme::state_color(status)),
+            base.fg(super::state_color(status)),
         );
         let text_x = area.x + 11;
         let num = format!("#{}", it.num);
@@ -283,11 +283,11 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
         // estado (derecha)
         let state_text = if it.kind() == Kind::Pr {
-            format!("{}  {} checks", it.state, theme::state_icon(it.checks()))
+            format!("{}  {} checks", it.state, super::state_icon(it.checks()))
         } else {
             it.state.to_string()
         };
-        let state_color = theme::state_color(if it.kind() == Kind::Pr {
+        let state_color = super::state_color(if it.kind() == Kind::Pr {
             it.checks()
         } else {
             status

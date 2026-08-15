@@ -22,7 +22,7 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 }
 
 fn state_badge(buf: &mut Buffer, x: u16, y: u16, max: u16, state: Status) -> u16 {
-    let color = theme::state_color(state);
+    let color = super::state_color(state);
     let base = Style::default().bg(theme::bg()).fg(color);
     let text = format!("[ {} ]", state.label().to_uppercase());
     put(buf, x, y, max, &text, base)
@@ -126,7 +126,7 @@ fn issue_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Vec<Vec<
     out.push(vec![
         (
             format!("[ {} ]", cur.state.label().to_uppercase()),
-            base.fg(theme::state_color(cur.state)),
+            base.fg(super::state_color(cur.state)),
         ),
         (format!("  #{}  ", cur.num), base.fg(theme::dimmer())),
         (
@@ -230,15 +230,15 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
         (
             format!(
                 "{} {} checks",
-                theme::state_icon(cur.checks()),
+                super::state_icon(cur.checks()),
                 cur.checks()
             ),
-            theme::state_color(cur.checks()),
+            super::state_color(cur.checks()),
         )
     } else {
         (
-            format!("{} {}", theme::state_icon(cur.state), cur.state),
-            theme::state_color(cur.state),
+            format!("{} {}", super::state_icon(cur.state), cur.state),
+            super::state_color(cur.state),
         )
     };
     put(buf, cx, y, max, &checks_label, base.fg(checks_color));
@@ -377,7 +377,7 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
         out.extend(skeleton_lines(width, &[34, 28], 9));
     }
     for r in cur.as_pr().into_iter().flat_map(|p| &p.reviews) {
-        let (color, icon) = theme::review(r.state);
+        let (color, icon) = super::review(r.state);
         out.push(vec![
             (format!("{icon} "), base.fg(color)),
             (format!("{} ", r.author), base.fg(theme::body())),
@@ -525,13 +525,13 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             };
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
-        let color = theme::state_color(j.status);
+        let color = super::state_color(j.status);
         put(
             buf,
             area.x + 2,
             y,
             area.right(),
-            theme::state_icon(j.status),
+            super::state_icon(j.status),
             base.fg(color),
         );
 

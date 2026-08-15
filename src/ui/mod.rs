@@ -397,6 +397,53 @@ fn draw_content(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 }
 
+// --- what a state looks like -------------------------------------------
+//
+// Here rather than in `theme` because these are decisions about GitHub's
+// vocabulary — a failing check is red, a merged pull request is purple —
+// and `theme` is shared with a program that has neither. It kept them, and
+// imported this program's `data` to do it.
+
+use crate::data::{ReviewState, Status};
+use ratatui::style::Color;
+
+/// The design's `sc(status)`.
+pub fn state_color(status: Status) -> Color {
+    match status {
+        Status::Success | Status::Open => theme::green(),
+        Status::Failure => theme::red(),
+        Status::Running => theme::yellow(),
+        Status::Pending | Status::Skipped => theme::dimmer(),
+        Status::Cancelled | Status::Draft => theme::dim(),
+        Status::Closed | Status::Merged => theme::purple(),
+        Status::Unknown => theme::fg(),
+    }
+}
+
+/// The design's `si(status)`.
+pub fn state_icon(status: Status) -> &'static str {
+    match status {
+        Status::Success => "✓",
+        Status::Failure => "✗",
+        Status::Running => "◐",
+        Status::Pending => "○",
+        Status::Skipped => "⊘",
+        Status::Cancelled => "⊗",
+        _ => "•",
+    }
+}
+
+/// Colour and glyph for a review state. This is the view's decision, which is
+/// why it lives here and not in the model.
+pub fn review(state: ReviewState) -> (Color, &'static str) {
+    match state {
+        ReviewState::Approved => (theme::green(), "✓"),
+        ReviewState::ChangesRequested => (theme::red(), "✗"),
+        ReviewState::Dismissed => (theme::dim(), "⊘"),
+        ReviewState::Commented => (theme::yellow(), "●"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

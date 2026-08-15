@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use super::app::{App, Dir, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
 use super::keys::{self, Action};
 use super::model::{Comment, Kind, State};
-use super::service::Request;
+use super::service::{Request, Write};
 
 /// Where on the screen a motion is aiming.
 ///
@@ -527,6 +527,17 @@ impl App {
         self.ask_send(agent.pane, text);
     }
 
+    /// Hands a write to the worker. Nothing in here touches a disk itself.
+    fn ask_write(&mut self, what: Write) {
+        if !self
+            .service
+            .as_ref()
+            .is_some_and(|s| s.send(Request::Write(what)))
+        {
+            self.flash("the worker is gone — nothing was written");
+        }
+    }
+
     /// Starts an agent for this repository and hands it the queue.
     ///
     /// The label names where it came from, so the workspace is recognisable in
@@ -709,14 +720,8 @@ impl App {
             "next scope" => self.step_scope(1),
             "prev scope" => self.step_scope(-1),
             "pick a theme" => self.open_themes(),
-            "write a keymap to start from" => match crate::diffline::keys::write_template() {
-                Ok(p) => self.flash(format!("wrote {}", p.display())),
-                Err(e) => self.flash(format!("could not write it: {e}")),
-            },
-            "write a theme to start from" => match crate::theme::write_template("mine") {
-                Ok(p) => self.flash(format!("wrote {}", p.display())),
-                Err(e) => self.flash(format!("could not write it: {e}")),
-            },
+            "write a keymap to start from" => self.ask_write(Write::KeymapTemplate),
+            "write a theme to start from" => self.ask_write(Write::ThemeTemplate("mine".into())),
             "split view" => {
                 self.split = !self.split;
                 self.hscroll = 0;
@@ -1014,12 +1019,11 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(t) = all.get(self.sel).copied() {
                         crate::theme::set(t);
-                        // Saved here rather than on exit: a theme you picked
-                        // and liked should survive a crash too.
-                        match crate::config::save_theme(t) {
-                            Ok(()) => self.flash(format!("theme → {}", t.name())),
-                            Err(e) => self.flash(format!("theme set, not saved: {e}")),
-                        }
+                        // Applied here and written on the worker: a theme you
+                        // picked and liked should survive a crash, but not at
+                        // the cost of a disk write between the key and the
+                        // frame that answers it.
+                        self.ask_write(Write::Theme(t));
                     }
                     self.modal = None;
                 }
@@ -1373,11 +1377,11 @@ mod tests {
     #[test]
     fn picking_a_running_agent_clears_a_pending_new_one() {
         let mut a = app();
-        a.agents = vec![crate::data::Agent {
+        a.agents = vec![crate::herdr::Agent {
             kind: "claude".into(),
             pane: "w:1".into(),
             cwd: "/tmp/r".into(),
-            status: crate::data::AgentStatus::Idle,
+            status: crate::herdr::AgentStatus::Idle,
             title: String::new(),
             focused: false,
         }];
@@ -1902,9 +1906,9 @@ mod tests {
     #[test]
     fn a_busy_agent_is_refused_with_its_reason() {
         let mut a = app();
-        a.agents = vec![crate::data::Agent {
+        a.agents = vec![crate::herdr::Agent {
             kind: "claude".into(),
-            status: crate::data::AgentStatus::Working,
+            status: crate::herdr::AgentStatus::Working,
             cwd: "/tmp/r".into(),
             pane: "wA:p1".into(),
             title: String::new(),

@@ -153,10 +153,10 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
             max,
             &format!(
                 "{} {} checks",
-                theme::state_icon(cur.checks()),
+                super::state_icon(cur.checks()),
                 cur.checks()
             ),
-            base.fg(theme::state_color(cur.checks())),
+            base.fg(super::state_color(cur.checks())),
         );
         let cx = put(buf, cx, y, max, "  ·  ", base.fg(theme::dimmer()));
         let cx = put(

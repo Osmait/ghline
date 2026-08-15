@@ -93,7 +93,7 @@ pub enum Pane {
 #[derive(Clone)]
 pub enum Dest {
     /// An agent already running, addressed by the pane it lives in.
-    Running(crate::data::Agent),
+    Running(crate::herdr::Agent),
     /// A new agent on a local clone.
     ///
     /// Either in a worktree branched off it, or in the checkout itself. The
@@ -306,7 +306,7 @@ pub struct App {
     pub detail_height: u16,
     /// Every agent herdr is running, and whether we have asked yet. Not keyed
     /// by repository: agents belong to the machine, not to a repo.
-    pub agents: Vec<crate::data::Agent>,
+    pub agents: Vec<crate::herdr::Agent>,
     pub agents_state: Load,
     /// A repository's file tree, keyed by `owner/repo`.
     pub trees: HashMap<String, Vec<crate::data::TreeEntry>>,

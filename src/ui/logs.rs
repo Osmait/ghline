@@ -132,8 +132,8 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             cx,
             y,
             area.right(),
-            theme::state_icon(n.status),
-            base.fg(theme::state_color(n.status)),
+            super::state_icon(n.status),
+            base.fg(super::state_color(n.status)),
         );
         cx = put(buf, cx, y, area.right(), " ", base);
 
@@ -187,8 +187,8 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.x + 1,
         area.y,
         area.right(),
-        theme::state_icon(status),
-        base.fg(theme::state_color(status)),
+        super::state_icon(status),
+        base.fg(super::state_color(status)),
     );
     cx = put(buf, cx, area.y, area.right(), " ", base);
     // the rightmost ~32 columns are reserved (follow + shortcut)
@@ -199,7 +199,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
         area.y,
         head_max,
         &name,
-        base.fg(theme::state_color(status)),
+        base.fg(super::state_color(status)),
     );
     cx = put(buf, cx, area.y, head_max, "  ", base);
     put_trunc(

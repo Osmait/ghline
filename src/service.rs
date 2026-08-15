@@ -117,7 +117,7 @@ pub enum Request {
 pub enum Response {
     Accounts(Result<Vec<Account>, Error>),
     Agents {
-        result: Result<Vec<crate::data::Agent>, Error>,
+        result: Result<Vec<crate::herdr::Agent>, Error>,
     },
     Dispatched {
         result: Result<(), Error>,

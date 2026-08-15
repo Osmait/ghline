@@ -146,8 +146,8 @@ pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             // the kind, so a mixed list stays readable
             let (mark, mark_color) = match hit.kind {
                 HitKind::Repo => ("▪", theme::cyan_soft()),
-                HitKind::Issue => ("◉", theme::state_color(hit.state)),
-                HitKind::Pr => ("⇅", theme::state_color(hit.state)),
+                HitKind::Issue => ("◉", super::state_color(hit.state)),
+                HitKind::Pr => ("⇅", super::state_color(hit.state)),
                 HitKind::Commit => ("◇", theme::purple()),
             };
             put(buf, list.x + 2, y, inner_right, mark, s.fg(mark_color));

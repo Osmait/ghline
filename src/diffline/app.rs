@@ -8,7 +8,7 @@ use crate::error::Error;
 
 use super::model::{Anchor, ChangedFile, Comment, Row, Scope, State};
 use super::service::{Request, Response, Service};
-use crate::data::Agent;
+use crate::herdr::Agent;
 
 /// Load state of one piece of data.
 #[derive(Clone, Debug, Default)]
@@ -613,6 +613,11 @@ impl App {
                 }
             },
 
+            Response::Wrote(result) => match result {
+                Ok(said) => self.flash(said),
+                Err(e) => self.flash(format!("could not write it: {e}")),
+            },
+
             Response::Sent(result) => {
                 self.busy = false;
                 match result {
@@ -943,7 +948,7 @@ mod tests {
         let mut a = app();
         a.agents = vec![Agent {
             kind: "claude".into(),
-            status: crate::data::AgentStatus::Idle,
+            status: crate::herdr::AgentStatus::Idle,
             cwd: "/tmp/x".into(),
             pane: "wA:p1".into(),
             title: String::new(),

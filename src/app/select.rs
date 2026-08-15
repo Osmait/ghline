@@ -303,7 +303,7 @@ impl App {
     /// the gathering row, all of them. Matched on the path ending in the
     /// repository's name, which is what a checkout looks like and also what a
     /// worktree of it looks like.
-    pub fn agents_visible(&self) -> Vec<&crate::data::Agent> {
+    pub fn agents_visible(&self) -> Vec<&crate::herdr::Agent> {
         let all = self.is_all();
         let name = self.repo_name().to_string();
         self.agents

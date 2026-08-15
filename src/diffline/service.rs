@@ -10,8 +10,8 @@ use std::thread;
 
 use super::git;
 use super::model::{ChangedFile, Row, Scope};
-use crate::data::Agent;
 use crate::error::{Error, Result as Res};
+use crate::herdr::Agent;
 
 pub enum Request {
     /// Which files a scope touches.
@@ -29,6 +29,12 @@ pub enum Request {
     Agents,
     /// Hand the queue to one of them.
     Send { pane: String, text: String },
+    /// Write a file: a config, a theme template, a keymap template.
+    ///
+    /// Small and local, but the render loop is the render loop — the only
+    /// reason to have this thread is that nothing which touches a disk or a
+    /// process should happen between a keystroke and the frame it draws.
+    Write(Write),
     /// Start one that is not running yet, in this repository, and hand it the
     /// queue. Everything the reader wants to say is already written by the
     /// time they decide who should hear it.
@@ -57,6 +63,16 @@ pub enum Response {
     },
     Agents(Res<Vec<Agent>>),
     Sent(Res<()>),
+    /// What the write did, in words, for the status bar.
+    Wrote(std::io::Result<String>),
+}
+
+/// The writes the interface can ask for.
+#[derive(Debug)]
+pub enum Write {
+    Theme(crate::theme::Theme),
+    ThemeTemplate(String),
+    KeymapTemplate,
 }
 
 /// The worker thread is not coming back.
@@ -151,6 +167,18 @@ fn handle(req: Request) -> Response {
         Request::Agents => Response::Agents(crate::herdr::agents()),
 
         Request::Send { pane, text } => Response::Sent(crate::herdr::prompt(&pane, &text)),
+
+        Request::Write(what) => Response::Wrote(match what {
+            Write::Theme(t) => {
+                crate::config::save_theme(t).map(|()| format!("theme → {}", t.name()))
+            }
+            Write::ThemeTemplate(name) => {
+                crate::theme::write_template(&name).map(|p| format!("wrote {}", p.display()))
+            }
+            Write::KeymapTemplate => {
+                super::keys::write_template().map(|p| format!("wrote {}", p.display()))
+            }
+        }),
 
         // `None` for the branch: the review is of what is in this checkout, so
         // a fresh worktree on a new branch would open the agent on a tree that
