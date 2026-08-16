@@ -25,6 +25,16 @@ pub const TAB: usize = 4;
 ///
 /// Returns the input untouched when there is nothing to do, which is the usual
 /// case — this runs over every line of every diff.
+///
+/// ```rust
+/// use github_tui::shared::text::expand_tabs;
+///
+/// // How far a tab moves depends on where it starts, which is the whole
+/// // reason a fixed-width replacement will not do.
+/// assert_eq!(expand_tabs("ab\tx"), "ab  x");
+/// assert_eq!(expand_tabs("abcd\tx"), "abcd    x");
+/// ```
+#[must_use]
 pub fn expand_tabs(text: &str) -> std::borrow::Cow<'_, str> {
     if !text.bytes().any(|b| (b < 0x20 && b != b'\n') || b == 0x7f) {
         return std::borrow::Cow::Borrowed(text);

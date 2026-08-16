@@ -9,11 +9,34 @@ use ratatui::layout::Rect;
 
 /// A percentage of the available width, so a skeleton keeps its proportions at
 /// any pane size.
+///
+/// The arithmetic goes through `u32` because the obvious `avail * p / 100`
+/// overflows at any width past 655 — a pane wider than that is unusual and a
+/// skeleton bar that wraps to nothing in it is not worth the surprise.
+///
+/// ```rust
+/// use github_tui::tui::geom::pct;
+///
+/// assert_eq!(pct(80, 25), 20);
+/// assert_eq!(pct(u16::MAX, 100), u16::MAX);
+/// ```
+#[must_use]
 pub fn pct(avail: u16, p: u16) -> u16 {
     (u32::from(avail) * u32::from(p) / 100) as u16
 }
 
 /// Keeps `sel` visible inside a window of `height` rows.
+///
+/// Moves `offset` as little as it can: a selection already on screen leaves it
+/// alone, so paging through a list does not jump the rows under the cursor.
+///
+/// ```rust
+/// use github_tui::tui::geom::scroll_into_view;
+///
+/// let mut offset = 0;
+/// scroll_into_view(&mut offset, 12, 5, 100);
+/// assert_eq!(offset, 8, "row 12 is the last of the five, not the first");
+/// ```
 pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usize) {
     if height == 0 {
         return;
@@ -38,6 +61,19 @@ pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usiz
 }
 
 /// Centred, never larger than what it is centred in.
+///
+/// `w` and `h` are what the modal would like; what comes back is what the
+/// terminal has. Asking for more than fits is the ordinary case, not an error
+/// — a help modal wants eighty columns and gets whatever the window is.
+///
+/// ```rust
+/// use github_tui::tui::geom::centered;
+/// use ratatui::layout::Rect;
+///
+/// let screen = Rect { x: 0, y: 0, width: 40, height: 10 };
+/// assert_eq!(centered(screen, 80, 30), screen, "asked for more than there is");
+/// ```
+#[must_use]
 pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
     inset(area, w, h, 0, 0)
 }
@@ -49,10 +85,25 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
 /// programs' copies of this function, which is to say it was an accident.
 /// Named, it is a choice: diffline's modals sit over a diff you are still
 /// reading, github-tui's cover a list you are done with.
+///
+/// The gutter is four columns and two rows, and it is taken off the room
+/// available rather than off the size asked for — so the two differ only where
+/// the request would have filled the screen.
+///
+/// ```rust
+/// use github_tui::tui::geom::{centered, centered_over};
+/// use ratatui::layout::Rect;
+///
+/// let screen = Rect { x: 0, y: 0, width: 80, height: 24 };
+/// assert_eq!(centered(screen, 100, 30).width, 80);
+/// assert_eq!(centered_over(screen, 100, 30).width, 76, "two columns each side");
+/// ```
+#[must_use]
 pub fn centered_over(area: Rect, w: u16, h: u16) -> Rect {
     inset(area, w, h, 4, 2)
 }
 
+#[must_use]
 fn inset(area: Rect, w: u16, h: u16, mx: u16, my: u16) -> Rect {
     let w = w.min(area.width.saturating_sub(mx));
     let h = h.min(area.height.saturating_sub(my));
