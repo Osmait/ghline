@@ -49,6 +49,10 @@ pub struct Immediate<Req, Res> {
 }
 
 impl<Req, Res> Immediate<Req, Res> {
+    /// A worker that answers every request by calling `handle`.
+    ///
+    /// `handle` runs on the thread that called `send`, before it returns, so
+    /// a test that sends and then polls is not racing anything.
     pub fn new(handle: impl Fn(Req) -> Res + 'static) -> Self {
         Self {
             handle: Box::new(handle),

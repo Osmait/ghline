@@ -31,6 +31,11 @@ pub fn apply_theme() {
     }
 }
 
+/// Writes the theme down for the next run.
+///
+/// The failure is returned rather than swallowed, and the caller shows it: a
+/// theme that could not be saved is still applied now, so forgetting silently
+/// would look like the setting had not been taken.
 pub fn save_theme(theme: Theme) -> io::Result<()> {
     store().set(THEME, theme.key())
 }
@@ -94,6 +99,11 @@ const AGENTS: &str = "agents";
 /// refusal is a better message than a guess at one.
 const DEFAULT_AGENTS: &str = "claude, codex, opencode, pi";
 
+/// The agent kinds to offer, in the order the setting lists them.
+///
+/// Order is the setting's, because the first one is what the picker lands on.
+/// Empty entries are dropped, so a trailing comma is a trailing comma rather
+/// than a nameless agent in the list.
 pub fn agent_kinds() -> Vec<String> {
     store()
         .get(AGENTS)

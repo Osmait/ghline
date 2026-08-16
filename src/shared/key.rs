@@ -16,22 +16,46 @@
 /// Deliberately smaller than the terminal's list: there is no `Insert` here
 /// because nothing is bound to it, and `Other` is what everything unmapped
 /// becomes rather than a variant per key nobody presses.
+///
+/// Each variant below is annotated with how it is written in the `<name>`
+/// notation `parse_keys` reads and `Press::spell` writes — the form a keymap
+/// file, a `--log` recording and a `--snapshot` script are all in. Several of
+/// the abbreviations are not guessable from the variant name, which is the
+/// only reason these lines are here.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
+    /// A character, already shifted by the terminal: `A` arrives as `A`, not
+    /// as shift plus `a`. Spells as itself, except `<` and `>`, which have to
+    /// be named so a chord over one does not eat its own bracket.
     Char(char),
+    /// `<enter>`.
     Enter,
+    /// `<esc>`.
     Esc,
+    /// `<tab>`.
     Tab,
+    /// `<btab>` — shift-tab, which terminals report as a key of its own
+    /// rather than as tab with a modifier.
     BackTab,
+    /// `<bs>`.
     Backspace,
+    /// `<del>` — forward delete, not backspace.
     Delete,
+    /// `<up>`.
     Up,
+    /// `<down>`.
     Down,
+    /// `<left>`.
     Left,
+    /// `<right>`.
     Right,
+    /// `<home>`.
     Home,
+    /// `<end>`.
     End,
+    /// `<pgup>`.
     PageUp,
+    /// `<pgdn>`.
     PageDown,
     /// Anything this program has no name for.
     Other,
@@ -44,12 +68,22 @@ pub enum Key {
 /// two ways to spell the same press and one of them would be wrong.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct Press {
+    /// Which key, with the modifiers lifted out into the two flags below.
     pub key: Key,
+    /// Control was held. A control chord is a command and never text, which
+    /// is the rule `typed` exists to enforce.
     pub ctrl: bool,
+    /// Alt — Meta on some keyboards — was held. Nothing is bound to an alt
+    /// chord today; it is carried because the terminal reports it, and a
+    /// modifier silently dropped would make `<a-x>` mean plain `x`.
     pub alt: bool,
 }
 
 impl Press {
+    /// A press with nothing held down.
+    ///
+    /// The common case by a wide margin, so it is the short name: most of a
+    /// keymap is bare letters.
     pub fn new(key: Key) -> Self {
         Self {
             key,
@@ -58,6 +92,10 @@ impl Press {
         }
     }
 
+    /// A press with control held down.
+    ///
+    /// There is no `alt` twin, because nothing is bound to an alt chord — the
+    /// struct literal is fine for the handful of tests that build one.
     pub fn ctrl(key: Key) -> Self {
         Self {
             key,
@@ -132,20 +170,40 @@ impl Press {
 }
 
 /// Which button.
+///
+/// All three are translated at the terminal edge, but only `Left` is bound:
+/// the others reach `--log` and nothing else. They are named rather than
+/// folded into `Left` so a recorded session says which button was pressed.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Button {
+    /// The primary button — every click either program acts on.
     Left,
+    /// Unbound. There is no context menu to open.
     Right,
+    /// Unbound. On many terminals this is the X11 paste, which the terminal
+    /// turns into typed characters before this layer sees anything.
     Middle,
 }
 
 /// What the mouse did.
+///
+/// Three of these are acted on — a left press and the two wheel directions.
+/// The rest arrive, are recorded by `--log`, and are ignored, which is the
+/// same reason `Moved` is spelt out below.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Motion {
+    /// A button went down. Both programs act on the press rather than the
+    /// release, so this is what selects.
     Down(Button),
+    /// A button came back up.
     Up(Button),
+    /// Moved with a button held. Nothing here supports a drag — no selection,
+    /// no resize handle — so this is `Up`'s neighbour in being reported only.
     Drag(Button),
+    /// One wheel notch away from the reader. Each program decides how many
+    /// rows a notch is worth; the event carries no magnitude.
     ScrollUp,
+    /// One wheel notch towards the reader.
     ScrollDown,
     /// The pointer moved with nothing pressed. Nothing here follows a
     /// pointer, so this exists to be ignored — but it is named rather than
@@ -155,10 +213,18 @@ pub enum Motion {
 }
 
 /// Where it happened, and what.
+///
+/// The position is in terminal cells, counted from zero at the top left of
+/// the whole screen — never from the corner of a pane. Turning that into
+/// "which row of which list" is the hit-testing each program does for itself,
+/// and doing it here would need this module to know what a pane is.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Mouse {
+    /// Cells from the left edge of the terminal.
     pub col: u16,
+    /// Cells from the top edge of the terminal.
     pub row: u16,
+    /// What the mouse did there.
     pub what: Motion,
 }
 

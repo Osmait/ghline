@@ -53,8 +53,15 @@ impl Checkouts for Disk {
 /// not depend on whose machine it is running on.
 #[derive(Default)]
 pub struct Told {
+    /// Handed back by `scan`, unchanged and in full — no root is consulted,
+    /// so an entry here can name a path that does not exist.
     pub index: Index,
+    /// Checkout root → branch name, answering `head_branch`. A root missing
+    /// from this map reads as a detached head, which is the same answer the
+    /// disk gives and the reason it is a map rather than a pair of vectors.
     pub branches: HashMap<String, String>,
+    /// Handed back by `roots`, and whose first entry is `clone_dir` — see the
+    /// override below for why that differs from `Disk`.
     pub roots: Vec<PathBuf>,
 }
 
