@@ -46,7 +46,9 @@ pub struct Span {
     pub from: usize,
     /// Byte offset one past the run's last byte, so `line[from..to]` is it.
     pub to: usize,
-    /// What the run is.
+    /// Which of the five classes the run is, and so which colour the view
+    /// gives it. Exactly one — runs do not overlap, so a keyword inside a
+    /// comment is part of the comment rather than a span of its own.
     pub kind: Kind,
 }
 

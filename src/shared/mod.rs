@@ -7,6 +7,15 @@
 //! `theme` reaching into it for a check status, `config` for the shape of a
 //! prompt — so the boundary is a directory now rather than a comment.
 
+// The same reasoning as the boundary above, one step further: code with two
+// callers is read by people who did not write it, and a field whose meaning
+// is guessed at from its name is how `Span::from` gets sliced as characters
+// once. Every item here carries a `///` today, and the lint is what keeps
+// the next one from not. Scoped to this directory and `tui` rather than set
+// crate-wide — the two programs are read by whoever is changing them, which
+// is a different job.
+#![warn(missing_docs)]
+
 pub mod ago;
 pub mod clones;
 pub mod config;
