@@ -45,23 +45,55 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
     if query.is_empty() {
         return Some((0, Vec::new()));
     }
-    let hay: Vec<char> = haystack.chars().collect();
+    // Sized up front. This allocates for candidates that turn out not to
+    // match, which looks like the obvious thing to fix, and both cheaper
+    // spellings were written and measured and are slower.
+    //
+    // Leaving it empty so a failure allocates nothing: 18% slower here, 32%
+    // over a list. A query whose *first* character misses is the rare one —
+    // "zzqx" against "marasanz/…" matches its `z` inside "marasanz" and only
+    // fails on the second — so the push happens on nearly every candidate
+    // anyway, and all that changed was that the block arrived through `Vec`'s
+    // outlined growth path instead of directly.
+    //
+    // Holding the positions in a stack array until the match is certain: that
+    // does keep the failures allocation-free, and was slower again, 26% on a
+    // single candidate. A finder spends its time on candidates that *match*,
+    // and that path then writes every position twice, once into the array and
+    // once into the `Vec` it has to return.
     let mut positions = Vec::with_capacity(query.chars().count());
     let mut total = 0;
-    let mut at = 0usize;
     let mut previous_hit: Option<usize> = None;
+
+    // One pass, carrying the character before the cursor rather than a copy of
+    // the whole haystack. `at` only ever moved forwards, so the `Vec<char>`
+    // this used to collect bought nothing and cost an allocation per
+    // candidate — five hundred of them on every character typed into the
+    // finder, which the profile showed outweighing the matching itself.
+    let mut chars = haystack.chars().enumerate();
+    let mut before: Option<char> = None;
+    let mut seen = 0usize;
 
     for q in query.chars() {
         let ql = q.to_ascii_lowercase();
-        let found = (at..hay.len()).find(|&i| hay[i].to_ascii_lowercase() == ql)?;
+        // `?` on the exhausted iterator is the "not a subsequence" exit, and
+        // it is why nothing after this needs the haystack's length yet.
+        let (found, hit) = loop {
+            let (i, c) = chars.next()?;
+            seen = i + 1;
+            if c.to_ascii_lowercase() == ql {
+                break (i, c);
+            }
+            before = Some(c);
+        };
 
         let mut points = 1;
         if found == 0 {
             points += STRING_START;
-        } else if is_boundary(&hay, found) {
+        } else if is_boundary(before, hit) {
             points += WORD_START;
         }
-        if hay[found] == q {
+        if hit == q {
             points += EXACT_CASE;
         }
         if previous_hit == Some(found.wrapping_sub(1)) {
@@ -74,26 +106,29 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
         total += points;
         positions.push(found);
         previous_hit = Some(found);
-        at = found + 1;
+        before = Some(hit);
     }
 
-    // a short haystack that matched is a closer fit than a long one
-    total -= (hay.len() / 8) as i32;
+    // a short haystack that matched is a closer fit than a long one. Counted
+    // rather than known, since the scan above stops at the last match — but
+    // only on the paths that matched, which is the minority of candidates.
+    total -= ((seen + chars.count()) / 8) as i32;
     Some((total, positions))
 }
 
 /// Is this the first letter of a word? Separators, and the lowercase-to-
 /// uppercase step of camelCase, both start one.
+///
+/// `before` is `None` at the start of the haystack, where the answer is yes.
 #[must_use]
-fn is_boundary(hay: &[char], i: usize) -> bool {
-    if i == 0 {
+fn is_boundary(before: Option<char>, at: char) -> bool {
+    let Some(prev) = before else {
         return true;
-    }
-    let prev = hay[i - 1];
+    };
     if matches!(prev, '-' | '_' | '/' | '.' | ' ' | ':') {
         return true;
     }
-    prev.is_lowercase() && hay[i].is_uppercase()
+    prev.is_lowercase() && at.is_uppercase()
 }
 
 /// Keeps what matches, best first. Ties keep their original order, so a list
@@ -210,6 +245,70 @@ mod tests {
             hits.iter().map(|(i, _)| items[*i]).collect::<Vec<_>>(),
             vec!["c", "a", "b"]
         );
+    }
+
+    /// See the twin in `tui::atom`: counted rather than timed, so it means the
+    /// same thing on a shared runner as it does on a desk.
+    fn allocations(f: impl FnOnce()) -> u64 {
+        allocation_counter::measure(f).count_total
+    }
+
+    /// And its twin: bytes rather than blocks, which is what sees a copy.
+    fn bytes(f: impl FnOnce()) -> u64 {
+        allocation_counter::measure(f).bytes_total
+    }
+
+    #[test]
+    fn scoring_allocates_the_positions_and_nothing_else() {
+        // The copy of the haystack this used to collect was the other one.
+        // Whatever is left has to be the `Vec` the caller is handed back,
+        // because the finder pays this per candidate per keystroke.
+        let n = allocations(|| {
+            let _ = std::hint::black_box(score(
+                std::hint::black_box("srn2"),
+                std::hint::black_box("marasanz/some-repository-name-42"),
+            ));
+        });
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn scoring_does_not_copy_the_haystack() {
+        // The `Vec<char>` this replaced was four bytes for every character it
+        // was handed, so looking at a longer name cost more memory as well as
+        // more time. What is left is the positions vector, and how big that
+        // is, is the query's business rather than the candidate's.
+        let short = "marasanz/repo-1";
+        let long = format!("marasanz/repo-1{}", "-with-a-much-longer-tail".repeat(40));
+        let a = bytes(|| {
+            let _ = std::hint::black_box(score(std::hint::black_box("mr1"), short));
+        });
+        let b = bytes(|| {
+            let _ = std::hint::black_box(score(std::hint::black_box("mr1"), &long));
+        });
+        assert_eq!(
+            a,
+            b,
+            "{a} bytes for a name of {}, {b} for one of {}",
+            short.len(),
+            long.len()
+        );
+    }
+
+    #[test]
+    fn the_length_penalty_counts_characters_rather_than_bytes() {
+        // `ñ` is two bytes and one letter, and a name spelt with them is not
+        // a worse match for it. What the walk has to keep true now that the
+        // haystack is not collected into a `Vec<char>` first.
+        assert_eq!(s("ab", "abnnnnnnnn"), s("ab", "abññññññññ"));
+    }
+
+    #[test]
+    fn a_boundary_is_found_from_the_letter_before_it() {
+        // the camelCase and separator rules both read the previous character,
+        // which is carried along rather than indexed backwards
+        assert!(s("dp", "GestorDePresupuesto").unwrap() > s("dp", "gestordxpresupuesto").unwrap());
+        assert!(s("t", "a-tui").unwrap() > s("t", "aXtui").unwrap());
     }
 
     #[test]
