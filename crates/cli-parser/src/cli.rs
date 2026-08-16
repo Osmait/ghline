@@ -81,17 +81,6 @@ where
             return self.finish(Vec::new(), 0);
         };
 
-        if let Some(outcome) = self.builtin(&first) {
-            return Ok(outcome);
-        }
-        if let Arg::Long { name, value } = &first
-            && let Some(mode) = self.args.iter().find(|argument| {
-                argument.long.as_deref() == Some(name) && matches!(argument.kind, Kind::Mode { .. })
-            })
-        {
-            return self.parse_mode(&mut parser, mode, value.clone());
-        }
-
         self.parse_options(&mut parser, first)
     }
 
@@ -126,15 +115,15 @@ where
                     }) else {
                         return Err(Error::unexpected(Arg::Long { name, value }));
                     };
-                    if matches!(spec.kind, Kind::Mode { .. }) {
-                        return Err(Error::unexpected(Arg::Long { name, value }));
-                    }
                     let label = format!("--{name}");
                     let values = match &spec.kind {
                         Kind::Flag if value.is_none() => Vec::new(),
                         Kind::Flag => return Err(Error::unexpected(Arg::Long { name, value })),
                         Kind::Option { .. } => vec![parser.value(label.clone(), value)?],
-                        Kind::Mode { .. } | Kind::Positional { .. } => {
+                        Kind::Mode { .. } => {
+                            return self.parse_mode(parser, spec, value, occurrences, position);
+                        }
+                        Kind::Positional { .. } => {
                             return Err(Error::unexpected(Arg::Long { name, value }));
                         }
                     };
@@ -177,7 +166,19 @@ where
         parser: &mut Parser,
         mode: &ArgSpec<I>,
         inline: Option<OsString>,
+        mut occurrences: Vec<Occurrence<I>>,
+        position: usize,
     ) -> Result<Outcome<I>, Error> {
+        if let Some(missing) = self
+            .positionals()
+            .nth(position)
+            .filter(|argument| positional_value(argument).is_some_and(|value| value.required))
+        {
+            return Err(Error::MissingValue {
+                argument: positional_name(missing),
+            });
+        }
+
         let Kind::Mode { values: schema } = &mode.kind else {
             return Err(Error::InvalidDefinition {
                 detail: "a non-mode reached mode parsing".into(),
@@ -199,12 +200,12 @@ where
             });
         }
 
-        Ok(Outcome::Matches(Matches {
-            occurrences: vec![Occurrence {
-                id: mode.id.clone(),
-                values,
-            }],
-        }))
+        let label = mode
+            .long
+            .as_deref()
+            .map_or_else(|| "mode".into(), |long| format!("--{long}"));
+        push_occurrence(&mut occurrences, mode, values, label)?;
+        Ok(Outcome::Matches(Matches { occurrences }))
     }
 
     fn finish(

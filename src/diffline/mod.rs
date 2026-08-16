@@ -10,6 +10,9 @@
 //!   `view`    drawing it, and nothing else: no file is opened and no process
 //!             is started from in there.
 //!
+//! `cli` sits at the process boundary rather than in that stack: it turns raw
+//! operating-system arguments into commands before a repository is opened.
+//!
 //! The arrows point one way: `view` reads `state`, `state` asks `source`,
 //! everything knows `model`, and `model` knows none of them.
 //!
@@ -42,6 +45,7 @@
 //! belongs here, but the file's shape is the keymap's, so the writer lives
 //! with what it writes.
 
+pub mod cli;
 pub mod model;
 
 pub mod source {

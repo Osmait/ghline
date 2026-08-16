@@ -90,11 +90,12 @@ fn help_is_generated_from_visible_definitions_only() {
 }
 
 #[test]
-fn a_mode_uses_its_own_positional_schema() {
-    let Ok(Outcome::Matches(matches)) = parse(&["--snapshot", "keys", "120"]) else {
+fn a_mode_uses_its_own_positional_schema_after_application_arguments() {
+    let Ok(Outcome::Matches(matches)) = parse(&["source", "--snapshot", "keys", "120"]) else {
         panic!("the mode should produce matches");
     };
 
+    assert_eq!(matches.value(&Id::Input), Some("source".as_ref()));
     assert_eq!(
         matches.values(&Id::Snapshot),
         Some([OsString::from("keys"), OsString::from("120")].as_slice())
