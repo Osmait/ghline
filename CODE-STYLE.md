@@ -144,11 +144,28 @@ not get it. `tui::geom`, `shared::fuzzy`, `shared::text` and `shared::ago`
 carry it today; the `is_*` predicates on `Status`, `Error` and `Failure` are
 the obvious next ones.
 
-**Reach for a newtype when two parameters of the same type are adjacent.**
-`fn f(x: usize, y: usize)` is a function whose arguments can be swapped
-silently. This crate has very few of these today and should not grow more; the
-existing ones (`scroll_into_view`, `inset`) are grandfathered and documented
-rather than converted.
+**Two adjacent parameters of the same type are two parameters that can be
+swapped silently.** `fn f(x: u16, y: u16)` compiles just as happily with the
+arguments the wrong way round. Where the pair is a point or a size, ratatui
+already has the type — use `Position` and `Size` rather than inventing a
+newtype for what a dependency has named.
+
+The mouse path is the case that mattered: `contains(col, row)` swapped is a
+hit test that is wrong only for non-square regions, which is to say wrong
+silently. It takes a `Position` now, and each program converts once, at the
+top of `on_mouse`, next to the field names that say which is which.
+`geom::inset` is the other: it took five `u16`s in a row, and now takes a
+`Rect` and two `Size`s.
+
+Not every pair is worth converting. `snapshot::frame(keys, width, height,
+ticks)` is an argument list, not a size, and wrapping it would be ceremony —
+the test would fail on the next golden frame anyway. The rule is about pairs
+that travel together and mean opposite axes, not about every `u16` with a
+neighbour.
+
+`scroll_into_view(offset, sel, height, len)` is the one left. Its four
+`usize`s are four different things rather than two pairs, so there is no type
+to reach for; it is pinned by five tests and a `debug_assert!` instead.
 
 ## Modules and visibility
 

@@ -1,7 +1,7 @@
 //! Writing a note.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::diffline::app::App;
@@ -10,7 +10,7 @@ use crate::tui::{centered_over as centered, fill, frame, put, put_right, put_tru
 
 pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &App) {
     let anchors = app.selected_anchors();
-    let m = centered(area, 72, 9);
+    let m = centered(area, Size::new(72, 9));
     frame(buf, m, theme::yellow());
     let base = Style::default().bg(theme::panel());
 

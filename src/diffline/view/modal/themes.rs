@@ -1,7 +1,7 @@
 //! Choosing a palette.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 
 use crate::diffline::app::App;
 use crate::diffline::hit::{Region, Target};
@@ -15,7 +15,10 @@ pub(crate) fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let body = Dialog::new("THEME")
         .hint("⏎ keep · esc undo")
         .accent(theme::cyan())
-        .size(60, (all.len() as u16 * 2 + 5).min(area.height - 2))
+        .size(Size::new(
+            60,
+            (all.len() as u16 * 2 + 5).min(area.height - 2),
+        ))
         .over_content()
         .open(buf, area);
 

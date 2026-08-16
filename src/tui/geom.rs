@@ -5,7 +5,7 @@
 //! arithmetic over `Rect` and `usize`, they are also the cheapest things here
 //! to test — no terminal, no fixture, just numbers in and numbers out.
 
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 
 /// A percentage of the available width, so a skeleton keeps its proportions at
 /// any pane size.
@@ -62,20 +62,20 @@ pub fn scroll_into_view(offset: &mut usize, sel: usize, height: usize, len: usiz
 
 /// Centred, never larger than what it is centred in.
 ///
-/// `w` and `h` are what the modal would like; what comes back is what the
-/// terminal has. Asking for more than fits is the ordinary case, not an error
-/// — a help modal wants eighty columns and gets whatever the window is.
+/// `want` is what the modal would like; what comes back is what the terminal
+/// has. Asking for more than fits is the ordinary case, not an error — a help
+/// modal wants eighty columns and gets whatever the window is.
 ///
 /// ```rust
 /// use github_tui::tui::geom::centered;
-/// use ratatui::layout::Rect;
+/// use ratatui::layout::{Rect, Size};
 ///
 /// let screen = Rect { x: 0, y: 0, width: 40, height: 10 };
-/// assert_eq!(centered(screen, 80, 30), screen, "asked for more than there is");
+/// assert_eq!(centered(screen, Size::new(80, 30)), screen, "asked for more than there is");
 /// ```
 #[must_use]
-pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
-    inset(area, w, h, 0, 0)
+pub fn centered(area: Rect, want: Size) -> Rect {
+    inset(area, want, Size::new(0, 0))
 }
 
 /// Centred with a gutter kept either side, so the thing underneath still
@@ -92,21 +92,25 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
 ///
 /// ```rust
 /// use github_tui::tui::geom::{centered, centered_over};
-/// use ratatui::layout::Rect;
+/// use ratatui::layout::{Rect, Size};
 ///
 /// let screen = Rect { x: 0, y: 0, width: 80, height: 24 };
-/// assert_eq!(centered(screen, 100, 30).width, 80);
-/// assert_eq!(centered_over(screen, 100, 30).width, 76, "two columns each side");
+/// let want = Size::new(100, 30);
+/// assert_eq!(centered(screen, want).width, 80);
+/// assert_eq!(centered_over(screen, want).width, 76, "two columns each side");
 /// ```
 #[must_use]
-pub fn centered_over(area: Rect, w: u16, h: u16) -> Rect {
-    inset(area, w, h, 4, 2)
+pub fn centered_over(area: Rect, want: Size) -> Rect {
+    inset(area, want, Size::new(4, 2))
 }
 
+/// Both pairs are `Size` rather than four `u16`s: this took five numbers in a
+/// row, of which the middle four were the same type and only their order said
+/// which was which.
 #[must_use]
-fn inset(area: Rect, w: u16, h: u16, mx: u16, my: u16) -> Rect {
-    let w = w.min(area.width.saturating_sub(mx));
-    let h = h.min(area.height.saturating_sub(my));
+fn inset(area: Rect, want: Size, gutter: Size) -> Rect {
+    let w = want.width.min(area.width.saturating_sub(gutter.width));
+    let h = want.height.min(area.height.saturating_sub(gutter.height));
     Rect {
         x: area.x + (area.width - w) / 2,
         y: area.y + (area.height - h) / 2,

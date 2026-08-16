@@ -53,10 +53,15 @@ impl<T: Copy> Region<T> {
 
     /// Whether this cell is inside the rectangle.
     ///
-    /// `col` and `row` are absolute terminal coordinates, as a mouse event
-    /// reports them — not offsets into the region.
-    pub fn contains(&self, col: u16, row: u16) -> bool {
-        self.area.contains(Position::new(col, row))
+    /// Absolute terminal coordinates, as a mouse event reports them — not
+    /// offsets into the region.
+    ///
+    /// A `Position` rather than two `u16`s because the two are the same type
+    /// and mean opposite axes: `contains(col, row)` compiles just as happily
+    /// with the arguments the wrong way round, and what it returns then is a
+    /// hit test that is wrong only for non-square regions.
+    pub fn contains(&self, at: Position) -> bool {
+        self.area.contains(at)
     }
 
     /// Which entry sits at this row, if any.
@@ -99,11 +104,12 @@ mod tests {
     #[test]
     fn a_point_outside_the_rectangle_is_not_in_it() {
         let r = region(1, 0, 50);
-        assert!(r.contains(10, 5), "the top left corner is inside");
-        assert!(r.contains(49, 14), "and so is the bottom right");
-        assert!(!r.contains(9, 5));
-        assert!(!r.contains(50, 5), "right is exclusive");
-        assert!(!r.contains(10, 15), "bottom is exclusive");
+        let at = Position::new;
+        assert!(r.contains(at(10, 5)), "the top left corner is inside");
+        assert!(r.contains(at(49, 14)), "and so is the bottom right");
+        assert!(!r.contains(at(9, 5)));
+        assert!(!r.contains(at(50, 5)), "right is exclusive");
+        assert!(!r.contains(at(10, 15)), "bottom is exclusive");
     }
 
     #[test]

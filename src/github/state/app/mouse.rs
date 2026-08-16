@@ -11,6 +11,8 @@
 
 use std::time::{Duration, Instant};
 
+use ratatui::layout::Position;
+
 use crate::shared::key::{Button, Motion, Mouse};
 
 use super::hit::{Region, Target};
@@ -33,10 +35,14 @@ impl App {
     /// The clock is a parameter so that double-click timing can be tested
     /// without a test having to wait out a real four hundred milliseconds.
     pub fn on_mouse_at(&mut self, ev: Mouse, now: Instant) {
+        // The one place the event's two `u16`s are read in order. Everything
+        // below takes the pair as a `Position`, so this is the only line that
+        // could put them the wrong way round.
+        let at = Position::new(ev.col, ev.row);
         match ev.what {
-            Motion::Down(Button::Left) => self.click(ev.col, ev.row, now),
-            Motion::ScrollUp => self.wheel(ev.col, ev.row, -WHEEL),
-            Motion::ScrollDown => self.wheel(ev.col, ev.row, WHEEL),
+            Motion::Down(Button::Left) => self.click(at, now),
+            Motion::ScrollUp => self.wheel(at, -WHEEL),
+            Motion::ScrollDown => self.wheel(at, WHEEL),
             _ => {}
         }
     }
@@ -45,12 +51,8 @@ impl App {
     ///
     /// Last drawn wins, which is what puts a modal in front of the panes it
     /// covers without either of them having to know about the other.
-    fn region_at(&self, col: u16, row: u16) -> Option<Region> {
-        self.hits
-            .iter()
-            .rev()
-            .find(|r| r.contains(col, row))
-            .copied()
+    fn region_at(&self, at: Position) -> Option<Region> {
+        self.hits.iter().rev().find(|r| r.contains(at)).copied()
     }
 
     /// Is something up that owns the input while it is there?
@@ -62,14 +64,14 @@ impl App {
             || self.dispatch_open
     }
 
-    fn click(&mut self, col: u16, row: u16, now: Instant) {
+    fn click(&mut self, at: Position, now: Instant) {
         // A confirmation is a question that wants a deliberate answer. A stray
         // click is not one, so it neither answers nor dismisses it.
         if self.prompt.is_some() {
             return;
         }
 
-        let region = self.region_at(col, row);
+        let region = self.region_at(at);
 
         // Clicking away from a modal closes it, on the same terms as `esc` —
         // which for the theme picker means putting back the theme it opened on.
@@ -84,8 +86,8 @@ impl App {
         }
 
         let Some(region) = region else { return };
-        let index = region.index_at(row);
-        let repeat = self.is_repeat_click(col, row, now);
+        let index = region.index_at(at.y);
+        let repeat = self.is_repeat_click(at, now);
 
         match region.target {
             Target::Tab(i) => self.pick_tab(i),
@@ -145,20 +147,20 @@ impl App {
     ///
     /// Position rather than entry, because a double click is a thing the hand
     /// does — two clicks that drifted onto different rows were two clicks.
-    fn is_repeat_click(&mut self, col: u16, row: u16, now: Instant) -> bool {
+    fn is_repeat_click(&mut self, at: Position, now: Instant) -> bool {
         let repeat = self
             .last_click
-            .is_some_and(|(c, r, at)| c == col && r == row && now.duration_since(at) <= DOUBLE);
+            .is_some_and(|(was, when)| was == at && now.duration_since(when) <= DOUBLE);
         // Cleared on a match so that three clicks are one double click and a
         // spare, not two overlapping ones.
-        self.last_click = if repeat { None } else { Some((col, row, now)) };
+        self.last_click = if repeat { None } else { Some((at, now)) };
         repeat
     }
 
     /// The wheel turns whatever is under the pointer, focused or not: reaching
     /// for it to read a pane is not a decision to work in that pane.
-    fn wheel(&mut self, col: u16, row: u16, d: i64) {
-        let Some(region) = self.region_at(col, row) else {
+    fn wheel(&mut self, at: Position, d: i64) {
+        let Some(region) = self.region_at(at) else {
             return;
         };
         match region.target {

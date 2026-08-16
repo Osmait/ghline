@@ -6,7 +6,7 @@
 //! one, the idle one".
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::{Modifier, Style};
 
 use crate::github::app::hit::{Region, Target};
@@ -41,7 +41,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     // `min` is what takes it away again on a screen too short to hold it, and
     // that is the one case the scrolling below is for.
     let height = (dests.len() as u16 * 2 + 11).min(area.height.saturating_sub(4));
-    let modal = centered(area, width, height);
+    let modal = centered(area, Size::new(width, height));
     frame(buf, modal, theme::cyan());
 
     let base = Style::default().bg(theme::panel());

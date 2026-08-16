@@ -5,7 +5,7 @@
 //! worth preserving.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::{Modifier, Style};
 
 use crate::github::app::App;
@@ -23,7 +23,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     let width = area.width.saturating_sub(8).min(96);
     let height = area.height.saturating_sub(4).min(28);
-    let modal = centered(area, width, height);
+    let modal = centered(area, Size::new(width, height));
     frame(buf, modal, theme::cyan());
     app.hits.push(Region::plain(Target::Finder, modal));
 

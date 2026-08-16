@@ -1,7 +1,7 @@
 //! The `:` command list.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 
 use crate::diffline::app::App;
 use crate::tui::theme;
@@ -12,7 +12,7 @@ pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &App) {
     let body = Dialog::new(":")
         .hint("⏎ run · esc")
         .accent(theme::purple())
-        .size(70, (hits.len() as u16 + 6).min(area.height - 2))
+        .size(Size::new(70, (hits.len() as u16 + 6).min(area.height - 2)))
         .over_content()
         .open(buf, area);
 

@@ -1,7 +1,7 @@
 //! The keymap, read off the keymap.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use super::super::parts::KEY_W;
@@ -16,7 +16,7 @@ use crate::tui::{centered_over as centered, frame, put, put_right, put_trunc, ru
 /// and being wrong about that is worse than not being there.
 pub(crate) fn help(buf: &mut Buffer, area: Rect, app: &App) {
     let rows = app.keys.listing();
-    let m = centered(area, 86, (rows.len() as u16).div_ceil(2) + 6);
+    let m = centered(area, Size::new(86, (rows.len() as u16).div_ceil(2) + 6));
     frame(buf, m, theme::yellow());
     let base = Style::default().bg(theme::panel());
     put(

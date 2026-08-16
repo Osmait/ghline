@@ -1,7 +1,7 @@
 //! Modals: the account picker (`a`) and the keybinding help (`?`).
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::github::app::App;
@@ -16,7 +16,7 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let rows = app.accounts.len() as u16 * 2;
-    let modal = centered(area, 66, rows + 7);
+    let modal = centered(area, Size::new(66, rows + 7));
     frame(buf, modal, theme::cyan());
 
     let base = Style::default().bg(theme::panel());
@@ -132,7 +132,7 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let body = Dialog::new("THEME")
         .hint("j/k previews · enter · esc")
         .accent(theme::purple())
-        .size(60, all.len() as u16 * 2 + 7)
+        .size(Size::new(60, all.len() as u16 * 2 + 7))
         .open(buf, area);
 
     // The box as a whole first, so a click on its chrome is absorbed rather
@@ -187,7 +187,7 @@ pub fn help(buf: &mut Buffer, area: Rect) {
     scrim(buf, area);
 
     let per_col = HELP.len().div_ceil(2) as u16;
-    let modal = centered(area, 79, per_col + 5);
+    let modal = centered(area, Size::new(79, per_col + 5));
     frame(buf, modal, theme::yellow());
 
     let base = Style::default().bg(theme::panel());

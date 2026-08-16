@@ -5,6 +5,8 @@
 //! how wide the tree ended up and which rows survived the scroll, and a
 //! second copy of that arithmetic would drift the first time a pane changed.
 
+use ratatui::layout::Position;
+
 use crate::shared::key::{Button, Motion, Mouse};
 
 use crate::diffline::app::{App, Pane};
@@ -12,27 +14,29 @@ use crate::diffline::hit::Target;
 
 impl App {
     pub fn on_mouse(&mut self, ev: Mouse) {
-        let (col, row) = (ev.col, ev.row);
+        // The one place the event's two `u16`s are read in order. Everything
+        // below takes the pair as a `Position`, so this line is the only one
+        // that could put them the wrong way round — and it is next to the
+        // field names that say which is which.
+        let at = Position::new(ev.col, ev.row);
         match ev.what {
-            Motion::Down(Button::Left) => self.click(col, row),
-            Motion::ScrollDown => self.wheel(col, row, 3),
-            Motion::ScrollUp => self.wheel(col, row, -3),
+            Motion::Down(Button::Left) => self.click(at),
+            Motion::ScrollDown => self.wheel(at, 3),
+            Motion::ScrollUp => self.wheel(at, -3),
             _ => {}
         }
     }
 
     /// Newest region first, which is what makes a modal shadow the pane it is
     /// drawn over without anything having to say so.
-    fn at(&self, col: u16, row: u16) -> Option<crate::diffline::hit::Region> {
-        self.hits
-            .iter()
-            .rev()
-            .find(|r| r.contains(col, row))
-            .copied()
+    fn region_at(&self, at: Position) -> Option<crate::diffline::hit::Region> {
+        self.hits.iter().rev().find(|r| r.contains(at)).copied()
     }
 
-    fn click(&mut self, col: u16, row: u16) {
-        let Some(hit) = self.at(col, row) else { return };
+    fn click(&mut self, at: Position) {
+        let Some(hit) = self.region_at(at) else {
+            return;
+        };
         match hit.target {
             Target::Scope(i) => {
                 if let Some(s) = self.scopes.get(i).cloned() {
@@ -42,7 +46,7 @@ impl App {
             }
             Target::QueueTab => self.toggle_queue_pane(),
             Target::Modal => {
-                if let Some(i) = hit.index_at(row) {
+                if let Some(i) = hit.index_at(at.y) {
                     self.sel = i;
                     self.accept_modal();
                 }
@@ -51,7 +55,7 @@ impl App {
                 // Going somewhere is what a click means; what it selects
                 // there depends on the pane.
                 self.pane = pane;
-                match (pane, hit.index_at(row)) {
+                match (pane, hit.index_at(at.y)) {
                     (Pane::Tree, Some(i)) => self.goto_file(i),
                     (Pane::Diff, Some(i)) => self.click_row(i),
                     (Pane::Queue, Some(i)) => self.queue_sel = i,
@@ -61,10 +65,12 @@ impl App {
         }
     }
 
-    fn wheel(&mut self, col: u16, row: u16, d: i64) {
+    fn wheel(&mut self, at: Position, d: i64) {
         // The wheel acts on what is under the pointer, without taking focus:
         // reading a pane you are not working in is a thing people do.
-        let Some(hit) = self.at(col, row) else { return };
+        let Some(hit) = self.region_at(at) else {
+            return;
+        };
         match hit.target {
             Target::Pane(Pane::Tree) => {
                 self.tree_scroll = (self.tree_scroll as i64 + d).max(0) as usize;
@@ -140,7 +146,10 @@ mod tests {
         ));
         a.hits
             .push(crate::diffline::hit::Region::plain(Target::Modal, area()));
-        assert_eq!(a.at(5, 5).map(|r| r.target), Some(Target::Modal));
+        assert_eq!(
+            a.region_at(Position::new(5, 5)).map(|r| r.target),
+            Some(Target::Modal)
+        );
     }
 
     #[test]

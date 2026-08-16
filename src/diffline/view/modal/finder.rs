@@ -1,7 +1,7 @@
 //! The fuzzy finder.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::diffline::app::{App, FinderTab};
@@ -15,8 +15,7 @@ use crate::tui::{
 pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
     let m = centered(
         area,
-        area.width.saturating_sub(8).min(120),
-        area.height * 3 / 4,
+        Size::new(area.width.saturating_sub(8).min(120), area.height * 3 / 4),
     );
     frame(buf, m, theme::yellow());
     let base = Style::default().bg(theme::panel());

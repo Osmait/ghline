@@ -1,7 +1,7 @@
 //! What else touches this file.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::diffline::app::App;
@@ -9,7 +9,7 @@ use crate::tui::theme;
 use crate::tui::{centered_over as centered, frame, put_trunc, rule};
 
 pub(crate) fn deps(buf: &mut Buffer, area: Rect, app: &App) {
-    let m = centered(area, 86, 14);
+    let m = centered(area, Size::new(86, 14));
     frame(buf, m, theme::cyan());
     let base = Style::default().bg(theme::panel());
     put_trunc(

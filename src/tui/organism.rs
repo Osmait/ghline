@@ -13,7 +13,7 @@
 //! organism.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::{Color, Modifier, Style};
 
 use super::atom::{fill, hline, put, put_right, put_trunc, scrim};
@@ -155,9 +155,9 @@ impl<'a> Dialog<'a> {
     /// than the terminal has gives a smaller box rather than one drawn off the
     /// edge. A box too short for its own four rows of chrome gets an empty
     /// body, not a body outside the frame — see `open`.
-    pub fn size(mut self, width: u16, height: u16) -> Self {
-        self.width = width;
-        self.height = height;
+    pub fn size(mut self, size: Size) -> Self {
+        self.width = size.width;
+        self.height = size.height;
         self
     }
 
@@ -185,10 +185,11 @@ impl<'a> Dialog<'a> {
         if self.scrim {
             scrim(buf, area);
         }
+        let want = Size::new(self.width, self.height);
         let outer = if self.over_content {
-            centered_over(area, self.width, self.height)
+            centered_over(area, want)
         } else {
-            centered(area, self.width, self.height)
+            centered(area, want)
         };
         let top = modal_head(buf, outer, self.title, self.hint, self.accent);
         let bottom = outer.bottom().saturating_sub(1 + self.footer);
@@ -615,7 +616,7 @@ mod tests {
     fn a_dialog_keeps_its_body_inside_its_frame() {
         let mut buf = buffer(40, 12);
         let b = Dialog::new("T")
-            .size(30, 8)
+            .size(Size::new(30, 8))
             .open(&mut buf, Rect::new(0, 0, 40, 12));
         assert!(b.inner.y > b.outer.y, "below the rule");
         assert!(b.inner.bottom() < b.outer.bottom(), "above the frame");
@@ -627,11 +628,11 @@ mod tests {
     fn a_footer_comes_out_of_the_body_rather_than_off_the_bottom() {
         let mut buf = buffer(40, 12);
         let plain = Dialog::new("T")
-            .size(30, 8)
+            .size(Size::new(30, 8))
             .open(&mut buf, Rect::new(0, 0, 40, 12));
         let mut buf = buffer(40, 12);
         let footed = Dialog::new("T")
-            .size(30, 8)
+            .size(Size::new(30, 8))
             .footer(2)
             .open(&mut buf, Rect::new(0, 0, 40, 12));
         assert_eq!(footed.outer, plain.outer, "the box is the same size");
@@ -644,7 +645,7 @@ mod tests {
     fn a_dialog_too_big_for_the_screen_is_cut_to_fit() {
         let mut buf = buffer(20, 6);
         let b = Dialog::new("T")
-            .size(200, 200)
+            .size(Size::new(200, 200))
             .open(&mut buf, Rect::new(0, 0, 20, 6));
         assert!(b.outer.width <= 20);
         assert!(b.outer.height <= 6);
@@ -654,7 +655,7 @@ mod tests {
     fn a_search_body_puts_its_rows_under_the_query_not_over_it() {
         let mut buf = buffer(40, 12);
         let b = Dialog::new("/")
-            .size(30, 10)
+            .size(Size::new(30, 10))
             .open(&mut buf, Rect::new(0, 0, 40, 12));
         let slots = b
             .query(&mut buf, "abc", "> ", "", false)
@@ -711,11 +712,14 @@ mod tests {
         let base = Rect::new(0, 0, 20, 6);
         let mut lit = buffer(20, 6);
         fill(&mut lit, base, theme::green());
-        Dialog::new("T").size(6, 3).open(&mut lit, base);
+        Dialog::new("T").size(Size::new(6, 3)).open(&mut lit, base);
 
         let mut dimmed = buffer(20, 6);
         fill(&mut dimmed, base, theme::green());
-        Dialog::new("T").size(6, 3).scrim().open(&mut dimmed, base);
+        Dialog::new("T")
+            .size(Size::new(6, 3))
+            .scrim()
+            .open(&mut dimmed, base);
 
         let corner = |b: &Buffer| b.cell((0u16, 0u16)).map(|c| c.bg);
         assert_ne!(

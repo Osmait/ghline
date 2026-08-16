@@ -418,7 +418,11 @@ pub struct App {
     /// arrives before a render simply does nothing.
     pub hits: Vec<Region>,
     /// Where and when the last click landed, for spotting a double click.
-    pub last_click: Option<(u16, u16, Instant)>,
+    ///
+    /// A `Position` rather than the two `u16`s it used to be: the pair was
+    /// destructured on one line and rebuilt on the next, which is two chances
+    /// to swap the axes for a field nothing else reads.
+    pub last_click: Option<(ratatui::layout::Position, Instant)>,
 }
 
 impl App {

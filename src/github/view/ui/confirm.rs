@@ -1,7 +1,7 @@
 //! Confirmation modal for merge, close / reopen and branch deletion.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::github::actions::Prompt;
@@ -46,7 +46,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     };
 
     let height = if is_merge { 12 } else { 7 };
-    let modal = centered(area, 68, height);
+    let modal = centered(area, Size::new(68, height));
     frame(buf, modal, accent);
 
     let base = Style::default().bg(theme::panel());
@@ -253,7 +253,7 @@ fn dispatch(buf: &mut Buffer, area: Rect, who: &str, text: &str) {
     const PREVIEW: usize = 14;
     let all = crate::tui::wrap(text, width.saturating_sub(6) as usize);
     let preview: Vec<String> = all.iter().take(PREVIEW).cloned().collect();
-    let modal = centered(area, width, preview.len() as u16 + 9);
+    let modal = centered(area, Size::new(width, preview.len() as u16 + 9));
     frame(buf, modal, accent);
 
     let base = Style::default().bg(theme::panel());

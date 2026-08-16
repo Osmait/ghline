@@ -1,7 +1,7 @@
 //! Choosing who the queue goes to.
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::Rect;
+use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::diffline::app::App;
@@ -14,7 +14,7 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
     let kinds = app.agent_choices().len() - app.agents.len();
     let rows = app.agents.len() as u16 * 2 + kinds as u16 + 1;
     let h = (rows + 6).min(area.height.saturating_sub(4));
-    let m = centered(area, 76, h.max(7));
+    let m = centered(area, Size::new(76, h.max(7)));
     frame(buf, m, theme::cyan());
     let base = Style::default().bg(theme::panel());
 
