@@ -221,11 +221,22 @@ jobs:
       - name: Oldest allowed dependencies
         run: cargo minimal-versions check --direct --all-targets
 
-  # Two checks that read files and run nothing, so they need no token at all.
+  # Two checks that read files and run nothing. `contents: read` is the whole
+  # of it, and it is there for the checkout rather than for either checker:
+  # this repository is private, so a job holding `permissions: {}` cannot
+  # clone it — GitHub answers a token with no rights the same way it answers
+  # a stranger, with "Repository not found". That is what this job did on
+  # every run between the commit that added it and this one, and the message
+  # is why it took a while to place: nothing in it mentions permissions.
+  #
+  # If the repository is ever made public, `{}` starts working again. Leave
+  # this as it is anyway — a job that only breaks when the repository is
+  # private is a worse trade than one read-only token.
   lint:
     name: spelling · workflows
     runs-on: ubuntu-latest
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
@@ -244,7 +255,8 @@ jobs:
       #
       # `advanced-security: false` prints the findings here instead of
       # uploading them to code scanning, which this repository does not have
-      # switched on. That is also why the job can hold no permissions.
+      # switched on. That is why the job needs nothing beyond the read above:
+      # neither checker writes anywhere.
       - name: Workflows
         uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
         with:
