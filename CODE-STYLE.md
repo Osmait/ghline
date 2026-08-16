@@ -261,6 +261,16 @@ There are around 617 of them. The conventions that got there:
   the code. `make flame` says which line inside one of them is the cost, and
   `make bench-cmp` is the before-and-after, with the noise check that says
   whether to believe it.
+- **Allocation tests** (`allocation-counter`, in `tui::atom` and
+  `shared::fuzzy`) are the half of performance that a gate can hold. Every
+  defect here has been a heap allocation on a path that did not need one, and
+  a count of them is the same number on a busy laptop as on a shared CI
+  runner — so unlike a benchmark, these run with the rest of the suite.
+  Assert the invariant rather than the number: *`put` reaches the allocator
+  not at all*, *padding costs the same at any width*, *a wider column does not
+  copy more*. `bytes_total` rather than `count_total` is what sees a routine
+  copying what it has already built. A new one earns its place by failing
+  against the code it was written for — all six here were checked that way.
 - **Architectural rules get a test.** The `shared` boundary is checked by
   reading the directory. That is unusual and it is correct: the rule was
   broken three times by people who had read the comment.

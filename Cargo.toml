@@ -111,6 +111,17 @@ divan = "0.1.21"
 # compare one string against another, and the rest of it is serde, yaml, ron,
 # toml and a glob walker for snapshotting things that are not strings.
 insta = { version = "1.48.0", default-features = false }
+# Counts what reaches the allocator — see the allocation tests in `tui::atom`
+# and `shared::fuzzy`. Every performance defect this crate has had was a heap
+# allocation on a path that did not need one, and a wall clock cannot be
+# asserted on: it varies by more on an idle laptop than the regressions worth
+# catching. A count does not vary at all, so these run in CI with the rest.
+#
+# The allocator it installs has to be written in `unsafe`, and `unsafe_code` is
+# `forbid` here — which cannot be lifted with an `allow`, deliberately. So the
+# unsafe lives in this crate rather than ours. It is dev-only and brings
+# nothing with it: zero dependencies of its own.
+allocation-counter = "0.8.1"
 # Properties — see tests/props.rs. The three parsers take input nobody here
 # wrote, and this generates the input nobody here thought of. Default features
 # off: the ones dropped fork a process per case to survive a segfault, which is
