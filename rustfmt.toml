@@ -1,0 +1,15 @@
+# Formatting, pinned rather than inherited.
+#
+# `rust-toolchain.toml` names an exact compiler so that a difference between
+# two machines is a finding rather than a version gap. This is the other half
+# of that: without it, `cargo fmt` uses whatever the current rustfmt's
+# defaults happen to be, and those move.
+#
+# Everything here is what the crate is already formatted as — adding the file
+# reformats nothing, it just stops the defaults changing underneath. Both are
+# stable options; nightly-only ones (`group_imports`, `imports_granularity`)
+# are deliberately absent, since rustfmt on the pinned toolchain would ignore
+# them with a warning and the grouping would go back to being a convention
+# nobody checks.
+edition = "2024"
+style_edition = "2024"

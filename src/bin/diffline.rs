@@ -74,7 +74,7 @@ fn main() -> io::Result<()> {
     // that base does not, and the last commit on its own.
     let mut scopes = vec![Scope::WorkingTree];
     if head != base {
-        scopes.push(Scope::Branch { base: base.clone() });
+        scopes.push(Scope::Branch { base });
     }
     scopes.push(Scope::Commit { sha: "HEAD".into() });
 
