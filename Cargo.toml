@@ -92,6 +92,12 @@ divan = "0.1.21"
 # compare one string against another, and the rest of it is serde, yaml, ron,
 # toml and a glob walker for snapshotting things that are not strings.
 insta = { version = "1.48.0", default-features = false }
+# Properties — see tests/props.rs. The three parsers take input nobody here
+# wrote, and this generates the input nobody here thought of. Default features
+# off: the ones dropped fork a process per case to survive a segfault, which is
+# a thing to want from C bindings and not from a lexer. It found an infinite
+# loop on its first run.
+proptest = { version = "1.11.0", default-features = false, features = ["std", "handle-panics"] }
 
 # `harness = false` because divan brings its own; without it, libtest runs
 # first and finds no `#[test]` to run.

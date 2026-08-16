@@ -217,18 +217,24 @@ pub fn parse_unified(text: &str) -> Vec<Row> {
             _ => continue,
         };
 
+        // Saturating rather than plain `+`: the counters start wherever the
+        // hunk header said, the hunk header is text, and text can say
+        // 4294967295. Two rows later that is an overflow — a panic in a debug
+        // build, and in a release build a row numbered 0 under a row numbered
+        // four billion. Both are worse than a column of stuck numbers on a
+        // diff no `git diff` would ever have produced.
         let (o, n) = match kind {
             Kind::Added => {
-                new += 1;
+                new = new.saturating_add(1);
                 (None, Some(new))
             }
             Kind::Deleted => {
-                old += 1;
+                old = old.saturating_add(1);
                 (Some(old), None)
             }
             _ => {
-                old += 1;
-                new += 1;
+                old = old.saturating_add(1);
+                new = new.saturating_add(1);
                 (Some(old), Some(new))
             }
         };
@@ -453,6 +459,22 @@ index e438487..1ec8869 100644
         let rows = parse_unified("@@ -1 +1 @@\n-a\n+b\n");
         let del = rows.iter().find(|r| r.kind == Kind::Deleted).unwrap();
         assert_eq!(del.old, Some(1));
+    }
+
+    /// A hunk header is text, and a `u32` counter that starts at what it says
+    /// runs out two rows later. That was an overflow: a panic where the whole
+    /// crate is linted against panicking, and in a release build a row
+    /// numbered zero below a row numbered four billion.
+    ///
+    /// No `git diff` produces this. The reason it is fixed rather than ruled
+    /// out is that `parse_unified` is public, takes a `&str`, and says nothing
+    /// about where the string came from.
+    #[test]
+    fn a_hunk_header_at_the_end_of_the_numbers_does_not_wrap() {
+        let rows = parse_unified("@@ -4294967295,3 +4294967295,3 @@\n a\n b\n c\n");
+        let last = rows.last().unwrap();
+        assert_eq!(last.old, Some(u32::MAX), "stuck, rather than back at zero");
+        assert_eq!(last.new, Some(u32::MAX));
     }
 
     // --- joining the two stat formats ---

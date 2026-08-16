@@ -754,6 +754,32 @@ INSTA_UPDATE=always cargo test --test frames   # accept without cargo-insta
 A golden is only worth what the look at it was worth. Accepting a frame you
 have not read turns a failing test into a passing one and nothing else.
 
+Both of those are examples: inputs somebody thought of. `tests/props.rs` is the
+other kind. Three things here parse input nobody in this repository wrote — the
+output of `git diff`, a line of source on its way to being coloured, a line on
+its way into cells — and what it asserts about them is what has to hold for
+every input rather than for a chosen one: that the pieces a line is wrapped
+into still spell the line, that an offset handed back can slice the string it
+came from, that a row's numbers only go forwards.
+
+```sh
+cargo test --test props                  # a few hundred generated cases each
+PROPTEST_CASES=10000 cargo test --test props    # a longer look
+```
+
+It earned its place on the first run, with two bugs the examples had missed.
+Colouring a line hung — forever, inside the draw, with no key that interrupts
+it — on any word starting with a letter that is not ASCII: `año`, `café`,
+`Ünicode`, `漢字`. The loop was entered on `is_alphabetic`, true of every letter
+there is, and left on `is_ascii_alphanumeric`, false of most of them. And a
+hunk header saying `@@ -4294967295 @@` overflowed the line counter two rows
+later, which is a panic in a debug build. Both are fixed, and both now have an
+ordinary named test next to the code as well.
+
+When a property fails, the input is shrunk to the smallest one that still fails
+and the seed is written to `tests/props.proptest-regressions`, which is
+committed — so the case is re-run first, for ever, by everyone.
+
 `make cov` says how much of the crate all of that actually executes — 72.7% of
 lines today, which CI holds a floor under rather than a target over. The total
 is the least useful line of it. The report is per file, and read that way it

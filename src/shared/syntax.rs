@@ -498,8 +498,18 @@ fn line(lang: &Lang, src: &str, state: &mut State) -> Vec<Span> {
                 }
                 if c.is_alphabetic() || c == '_' {
                     let start = i;
-                    while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
-                        i += 1;
+                    // By character, not by byte. `is_alphabetic` is true of
+                    // every letter there is, and this used to walk forwards
+                    // only over the ASCII ones — so a word starting with `é`,
+                    // `ñ` or `漢` entered the loop and then advanced by
+                    // nothing, for ever, with the whole program inside it.
+                    // Reading a file is what a terminal cannot be interrupted
+                    // out of.
+                    while let Some(ch) = src[i..].chars().next() {
+                        if !ch.is_alphanumeric() && ch != '_' {
+                            break;
+                        }
+                        i += ch.len_utf8();
                     }
                     let word = &src[start..i];
                     if lang.keywords.contains(&word) {
@@ -695,6 +705,26 @@ mod tests {
     fn a_capitalised_word_reads_as_a_type() {
         assert_eq!(spans(&RUST, "Vec"), vec![(Kind::Type, "Vec")]);
         assert!(spans(&RUST, "vec").is_empty(), "lowercase is ordinary");
+    }
+
+    /// The bug this is guarding against was not a wrong colour. Entering the
+    /// word loop took one test — `is_alphabetic`, true of every letter there
+    /// is — and leaving it took another, `is_ascii_alphanumeric`, which is
+    /// false of most of them. A line with `año` or `漢字` on it walked
+    /// forwards by nothing, for ever, inside the draw. There is no key that
+    /// interrupts that: the program stops answering and the terminal keeps
+    /// its screen.
+    ///
+    /// It survived this long because every fixture in this repository, and
+    /// most code anywhere, is ASCII outside its strings and comments — and a
+    /// string and a comment are both read by something else.
+    #[test]
+    fn a_word_that_is_not_ascii_is_still_a_word() {
+        assert_eq!(spans(&RUST, "año"), vec![]);
+        assert_eq!(spans(&RUST, "Año"), vec![(Kind::Type, "Año")]);
+        assert_eq!(spans(&RUST, "Ünicode"), vec![(Kind::Type, "Ünicode")]);
+        // and the word is taken whole, rather than one letter at a time
+        assert_eq!(spans(&RUST, "let café"), vec![(Kind::Keyword, "let")]);
     }
 
     #[test]
