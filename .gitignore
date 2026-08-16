@@ -1,1 +1,7 @@
 /target
+
+# Where coding agents put their scratch worktrees. Each one is a full
+# checkout with a `target/` of its own, so the directory reaches gigabytes
+# without anything in it being worth keeping — whatever an agent produced is
+# either merged or discarded by the time it is read.
+/.claude
