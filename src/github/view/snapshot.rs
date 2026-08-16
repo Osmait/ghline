@@ -149,11 +149,21 @@ pub fn demo(keys: &str, ticks: usize) -> App {
 ///
 /// What the golden tests in `tests/` compare against. The SVG below is the
 /// same frame for a human to look at; this is the one a diff can be read on.
-pub fn frame(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<String> {
+///
+/// No `Result`, because there is nothing here that can fail. ratatui 0.30 gave
+/// `Backend` an associated error type and `TestBackend`'s is `Infallible`:
+/// drawing into a buffer in memory has nowhere to go wrong, and the type says
+/// so now. The `io::Result` this used to return described a failure that could
+/// not happen, which is the kind of signature CODE-STYLE is against.
+///
+/// `let Ok(…) =` with no `else` is how an uninhabited error is discharged —
+/// the pattern is irrefutable precisely because the other variant cannot be
+/// constructed, so it costs nothing and panics nowhere.
+pub fn frame(keys: &str, width: u16, height: u16, ticks: usize) -> String {
     let mut app = demo(keys, ticks);
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| ui::draw(f, &mut app))?;
-    Ok(crate::tui::probe::screen(&term))
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| ui::draw(f, &mut app));
+    crate::tui::probe::screen(&term)
 }
 
 /// Render with real data: applies the keys, waiting on `gh` between each one.
@@ -171,22 +181,21 @@ fn build_live(keys: &str, ticks: usize) -> App {
     app
 }
 
-pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) {
     // A snapshot has to be the same frame on any machine, so it reads
     // nobody's config.
     let _ =
         crate::shared::settings::use_store(Box::new(crate::shared::settings::Memory::default()));
     let mut app = build_live(keys, ticks);
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| ui::draw(f, &mut app))?;
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| ui::draw(f, &mut app));
     print!("{}", to_svg(term.backend().buffer(), width, height));
-    Ok(())
 }
 
 #[cfg(feature = "demo")]
 /// Renders the demo with every pane held in its loading state, which is the
 /// only way to look at the skeletons without racing the network.
-pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::Result<()> {
+pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) {
     // A snapshot has to be the same frame on any machine, so it reads
     // nobody's config.
     let _ =
@@ -197,26 +206,24 @@ pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::
     }
     app.hold_loading(frame);
 
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| ui::draw(f, &mut app))?;
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| ui::draw(f, &mut app));
     print!("{}", to_svg(term.backend().buffer(), width, height));
-    Ok(())
 }
 
 #[cfg(feature = "demo")]
-pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) {
     let mut app = demo(keys, ticks);
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| ui::draw(f, &mut app))?;
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| ui::draw(f, &mut app));
     print!("{}", to_svg(term.backend().buffer(), width, height));
-    Ok(())
 }
 
 #[cfg(feature = "demo")]
-pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
+pub fn run(keys: &str, width: u16, height: u16, ticks: usize) {
     let mut app = demo(keys, ticks);
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| ui::draw(f, &mut app))?;
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| ui::draw(f, &mut app));
 
     let buf = term.backend().buffer();
     let mut out = String::new();
@@ -231,5 +238,4 @@ pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result
         out.push_str("\x1b[0m\n");
     }
     print!("{out}");
-    Ok(())
 }

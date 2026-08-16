@@ -320,13 +320,8 @@ mod github {
     /// fixture, which is not what a frame costs.
     fn draw_view(bencher: Bencher<'_, '_>, keys: &str) {
         let mut app = snapshot::demo(keys, 0);
-        let mut term = match ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44)) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("no terminal to draw into: {e}");
-                return;
-            }
-        };
+        // Infallible from ratatui 0.30 on, so there is no error arm to write.
+        let Ok(mut term) = ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44));
         bencher.bench_local(|| {
             let _ = term.draw(|f| ui::draw(f, &mut app));
         });
@@ -448,13 +443,8 @@ mod diffline {
 
     fn draw_view(bencher: Bencher<'_, '_>, keys: &str) {
         let mut app = snapshot::demo(keys);
-        let mut term = match ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44)) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("no terminal to draw into: {e}");
-                return;
-            }
-        };
+        // Infallible from ratatui 0.30 on, so there is no error arm to write.
+        let Ok(mut term) = ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44));
         bencher.bench_local(|| {
             let _ = term.draw(|f| view::draw(f, &mut app));
         });
