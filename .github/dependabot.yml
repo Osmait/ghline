@@ -7,6 +7,18 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # A week between a release existing and dependabot proposing it. The
+    # attack this is against is a compromised account publishing a version
+    # and a bot opening the pull request for it within the minute; a week is
+    # long enough that a yanked or withdrawn release is gone before it is
+    # ever offered. `cargo deny` refuses yanked crates, but only once they
+    # are in the lockfile, which is one step too late.
+    #
+    # Monthly scheduling already hides most of this. It is here because
+    # `interval` says when to look and `cooldown` says what is too new to
+    # take, and the two answer different questions.
+    cooldown:
+      default-days: 7
     # A pull request per crate for a tree this size is noise; ratatui and
     # crossterm move together anyway.
     groups:
@@ -17,3 +29,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # Same reasoning, and it bites harder here: these are pinned to a commit
+    # each, so what dependabot rewrites is the SHA a job runs.
+    cooldown:
+      default-days: 7

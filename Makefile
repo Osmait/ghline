@@ -73,11 +73,16 @@ lint: ## Formatting and lints, exactly as CI runs them
 # The last two are not cargo crates, and `uvx` runs them without installing
 # anything permanently — the same versions CI pins actions to. Everything
 # here is what the `deps` and `lint` jobs run.
+#
+# zizmor is pointed at `.github/` and not `.github/workflows/`, because that
+# is what the action does and `dependabot.yml` is the difference between the
+# two. Aimed at the narrower path this target passed while CI failed, which
+# is the one way a check like this can be worse than not having it.
 audit: ## Advisories, licences, sources, spelling and workflows
 	cargo machete
 	cargo deny --locked check
 	uvx typos
-	uvx zizmor --no-online-audits .github/workflows/
+	uvx zizmor --no-online-audits .github/
 
 fmt: ## Apply the formatter
 	cargo fmt --all
