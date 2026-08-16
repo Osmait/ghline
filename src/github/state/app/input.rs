@@ -5,8 +5,6 @@ use crate::shared::key::{Key, Press};
 
 use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::github::data::{Kind, TABS};
-#[cfg(feature = "demo")]
-use crate::github::demo;
 use crate::shared::nav::{Dir, Place};
 
 impl App {
@@ -211,10 +209,6 @@ impl App {
 
     /// `x`: opens the dispatch picker over the selected issue or PR.
     pub fn open_dispatch(&mut self) {
-        if !self.live() {
-            self.flash_warn("dispatching needs live mode — demo data has no issues to send");
-            return;
-        }
         // Whether there is anything to send is the subject's question, not the
         // item list's: standing in the file explorer there is no item at all.
         if self.dispatch_subject().is_none() {
@@ -528,7 +522,6 @@ impl App {
             Pane::Checks => self.check = i,
             Pane::Tree => {
                 self.tree_sel = i;
-                self.extra_lines = 0;
                 self.log_scroll = 0;
             }
             Pane::Files => {
@@ -595,7 +588,6 @@ impl App {
             Pane::Checks => {
                 self.view = View::Logs;
                 self.tree_sel = self.tree_index_for_job(self.check);
-                self.extra_lines = 0;
                 self.log_scroll = 0;
                 self.pane = Pane::Tree;
             }
@@ -912,7 +904,6 @@ impl App {
             Key::Char('f') => self.follow = !self.follow,
             Key::Char('r') => {
                 self.tick += 1;
-                self.extra_lines = 0;
                 self.refresh();
             }
             Key::Char(c @ '1'..='5') => {
@@ -989,13 +980,6 @@ impl App {
 
     /// 1400 ms heartbeat: advances the log stream like the design's `setInterval`.
     pub fn tick(&mut self) {
-        // Only the fixture has a stream to advance, and `extra_lines` is only
-        // read where it is drawn from. It used to count up in live mode too,
-        // bounded by the length of a fixture that was not being shown.
-        #[cfg(feature = "demo")]
-        if self.view == View::Logs && self.extra_lines < demo::STREAM.len() {
-            self.extra_lines += 1;
-        }
         if let Some(f) = &mut self.flash {
             f.ttl = f.ttl.saturating_sub(1);
             if f.ttl == 0 {

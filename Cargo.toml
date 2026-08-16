@@ -1,3 +1,8 @@
+[workspace]
+members = [".", "crates/cli-parser"]
+default-members = [".", "crates/cli-parser"]
+resolver = "3"
+
 [package]
 name = "github-tui"
 version = "0.1.0"
@@ -14,14 +19,11 @@ categories = ["command-line-utilities", "development-tools"]
 # syntax error an older compiler happens to reach first. Raise both together.
 rust-version = "1.96"
 
-# The design's fixture and the headless renders that draw it. Off by default,
-# so the binary somebody downloads carries neither. Turned on for the test
-# build by the dev-dependency on this crate below, which is how a feature is
-# said to be for tests and nothing else.
-[features]
-demo = []
+[lints]
+workspace = true
 
 [dependencies]
+cli-parser = { path = "crates/cli-parser" }
 crossterm = "0.29"
 ratatui = "0.30"
 ratatui-core = "0.1.2"
@@ -31,7 +33,7 @@ unicode-width = "0.2"
 
 # Lints kept deliberately narrow: the goal is to catch real defects, not to
 # fight the `as u16` casts that a cell-grid renderer is made of.
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
 # `pub` had drifted into meaning two different things: part of the crate's
@@ -46,12 +48,12 @@ unreachable_pub = "warn"
 # error. A link that names a moved item is a doc comment that lies, and it
 # lies silently: `cargo doc` is not something anybody runs before a push, so
 # CI runs it instead. All three of these are clean today.
-[lints.rustdoc]
+[workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
 private_intra_doc_links = "deny"
 missing_crate_level_docs = "deny"
 
-[lints.clippy]
+[workspace.lints.clippy]
 # Nothing panics: no `unwrap`, no `expect`, no bare `panic!`; tests opt out
 # locally. Invariants are written as `debug_assert!`, which is a deliberate
 # choice rather than the default one — a violated invariant here costs a
@@ -98,11 +100,6 @@ strip = true
 
 # Neither of these is compiled into anything that ships.
 [dev-dependencies]
-# This crate, depending on itself, purely to turn `demo` on while the tests
-# are built. Cargo unifies the features of a package with those its
-# dev-dependencies ask for, so `cargo test` compiles the fixture in and
-# `cargo build` does not.
-github-tui = { path = ".", features = ["demo"] }
 # The bench harness. divan rather than criterion: a tenth of the dependencies
 # for what is wanted here, which is four numbers and a comparison against the
 # last run.
@@ -127,7 +124,10 @@ allocation-counter = "0.8.1"
 # off: the ones dropped fork a process per case to survive a segfault, which is
 # a thing to want from C bindings and not from a lexer. It found an infinite
 # loop on its first run.
-proptest = { version = "1.11.0", default-features = false, features = ["std", "handle-panics"] }
+proptest = { version = "1.11.0", default-features = false, features = [
+  "std",
+  "handle-panics",
+] }
 
 # `harness = false` because divan brings its own; without it, libtest runs
 # first and finds no `#[test]` to run.

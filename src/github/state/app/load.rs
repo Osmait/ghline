@@ -57,10 +57,7 @@ impl App {
     /// Requests whatever the current view still needs. Idempotent: each piece
     /// is marked `Loading` before being asked for, so nothing is duplicated.
     pub fn ensure(&mut self) {
-        if self.worker_gone {
-            return;
-        }
-        if !self.live() {
+        if self.worker_gone || !self.has_worker() {
             return;
         }
 
@@ -231,7 +228,7 @@ impl App {
     /// changed since the last one. Called on a short beat from the main loop
     /// so that typing does not fire a request per keystroke.
     pub fn finder_tick(&mut self) {
-        if !self.finder_open || self.finder_source.is_local() || !self.live() {
+        if !self.finder_open || self.finder_source.is_local() || !self.has_worker() {
             return;
         }
         if self.finder_query == self.finder_sent {
@@ -288,7 +285,7 @@ impl App {
     /// heartbeat — but only while it is the tab being looked at, and never
     /// while an answer is still on its way.
     pub fn poll_agents(&mut self) {
-        if self.live()
+        if self.has_worker()
             && self.tab == crate::github::data::AGENTS_TAB
             && self.agents_state == Load::Ready
         {
@@ -298,7 +295,7 @@ impl App {
 
     /// `r`: drops the active repo's caches so `ensure` asks for them again.
     pub fn refresh(&mut self) {
-        if !self.live() {
+        if !self.has_worker() {
             return;
         }
         let key = self.repo_key();
@@ -419,8 +416,8 @@ impl App {
                     // The row that gathers them all goes first, and is where a
                     // session starts: with a hundred repositories, "what is
                     // going on" is a better opening question than "in which
-                    // one". Live only — the demo is the design's fixture and
-                    // has no cross-repository data to gather.
+                    // one". It is added as the repository list arrives, so a
+                    // fixture-seeded app never has one unless it builds it.
                     if !repos.is_empty() {
                         repos.insert(0, crate::github::data::Repo::all(&repos));
                     }

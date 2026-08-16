@@ -175,7 +175,7 @@ mod shared {
     }
 
     /// The keymap notation. Read when a binding is loaded, not per keystroke —
-    /// here because the tests and the demo drive the app through it, so it is
+    /// here because the tests drive the app through it, so it is
     /// on the path every snapshot pays.
     #[divan::bench]
     fn key_parse_keys() -> Vec<key::Press> {
@@ -313,13 +313,13 @@ mod github {
     use github_tui::github::{snapshot, ui};
     use github_tui::shared::key::{Key, Press};
 
-    /// One frame of the demo, drawn into an off-screen terminal at the size
+    /// One frame of the fixture, drawn into an off-screen terminal at the size
     /// the design was drawn at, for each of the screens a key can reach.
     ///
     /// The app is built once, outside the timer: building it parses the
     /// fixture, which is not what a frame costs.
     fn draw_view(bencher: Bencher<'_, '_>, keys: &str) {
-        let mut app = snapshot::demo(keys, 0);
+        let mut app = snapshot::seeded(keys, 0);
         // Infallible from ratatui 0.30 on, so there is no error arm to write.
         let Ok(mut term) = ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44));
         bencher.bench_local(|| {
@@ -371,7 +371,7 @@ mod github {
     /// at the bottom of it.
     #[divan::bench]
     fn on_key(bencher: Bencher<'_, '_>) {
-        let mut app = snapshot::demo("", 0);
+        let mut app = snapshot::seeded("", 0);
         let (down, up) = (Press::new(Key::Char('j')), Press::new(Key::Char('k')));
         bencher.bench_local(|| {
             app.on_key(black_box(down));
@@ -382,7 +382,7 @@ mod github {
     /// The 16ms timer, which is what animates a spinner and expires a toast.
     #[divan::bench]
     fn tick(bencher: Bencher<'_, '_>) {
-        let mut app = snapshot::demo("", 0);
+        let mut app = snapshot::seeded("", 0);
         bencher.bench_local(|| app.tick());
     }
 
@@ -442,7 +442,7 @@ mod diffline {
     use github_tui::shared::key::{Key, Press};
 
     fn draw_view(bencher: Bencher<'_, '_>, keys: &str) {
-        let mut app = snapshot::demo(keys);
+        let mut app = snapshot::seeded(keys);
         // Infallible from ratatui 0.30 on, so there is no error arm to write.
         let Ok(mut term) = ratatui::Terminal::new(ratatui::backend::TestBackend::new(160, 44));
         bencher.bench_local(|| {
@@ -471,7 +471,7 @@ mod diffline {
     /// The same two-keypress shape as github-tui's: down and back up.
     #[divan::bench]
     fn on_key(bencher: Bencher<'_, '_>) {
-        let mut app = snapshot::demo("");
+        let mut app = snapshot::seeded("");
         let (down, up) = (Press::new(Key::Char('j')), Press::new(Key::Char('k')));
         bencher.bench_local(|| {
             app.on_key(black_box(down));

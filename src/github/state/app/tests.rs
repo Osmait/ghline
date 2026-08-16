@@ -7,14 +7,43 @@ use crate::github::actions::Prompt;
 use crate::github::data::Status;
 use crate::shared::key::{Key, Press};
 
-fn demo() -> App {
-    App::new(Source::Demo, None)
+fn seeded() -> App {
+    crate::github::fixture::app()
+}
+
+/// A worker that answers nothing and keeps every request it was handed.
+///
+/// The actions used to have two paths — send to `gh`, or mutate the in-memory
+/// copy for the offline mode — and the tests took the second one because it was the
+/// one an `App` with no worker walked. There is only the first path now, so
+/// what a confirmation *does* is send a request, and this is what reads them
+/// back.
+#[derive(Default)]
+struct Recorder(std::cell::RefCell<Vec<Request>>);
+
+impl Worker<Request, Response> for std::rc::Rc<Recorder> {
+    fn send(&self, req: Request) -> bool {
+        self.0.borrow_mut().push(req);
+        true
+    }
+
+    fn poll(&self) -> Result<Option<Response>, crate::shared::worker::Gone> {
+        Ok(None)
+    }
+}
+
+/// A fixture-seeded `App` that records what it sends, and the tape.
+fn recording() -> (App, std::rc::Rc<Recorder>) {
+    let tape = std::rc::Rc::new(Recorder::default());
+    let mut app = seeded();
+    app.service = Some(Box::new(std::rc::Rc::clone(&tape)));
+    (app, tape)
 }
 
 /// The repository pane is hidden by default, so the tests that are about
 /// walking to it have to ask for it — as a reader would with `b`.
-fn demo_with_sidebar() -> App {
-    let mut app = demo();
+fn seeded_with_sidebar() -> App {
+    let mut app = seeded();
     app.sidebar = true;
     app.sidebar_shown = true;
     app
@@ -32,14 +61,14 @@ fn ch(app: &mut App, c: char) {
 
 #[test]
 fn each_view_exposes_its_own_panes() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::List]);
 
     // a PR has a checks pane; an issue does not
     press(&mut app, Key::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body, Pane::Checks]);
 
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     ch(&mut app, '1'); // issues tab
     press(&mut app, Key::Enter);
     assert_eq!(app.panes(), vec![Pane::Repos, Pane::Body]);
@@ -47,7 +76,7 @@ fn each_view_exposes_its_own_panes() {
 
 #[test]
 fn h_and_l_stop_at_the_edges() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     app.pane = Pane::Repos;
     ch(&mut app, 'h');
     assert_eq!(app.pane, Pane::Repos, "h at the leftmost pane stays put");
@@ -59,7 +88,7 @@ fn h_and_l_stop_at_the_edges() {
 
 #[test]
 fn tab_cycles_all_the_way_around() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     press(&mut app, Key::Enter); // PR detail: three panes
     app.pane = Pane::Repos;
     press(&mut app, Key::Tab);
@@ -74,7 +103,7 @@ fn tab_cycles_all_the_way_around() {
 
 #[test]
 fn enter_and_esc_walk_the_same_path_in_reverse() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     app.pane = Pane::Repos;
 
     press(&mut app, Key::Enter); // repos -> list
@@ -101,7 +130,7 @@ fn enter_and_esc_walk_the_same_path_in_reverse() {
 
 #[test]
 fn the_focused_pane_is_always_one_the_view_has() {
-    let mut app = demo();
+    let mut app = seeded();
     // land on the checks pane, then jump to the issues tab, which has none
     press(&mut app, Key::Enter);
     ch(&mut app, 'l');
@@ -114,7 +143,7 @@ fn the_focused_pane_is_always_one_the_view_has() {
 
 #[test]
 fn j_and_k_clamp_instead_of_wrapping() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     let last = app.visible().len() - 1;
     for _ in 0..50 {
@@ -129,7 +158,7 @@ fn j_and_k_clamp_instead_of_wrapping() {
 
 #[test]
 fn g_and_shift_g_reach_the_ends() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     ch(&mut app, 'G');
     assert_eq!(app.item, app.visible().len() - 1);
@@ -139,7 +168,7 @@ fn g_and_shift_g_reach_the_ends() {
 
 #[test]
 fn scrolling_the_log_by_hand_drops_follow_mode() {
-    let mut app = demo();
+    let mut app = seeded();
     app.view = View::Logs;
     app.pane = Pane::Log;
     assert!(app.follow);
@@ -149,7 +178,7 @@ fn scrolling_the_log_by_hand_drops_follow_mode() {
 
 #[test]
 fn moving_between_items_resets_the_body_scroll() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     app.detail_scroll = 42;
     ch(&mut app, 'j');
@@ -161,7 +190,7 @@ fn moving_between_items_resets_the_body_scroll() {
 #[test]
 fn an_app_with_no_accounts_does_not_panic() {
     // this is what live mode looks like before the first response lands
-    let app = App::new(Source::Live, None);
+    let app = App::new(None);
     assert_eq!(app.repo_idx(), 0);
     assert_eq!(app.login(), "—");
     assert_eq!(app.repo_name(), "—");
@@ -176,7 +205,7 @@ fn an_app_with_no_accounts_does_not_panic() {
 
 #[test]
 fn a_filter_that_matches_nothing_leaves_no_selection() {
-    let mut app = demo();
+    let mut app = seeded();
     app.filter = "zzzzzzzz".into();
     assert!(app.visible().is_empty());
     assert!(app.current().is_none());
@@ -191,7 +220,7 @@ fn a_filter_that_matches_nothing_leaves_no_selection() {
 
 #[test]
 fn navigating_an_empty_list_stays_at_zero() {
-    let mut app = demo();
+    let mut app = seeded();
     app.filter = "zzzzzzzz".into();
     app.pane = Pane::List;
     ch(&mut app, 'j');
@@ -203,10 +232,10 @@ fn navigating_an_empty_list_stays_at_zero() {
 
 #[test]
 fn merge_is_refused_for_everything_but_an_open_pr() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
 
-    // the draft PR of the demo data
+    // the draft PR of the fixture
     app.item = 3;
     assert_eq!(app.current().unwrap().state, Status::Draft);
     app.ask_merge();
@@ -220,67 +249,71 @@ fn merge_is_refused_for_everything_but_an_open_pr() {
 }
 
 #[test]
-fn a_merge_updates_the_pr_and_offers_the_branch() {
-    let mut app = demo();
+fn a_merge_asks_gh_rather_than_editing_the_list() {
+    let (mut app, tape) = recording();
     app.pane = Pane::List;
     app.item = 0;
-    let open_prs = app.repo().unwrap().prs;
+    let before = app.current().unwrap().state;
 
     app.ask_merge();
     assert!(matches!(app.prompt, Some(Prompt::Merge(0))));
     app.confirm();
 
-    let pr = app.current().unwrap();
-    assert_eq!(pr.state, Status::Merged);
-    assert_eq!(
-        pr.as_pr().and_then(|p| p.merged_with.as_deref()),
-        Some("merge commit")
+    let sent = tape.0.borrow();
+    assert!(
+        matches!(sent.first(), Some(Request::Merge { num, .. }) if *num == app.current().unwrap().num),
+        "the merge goes to the worker, addressed to the selected PR"
     );
-    assert_eq!(app.repo().unwrap().prs, open_prs - 1, "one less open PR");
-    // GitHub offers to delete the branch right after
-    assert!(matches!(app.prompt, Some(Prompt::DeleteBranch { .. })));
-
-    app.confirm();
-    assert!(app.current().unwrap().as_pr().unwrap().branch_deleted);
+    assert_eq!(
+        app.current().unwrap().state,
+        before,
+        "and the row does not change until GitHub says it did — a local guess \
+         is how a failed merge used to look like a successful one"
+    );
 }
 
 #[test]
-fn closing_and_reopening_a_pr_round_trips() {
-    let mut app = demo();
+fn closing_a_pr_asks_gh_to_close_it() {
+    let (mut app, tape) = recording();
     app.pane = Pane::List;
-    let open_prs = app.repo().unwrap().prs;
 
     app.ask_close();
+    assert!(matches!(app.prompt, Some(Prompt::Close)));
     app.confirm();
-    assert_eq!(app.current().unwrap().state, Status::Closed);
-    assert_eq!(app.repo().unwrap().prs, open_prs - 1);
 
-    app.ask_close(); // now it reopens
-    assert!(matches!(app.prompt, Some(Prompt::Reopen)));
-    app.confirm();
-    assert_eq!(app.current().unwrap().state, Status::Open);
-    assert_eq!(app.repo().unwrap().prs, open_prs);
+    assert!(matches!(
+        tape.0.borrow().first(),
+        Some(Request::Close { .. })
+    ));
 }
 
 #[test]
 fn the_branch_prompt_remembers_which_branch_it_asked_about() {
-    let mut app = demo();
+    let (mut app, tape) = recording();
     app.pane = Pane::List;
-    app.ask_merge();
+    // The prompt is raised directly: it normally arrives with the merge
+    // response, which is a round trip this test has no worker to make.
+    let cur = app.current().unwrap();
+    let (num, branch) = (cur.num, cur.branch().to_string());
+    assert!(!branch.is_empty(), "the fixture needs a branch to delete");
+    app.prompt = Some(Prompt::DeleteBranch {
+        num,
+        branch: branch.clone(),
+    });
+
+    // moving the selection must not change what gets deleted
+    app.item += 1;
     app.confirm();
 
-    let Some(Prompt::DeleteBranch { num, branch }) = app.prompt.clone() else {
-        panic!("expected a delete-branch prompt");
-    };
-    // moving the selection must not change what gets deleted
-    let expected = app.current().unwrap().num;
-    assert_eq!(num, expected);
-    assert!(!branch.is_empty());
+    assert!(
+        matches!(tape.0.borrow().first(), Some(Request::DeleteBranch { branch: b, .. }) if *b == branch),
+        "the branch the prompt carried, not the one now under the cursor"
+    );
 }
 
 #[test]
 fn a_branch_cannot_be_deleted_while_the_pr_is_open() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     app.ask_delete_branch();
     assert!(app.prompt.is_none());
@@ -288,7 +321,7 @@ fn a_branch_cannot_be_deleted_while_the_pr_is_open() {
 
 #[test]
 fn cancelling_a_prompt_changes_nothing() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     let before = app.current().unwrap().state;
     app.ask_merge();
@@ -301,7 +334,7 @@ fn cancelling_a_prompt_changes_nothing() {
 
 #[test]
 fn the_diff_only_opens_on_a_pull_request() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, '1'); // issues
     app.pane = Pane::List;
     ch(&mut app, 'd');
@@ -315,7 +348,7 @@ fn the_diff_only_opens_on_a_pull_request() {
 
 #[test]
 fn split_and_whitespace_toggles_only_bite_inside_the_diff() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     ch(&mut app, 's');
     assert!(!app.split, "s does nothing outside the diff view");
@@ -329,10 +362,10 @@ fn split_and_whitespace_toggles_only_bite_inside_the_diff() {
 
 #[test]
 fn a_file_with_no_hunks_yields_no_rows() {
-    let mut app = demo();
+    let mut app = seeded();
     app.pane = Pane::List;
     ch(&mut app, 'd');
-    // CHANGELOG.md is last in the demo data and has no textual changes
+    // CHANGELOG.md is last in the fixture and has no textual changes
     let last = app.diff_files().len() - 1;
     app.file_idx = last;
     assert_eq!(app.diff_file().unwrap().path, "CHANGELOG.md");
@@ -379,7 +412,7 @@ fn context_only_hunks_pass_through_untouched() {
 
 #[test]
 fn a_slash_filter_updates_as_you_type_and_esc_keeps_it() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, '/');
     for c in "clamp".chars() {
         ch(&mut app, c);
@@ -398,7 +431,7 @@ fn a_slash_filter_updates_as_you_type_and_esc_keeps_it() {
 
 #[test]
 fn unknown_commands_are_ignored_without_leaving_the_prompt_open() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, ':');
     for c in "nonsense".chars() {
         ch(&mut app, c);
@@ -412,7 +445,7 @@ fn unknown_commands_are_ignored_without_leaving_the_prompt_open() {
 #[test]
 fn commands_reach_every_view() {
     for (cmd, view) in [("issues", View::List), ("logs", View::Logs)] {
-        let mut app = demo();
+        let mut app = seeded();
         ch(&mut app, ':');
         for c in cmd.chars() {
             ch(&mut app, c);
@@ -426,7 +459,7 @@ fn commands_reach_every_view() {
 
 #[test]
 fn a_flash_fades_after_a_few_ticks() {
-    let mut app = demo();
+    let mut app = seeded();
     app.flash_ok("done");
     assert!(app.flash.is_some());
     for _ in 0..3 {
@@ -440,7 +473,7 @@ fn a_loading_list_draws_a_skeleton_rather_than_a_word() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    let mut app = demo();
+    let mut app = seeded();
     app.hold_loading(0);
 
     let mut term = Terminal::new(TestBackend::new(120, 30)).unwrap();
@@ -478,15 +511,15 @@ fn a_pending_body_draws_a_skeleton_but_a_loaded_one_does_not() {
             .count()
     };
 
-    // the demo fixture already carries a body, so a pending state must not
+    // the fixture already carries a body, so a pending state must not
     // paint over content that is already there
-    let mut loaded = demo();
+    let mut loaded = seeded();
     press(&mut loaded, Key::Enter);
     loaded.hold_loading(0);
     let with_body = blocks_on_screen(&mut loaded);
 
     // with the body emptied, the same pending state should show its shape
-    let mut empty = demo();
+    let mut empty = seeded();
     press(&mut empty, Key::Enter);
     let key = (empty.repo_key(), empty.tab);
     if let Some(items) = empty.lists.get_mut(&key) {
@@ -512,7 +545,7 @@ fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
     use crate::tui::theme::{Theme, current, set};
 
     set(Theme::Design);
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 't');
     assert!(app.themes_open);
     assert_eq!(current(), Theme::Design, "opening changes nothing yet");
@@ -532,7 +565,7 @@ fn enter_keeps_the_previewed_theme() {
     use crate::tui::theme::{Theme, current, set};
 
     set(Theme::Design);
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 't');
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
@@ -547,7 +580,7 @@ fn the_picker_does_not_run_off_either_end() {
     use crate::tui::theme::{Theme, set};
 
     set(Theme::Design);
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 't');
     for _ in 0..10 {
         ch(&mut app, 'j');
@@ -563,7 +596,7 @@ fn the_picker_does_not_run_off_either_end() {
 
 #[test]
 fn the_repository_pane_starts_hidden() {
-    let app = demo();
+    let app = seeded();
     assert!(!app.sidebar, "sixty repositories are a wall, not a default");
     assert!(!app.panes().contains(&Pane::Repos));
 }
@@ -574,7 +607,7 @@ fn the_picker_swallows_the_keys_beneath_it() {
     use crate::tui::theme::{Theme, set};
 
     set(Theme::Design);
-    let mut app = demo();
+    let mut app = seeded();
     let before = app.item;
     ch(&mut app, 't');
     ch(&mut app, 'j'); // moves the theme, not the list
@@ -587,7 +620,7 @@ fn the_picker_swallows_the_keys_beneath_it() {
 
 #[test]
 fn b_hides_the_repository_pane_and_the_panes_follow() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     assert!(app.panes().contains(&Pane::Repos));
 
     ch(&mut app, 'b');
@@ -605,7 +638,7 @@ fn b_hides_the_repository_pane_and_the_panes_follow() {
 
 #[test]
 fn hiding_the_sidebar_takes_the_focus_with_it() {
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     app.pane = Pane::Repos;
     ch(&mut app, 'b');
     assert_ne!(app.pane, Pane::Repos, "focus cannot stay on a hidden pane");
@@ -613,7 +646,7 @@ fn hiding_the_sidebar_takes_the_focus_with_it() {
 
 #[test]
 fn h_does_not_reach_a_hidden_sidebar() {
-    let mut app = demo();
+    let mut app = seeded();
     app.sidebar_shown = false;
     app.pane = Pane::List;
     ch(&mut app, 'h');
@@ -625,7 +658,7 @@ fn a_narrow_terminal_hides_it_whatever_was_asked_for() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    let mut app = demo_with_sidebar();
+    let mut app = seeded_with_sidebar();
     assert!(app.sidebar, "asked for");
 
     let mut term = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -643,7 +676,7 @@ fn the_logs_and_diff_views_never_show_it() {
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
-    let mut app = demo();
+    let mut app = seeded();
     press(&mut app, Key::Enter);
     ch(&mut app, 'l');
     press(&mut app, Key::Enter); // logs
@@ -656,7 +689,7 @@ fn the_logs_and_diff_views_never_show_it() {
 
 #[test]
 fn p_opens_the_finder_on_repositories() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 'p');
     assert!(app.finder_open);
     assert_eq!(app.finder_source, crate::github::data::Source::Repos);
@@ -669,7 +702,7 @@ fn p_opens_the_finder_on_repositories() {
 
 #[test]
 fn typing_filters_the_repositories_as_you_go() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 'p');
     for c in "tui".chars() {
         ch(&mut app, c);
@@ -685,7 +718,7 @@ fn typing_filters_the_repositories_as_you_go() {
 
 #[test]
 fn a_query_that_matches_nothing_leaves_an_empty_list() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 'p');
     for c in "zzzzz".chars() {
         ch(&mut app, c);
@@ -695,7 +728,7 @@ fn a_query_that_matches_nothing_leaves_an_empty_list() {
 
 #[test]
 fn enter_on_a_repository_goes_there() {
-    let mut app = demo();
+    let mut app = seeded();
     let target = app.repos()[4].name.clone();
     ch(&mut app, 'p');
     for c in target.chars().take(4) {
@@ -709,7 +742,7 @@ fn enter_on_a_repository_goes_there() {
 
 #[test]
 fn tab_walks_the_sources_and_keeps_the_query() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 'p');
     ch(&mut app, 'x');
     press(&mut app, Key::Tab);
@@ -727,7 +760,7 @@ fn tab_walks_the_sources_and_keeps_the_query() {
 
 #[test]
 fn the_selection_wraps_and_never_leaves_the_list() {
-    let mut app = demo();
+    let mut app = seeded();
     ch(&mut app, 'p');
     let len = app.finder_len();
     press(&mut app, Key::Up);
@@ -738,7 +771,7 @@ fn the_selection_wraps_and_never_leaves_the_list() {
 
 #[test]
 fn the_finder_swallows_the_keys_beneath_it() {
-    let mut app = demo();
+    let mut app = seeded();
     let before = app.item;
     ch(&mut app, 'p');
     ch(&mut app, 'j'); // a letter of the query, not a movement
@@ -752,7 +785,7 @@ fn the_finder_swallows_the_keys_beneath_it() {
 fn a_commit_search_waits_for_something_to_search_for() {
     // GitHub rejects a commit search made of qualifiers alone, so an empty
     // query must not be sent at all
-    let mut app = App::new(Source::Live, None);
+    let mut app = App::new(None);
     app.open_finder();
     app.finder_source = crate::github::data::Source::Commits;
     app.finder_sent = "\u{0}".into();
@@ -767,7 +800,7 @@ fn a_commit_search_waits_for_something_to_search_for() {
 
 #[test]
 fn brackets_step_through_the_repositories_and_wrap() {
-    let mut app = demo();
+    let mut app = seeded();
     let n = app.repos().len();
     let start = app.repo_idx();
 
@@ -784,7 +817,7 @@ fn brackets_step_through_the_repositories_and_wrap() {
 
 #[test]
 fn stepping_to_another_repository_resets_the_view() {
-    let mut app = demo();
+    let mut app = seeded();
     press(&mut app, Key::Enter); // into a detail
     app.item = 2;
     ch(&mut app, ']');
@@ -858,7 +891,7 @@ mod mouse {
 
     #[test]
     fn a_click_focuses_the_pane_it_landed_on() {
-        let mut app = demo_with_sidebar();
+        let mut app = seeded_with_sidebar();
         app.pane = Pane::List;
         render(&mut app);
 
@@ -868,7 +901,7 @@ mod mouse {
 
     #[test]
     fn a_click_selects_the_row_under_the_pointer() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         assert!(app.visible().len() > 2, "the fixture needs rows to click");
 
@@ -881,7 +914,7 @@ mod mouse {
         // A short terminal with the selection at the bottom is what actually
         // scrolls a list; setting the offset by hand would just be undone by
         // the next frame, which is the render's job.
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         let last = app.visible().len() - 1;
         app.item = last;
@@ -897,7 +930,7 @@ mod mouse {
 
     #[test]
     fn a_click_on_the_blank_space_below_the_rows_keeps_the_selection() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         app.item = 1;
 
@@ -910,7 +943,7 @@ mod mouse {
 
     #[test]
     fn selecting_a_repository_by_click_resets_the_list_under_it() {
-        let mut app = demo_with_sidebar();
+        let mut app = seeded_with_sidebar();
         app.item = 3;
         app.item_scroll = 3;
         render(&mut app);
@@ -923,7 +956,7 @@ mod mouse {
 
     #[test]
     fn a_click_before_the_first_frame_does_nothing() {
-        let mut app = demo();
+        let mut app = seeded();
         let before = app.pane;
         click_at(&mut app, 10, 10);
         assert_eq!(app.pane, before, "there are no regions yet");
@@ -933,7 +966,7 @@ mod mouse {
 
     #[test]
     fn a_double_click_opens_what_it_selected() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         let r = region(&app, Target::Pane(Pane::List));
         let (col, row) = (r.area.x + 1, r.area.y);
@@ -949,7 +982,7 @@ mod mouse {
 
     #[test]
     fn two_slow_clicks_are_two_clicks() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         let r = region(&app, Target::Pane(Pane::List));
         let (col, row) = (r.area.x + 1, r.area.y);
@@ -963,7 +996,7 @@ mod mouse {
 
     #[test]
     fn two_clicks_on_different_rows_are_not_a_double_click() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         if app.visible().len() < 2 {
             return;
@@ -983,7 +1016,7 @@ mod mouse {
 
     #[test]
     fn a_third_click_does_not_open_a_second_time() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         let r = region(&app, Target::Pane(Pane::List));
         let (col, row) = (r.area.x + 1, r.area.y);
@@ -1001,7 +1034,7 @@ mod mouse {
 
     #[test]
     fn the_wheel_moves_the_pane_under_the_pointer() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         if app.visible().len() < 4 {
             return;
@@ -1016,7 +1049,7 @@ mod mouse {
 
     #[test]
     fn the_wheel_does_not_steal_the_focus() {
-        let mut app = demo_with_sidebar();
+        let mut app = seeded_with_sidebar();
         app.pane = Pane::List;
         render(&mut app);
 
@@ -1028,7 +1061,7 @@ mod mouse {
 
     #[test]
     fn the_wheel_stops_at_the_end_rather_than_wrapping() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         let r = region(&app, Target::Pane(Pane::List));
         let last = app.visible().len() - 1;
@@ -1043,7 +1076,7 @@ mod mouse {
 
     #[test]
     fn clicking_a_tab_switches_to_it() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
 
         let r = region(&app, Target::Tab(1));
@@ -1057,7 +1090,7 @@ mod mouse {
 
     #[test]
     fn a_click_on_a_finder_row_selects_it() {
-        let mut app = demo();
+        let mut app = seeded();
         app.open_finder();
         render(&mut app);
         if app.finder_len() < 3 {
@@ -1071,7 +1104,7 @@ mod mouse {
 
     #[test]
     fn a_click_outside_a_modal_closes_it() {
-        let mut app = demo();
+        let mut app = seeded();
         app.open_finder();
         render(&mut app);
 
@@ -1081,7 +1114,7 @@ mod mouse {
 
     #[test]
     fn a_click_inside_a_modal_but_off_its_rows_changes_nothing() {
-        let mut app = demo();
+        let mut app = seeded();
         app.open_finder();
         render(&mut app);
         let before = app.finder_sel;
@@ -1094,7 +1127,7 @@ mod mouse {
 
     #[test]
     fn a_modal_shadows_the_panes_behind_it() {
-        let mut app = demo();
+        let mut app = seeded();
         app.open_finder();
         render(&mut app);
         let before = app.item;
@@ -1107,7 +1140,7 @@ mod mouse {
 
     #[test]
     fn clicking_a_theme_previews_it_the_way_moving_to_it_does() {
-        let mut app = demo();
+        let mut app = seeded();
         app.open_themes();
         render(&mut app);
 
@@ -1126,7 +1159,7 @@ mod mouse {
 
     #[test]
     fn a_click_cannot_answer_a_confirmation() {
-        let mut app = demo();
+        let mut app = seeded();
         render(&mut app);
         app.prompt = Some(Prompt::Close);
 
@@ -1139,7 +1172,7 @@ mod mouse {
         // a pane the renderer forgot to register is a pane the mouse cannot
         // reach, and nothing else would notice
         for view in [View::List, View::Detail, View::Logs, View::Diff] {
-            let mut app = demo_with_sidebar();
+            let mut app = seeded_with_sidebar();
             app.view = view;
             render(&mut app);
             for pane in app.panes() {
@@ -1163,9 +1196,9 @@ mod all_repos {
     use super::*;
     use crate::github::data::Repo;
 
-    /// The demo with a gathering row in front, as live mode builds it.
+    /// The fixture with a gathering row in front, as a live list builds it.
     fn gathered() -> App {
-        let mut app = demo();
+        let mut app = seeded();
         if let Some(a) = app.accounts.get_mut(app.acc) {
             a.repos.insert(0, Repo::all(&a.repos));
         }
@@ -1178,9 +1211,9 @@ mod all_repos {
     fn stamp(app: &mut App, repo: &str) {
         let key = (app.repo_key(), app.tab);
         let mut items = if app.tab == 1 {
-            demo::prs(0)
+            crate::github::fixture::prs(0)
         } else {
-            demo::issues(0)
+            crate::github::fixture::issues(0)
         };
         for it in &mut items {
             it.repo = repo.to_string();
@@ -1225,7 +1258,7 @@ mod all_repos {
     #[test]
     fn an_item_with_no_repository_of_its_own_belongs_to_the_pane() {
         // every single-repository list, which is to say almost all of them
-        let app = demo();
+        let app = seeded();
         assert_eq!(app.item_repo_key(), app.repo_key());
     }
 
@@ -1316,7 +1349,7 @@ mod all_repos {
         app.tab = 1;
         let key = (app.repo_key(), 1);
 
-        let mut a = demo::prs(0).remove(0);
+        let mut a = crate::github::fixture::prs(0).remove(0);
         a.num = 14;
         a.repo = format!("{}/sbql", app.login());
         a.body = String::new();
@@ -1339,7 +1372,7 @@ mod all_repos {
     fn an_answer_still_reaches_a_plain_single_repository_list() {
         use crate::github::service::Response;
 
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = 1;
         let key = (app.repo_key(), 1);
         let num = app.lists[&key][0].num;
@@ -1375,7 +1408,7 @@ mod dispatch {
     }
 
     fn with(agents: Vec<Agent>) -> App {
-        let mut app = demo();
+        let mut app = seeded();
         app.agents = agents;
         app
     }
@@ -1705,7 +1738,7 @@ mod dispatch {
     fn the_subject_follows_the_tab_in_the_list() {
         use crate::github::subject::Subject;
         for (tab, want) in [(0, Subject::Issue), (1, Subject::Pr), (2, Subject::Run)] {
-            let mut app = demo();
+            let mut app = seeded();
             app.tab = tab;
             app.view = View::List;
             assert_eq!(app.dispatch_subject(), Some(want), "tab {tab}");
@@ -1715,7 +1748,7 @@ mod dispatch {
     #[test]
     fn standing_in_a_log_sends_the_log_whatever_the_tab_says() {
         use crate::github::subject::Subject;
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = 1; // a pull request's checks lead here too
         app.view = View::Logs;
         assert_eq!(app.dispatch_subject(), Some(Subject::Run));
@@ -1724,7 +1757,7 @@ mod dispatch {
     #[test]
     fn standing_in_a_diff_sends_that_file() {
         use crate::github::subject::Subject;
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = 1;
         app.view = View::Diff;
         assert_eq!(app.dispatch_subject(), Some(Subject::FileDiff));
@@ -1733,7 +1766,7 @@ mod dispatch {
     #[test]
     fn a_pull_request_carries_its_files_not_only_its_body() {
         use crate::github::subject::Subject;
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = 1;
         app.view = View::Detail;
 
@@ -1747,7 +1780,7 @@ mod dispatch {
     #[test]
     fn a_run_carries_the_job_its_log_came_from() {
         use crate::github::subject::Subject;
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = 2;
         app.view = View::Logs;
 
@@ -1766,14 +1799,6 @@ mod dispatch {
         assert!(issue.starts_with("Work on"));
         assert!(run.starts_with("Diagnose"));
         assert_ne!(issue, run, "the first line is what an agent leans on");
-    }
-
-    #[test]
-    fn the_picker_does_not_open_on_demo_data() {
-        let mut app = demo();
-        app.open_dispatch();
-        assert!(!app.dispatch_open);
-        assert!(app.flash.is_some(), "and it says why");
     }
 }
 
@@ -1808,7 +1833,7 @@ mod explorer {
     }
 
     fn with_tree() -> App {
-        let mut app = demo();
+        let mut app = seeded();
         app.tab = crate::github::data::FILES_TAB;
         app.view = View::List;
         let key = app.repo_key();
@@ -1970,7 +1995,6 @@ mod explorer {
     #[test]
     fn the_picker_refuses_to_open_over_a_directory() {
         let mut app = with_tree();
-        app.source = Source::Live;
         app.fs_sel = 1;
         app.open_dispatch();
         assert!(!app.dispatch_open);
@@ -1992,8 +2016,7 @@ mod editing {
 
     /// A repository whose checkout really exists, so the path checks are real.
     fn at_file(rel: &str) -> App {
-        let mut app = demo();
-        app.source = Source::Live;
+        let mut app = seeded();
         app.tab = crate::github::data::FILES_TAB;
         app.view = View::List;
         app.pane = Pane::FileTree;
@@ -2198,8 +2221,7 @@ mod residue {
     /// Two files: one with lines that reach the right edge, one with short
     /// ones. Switching between them is what exposes an unpainted cell.
     fn app_with_files() -> App {
-        let mut app = demo();
-        app.source = Source::Live;
+        let mut app = seeded();
         app.tab = crate::github::data::FILES_TAB;
         app.view = View::List;
         app.pane = Pane::FileTree;
@@ -2265,7 +2287,7 @@ mod residue {
         // Ratatui writes only what differs between two buffers, so nothing
         // inside a frame can repaint a cell it believes is already right.
         // `^l` therefore only raises a flag; the loop does the work.
-        let mut app = demo();
+        let mut app = seeded();
         assert!(!app.wants_redraw);
         app.on_key(Press::ctrl(Key::Char('l')));
         assert!(app.wants_redraw);
@@ -2273,7 +2295,7 @@ mod residue {
 
     #[test]
     fn a_plain_l_still_moves_right_rather_than_repainting() {
-        let mut app = demo_with_sidebar();
+        let mut app = seeded_with_sidebar();
         app.pane = Pane::Repos;
         press(&mut app, Key::Char('l'));
         assert!(!app.wants_redraw);
@@ -2318,8 +2340,7 @@ mod note {
     use crate::shared::mux::AgentStatus;
 
     fn open_picker() -> App {
-        let mut app = demo();
-        app.source = Source::Live;
+        let mut app = seeded();
         app.agents = vec![crate::shared::mux::Agent {
             kind: "claude".into(),
             status: AgentStatus::Idle,

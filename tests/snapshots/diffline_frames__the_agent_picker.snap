@@ -1,6 +1,6 @@
 ---
 source: tests/diffline_frames.rs
-expression: "frame(\" a\")?"
+expression: "frame(\" a\")"
 ---
  DIFFLINE  ⎇ working tree   working tree   branch…main                                                                         +19  −4  │  2 files  │  1 queued 
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── ● 1 queued · ␣c ──
@@ -20,7 +20,7 @@ expression: "frame(\" a\")?"
                                 │         │ AGENTS ON THIS MACHINE                                         via herdr │                                          
                                 │         ├──────────────────────────────────────────────────────────────────────────┤                                          
                                 │         │▌ ○ ✳ claude                                                        idle  │                                          
-                                │         │▌     /demo/tuikit                                                        │                                          
+                                │         │▌     /src/tuikit                                                         │                                          
                                 │         │  ◐ ◆ codex                                                      working  │                                          
                                 │         │      working — interrupting would lose its context                       │                                          
                                 │         ├── start a new one here ──────────────────────────────────────────────────┤                                          

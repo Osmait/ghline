@@ -2,24 +2,24 @@
 source: tests/frames.rs
 expression: "frame(\"1\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Issues                                                                  synced 3s ago · idle  ?  help 
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Issues                                                                             gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   7 items · / to filter  
+  1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   6 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▌ ◉ #386   Panic on resize when sidebar width < 12 cols [bug] [tui]                                                                                       open  
-▌          lmoreno · 6 comments · 2h ago                                                                                                                        
-  ◉ #382   Add fuzzy filter to the repository pane [feature]                                                                                              open  
-           kdev · 2 comments · 9h ago                                                                                                                           
-  ◉ #375   Truecolor fallback is wrong on Apple Terminal [bug] [good first issue]                                                                         open  
-           sofi · 11 comments · 1d ago                                                                                                                          
-  ◉ #371   Document the :account command in the README [docs]                                                                                             open  
-           marasanz · 1 comments · 2d ago                                                                                                                       
-  ◉ #362   Cache the GraphQL check-run query per PR [perf]                                                                                                open  
-           tsuki · 4 comments · 3d ago                                                                                                                          
-  ⊙ #345   Vim-style counts (3j) are ignored in lists [bug]                                                                                             closed  
-           kdev · 8 comments · 6d ago                                                                                                                           
-  ⊙ #329   Support GHE hosts alongside github.com [feature]                                                                                             closed  
-           lmoreno · 17 comments · 2w ago                                                                                                                       
+▌ ◉ #410   Panic on resize when the sidebar is narrow [bug]                                                                                               open  
+▌          lmoreno · 0 comments · 2h ago                                                                                                                        
+  ◉ #406   Add a fuzzy filter to the repository pane [feature]                                                                                            open  
+           kdev · 0 comments · 9h ago                                                                                                                           
+  ◉ #399   Truecolor fallback is wrong on Apple Terminal [bug]                                                                                            open  
+           sofi · 0 comments · 1d ago                                                                                                                           
+  ◉ #395   Document the :account command in the README [docs]                                                                                             open  
+           marasanz · 0 comments · 2d ago                                                                                                                       
+  ◉ #389   Wrap long labels instead of clipping them [feature]                                                                                            open  
+           kdev · 0 comments · 3d ago                                                                                                                           
+  ⊙ #386   Scrollbar thumb disappears on short lists [bug]                                                                                              closed  
+           tsuki · 0 comments · 5d ago                                                                                                                          
+                                                                                                                                                                
+                                                                                                                                                                
                                                                                                                                                                 
                                                                                                                                                                 
                                                                                                                                                                 
@@ -45,4 +45,4 @@ expression: "frame(\"1\")"
                                                                                                                                                                 
                                                                                                                                                                 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter                                                                         1/7  marasanz/tuikit
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter                                                                         1/6  marasanz/tuikit

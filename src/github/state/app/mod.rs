@@ -23,22 +23,8 @@ use std::sync::Arc;
 use crate::shared::error::{Error, Failure};
 
 use crate::github::data::{Account, Item, Job, RawLog, Status};
-#[cfg(feature = "demo")]
-use crate::github::demo;
 use crate::github::service::{Request, Response};
 use crate::shared::worker::Worker;
-
-/// Where the data comes from.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Source {
-    /// The design's fake data, with no network. Only where there is a fixture
-    /// to read: without the `demo` feature there is no such source, which is
-    /// the compiler saying what the release binary can and cannot start as.
-    #[cfg(feature = "demo")]
-    Demo,
-    /// The `gh` CLI against real GitHub.
-    Live,
-}
 
 /// Load state of one piece of data.
 #[derive(Clone, Debug, Default)]
@@ -264,14 +250,13 @@ pub struct TreeNode {
 
 pub struct LogRow {
     pub n: usize,
-    /// Real HH:MM:SS when the log comes from GitHub; synthetic in demo mode.
+    /// The HH:MM:SS GitHub stamped the line with.
     pub time: String,
     pub text: String,
     pub kind: crate::github::data::LogKind,
 }
 
 pub struct App {
-    pub source: Source,
     pub service: Option<Box<dyn Worker<Request, Response>>>,
     pub accounts: Vec<Account>,
     pub accounts_state: Load,
@@ -308,7 +293,6 @@ pub struct App {
     pub tree_sel: usize,
     pub collapsed: HashSet<usize>,
     pub follow: bool,
-    pub extra_lines: usize,
     pub accounts_open: bool,
     pub acc_sel: usize,
     /// Whether the repository pane is wanted. The view and the terminal width
@@ -429,80 +413,22 @@ pub struct App {
     pub last_click: Option<(ratatui::layout::Position, Instant)>,
 }
 
-/// What the fixture puts into a fresh `App`, and nothing else.
-///
-/// Two implementations rather than four `#[cfg]`s scattered through
-/// `App::new`: with the feature there is a fixture to read, and without it
-/// there is not, and the constructor should not have to say so five times.
-struct Seed {
-    is_demo: bool,
-    accounts: Vec<Account>,
-    lists: HashMap<(String, usize), Vec<Item>>,
-    lists_state: HashMap<(String, usize), Load>,
-}
-
-#[cfg(feature = "demo")]
-fn seed(source: Source) -> Seed {
-    if source != Source::Demo {
-        return seed_nothing();
-    }
-    let accounts = demo::accounts();
-    let mut lists = HashMap::new();
-    let mut lists_state = HashMap::new();
-    for a in &accounts {
-        for (r, repo) in a.repos.iter().enumerate() {
-            let key = format!("{}/{}", a.login, repo.name);
-            lists.insert((key.clone(), 0), demo::issues(r));
-            lists.insert((key.clone(), 1), demo::prs(r));
-            lists.insert((key.clone(), 2), demo::runs(r));
-            for t in 0..3 {
-                lists_state.insert((key.clone(), t), Load::Ready);
-            }
-        }
-    }
-    Seed {
-        is_demo: true,
-        accounts,
-        lists,
-        lists_state,
-    }
-}
-
-/// No fixture compiled in, so there is nothing to seed and no source that
-/// could have asked for it.
-#[cfg(not(feature = "demo"))]
-fn seed(_source: Source) -> Seed {
-    seed_nothing()
-}
-
-fn seed_nothing() -> Seed {
-    Seed {
-        is_demo: false,
-        accounts: Vec::new(),
-        lists: HashMap::new(),
-        lists_state: HashMap::new(),
-    }
-}
-
 impl App {
     /// The worker is handed in rather than made here — the binary is the only
     /// part that should decide there is one.
-    pub fn new(source: Source, service: Option<Box<dyn Worker<Request, Response>>>) -> Self {
-        // Everything the fixture puts in before the first frame, and the one
-        // place in this file that knows whether there is a fixture at all.
-        let Seed {
-            is_demo,
-            accounts,
-            lists,
-            lists_state,
-        } = seed(source);
+    ///
+    /// Everything starts empty and `Idle`, and `ensure` asks for what a view
+    /// needs by existing. There used to be a `Source` here saying whether to
+    /// pre-fill from a fixture instead; the tests that want a filled-in
+    /// one call `source::fixture::app`, which keeps the invention out of the
+    /// constructor.
+    pub fn new(service: Option<Box<dyn Worker<Request, Response>>>) -> Self {
         Self {
-            source,
             service,
-            accounts_state: if is_demo { Load::Ready } else { Load::Idle },
+            accounts_state: Load::Idle,
             repos_state: HashMap::new(),
-            lists,
-            lists_state,
+            lists: HashMap::new(),
+            lists_state: HashMap::new(),
             jobs_by_run: HashMap::new(),
             jobs_state: HashMap::new(),
             raw_logs: HashMap::new(),
@@ -511,12 +437,11 @@ impl App {
             detail_state: HashMap::new(),
             busy: false,
             anim: 0,
-            accounts,
+            accounts: Vec::new(),
             prompt: None,
             flash: None,
             acc: 0,
-            // the design starts on the third repo; with real data, on the first
-            repo: if is_demo { 2 } else { 0 },
+            repo: 0,
             tab: 1, // 'prs'
             pane: Pane::List,
             item: 0,
@@ -525,7 +450,6 @@ impl App {
             tree_sel: 0,
             collapsed: HashSet::new(),
             follow: true,
-            extra_lines: 0,
             accounts_open: false,
             acc_sel: 0,
             finder_open: false,
@@ -592,10 +516,6 @@ impl App {
         }
     }
 
-    pub fn live(&self) -> bool {
-        self.source == Source::Live
-    }
-
     /// The next answer from the worker, if one has arrived.
     ///
     /// Takes `&mut self` because finding out the worker is gone is itself a
@@ -639,6 +559,16 @@ impl App {
             }
         }
         self.flash_warn("the worker thread is gone — restart github-tui");
+    }
+
+    /// Is there anybody to ask?
+    ///
+    /// This is what the old `live()` was really testing. The binary hands in a
+    /// worker and every load goes through it; a fixture-seeded `App` has none,
+    /// so it has its data already and asking for more would mark half the
+    /// interface `Loading` with nothing on the way back.
+    pub fn has_worker(&self) -> bool {
+        self.service.is_some()
     }
 
     /// Is anything requested and still unanswered? The loop waits less if so.

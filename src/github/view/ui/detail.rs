@@ -429,7 +429,7 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     };
     fill(buf, head, theme::panel());
     let hs = Style::default().bg(theme::panel()).fg(theme::dim());
-    let workflow = if app.live() {
+    let workflow = {
         let name = if cur.workflow().is_empty() {
             "checks"
         } else {
@@ -440,14 +440,6 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         } else {
             name.to_string()
         }
-    } else if cur.kind() == Kind::Pr {
-        format!("CI #{}", 1841 - app.repo_idx())
-    } else {
-        format!(
-            "{} #{}",
-            cur.title.split(" · ").next().unwrap_or(&cur.title),
-            cur.num
-        )
     };
     put_trunc(
         buf,
@@ -576,19 +568,12 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         base.fg(theme::dimmer()),
     );
     y += 1;
-    let trigger = if app.live() {
-        let event = if cur.as_run().map_or("", |r| r.event.as_str()).is_empty() {
-            "pull_request"
-        } else {
-            cur.as_run().map_or("", |r| r.event.as_str())
-        };
-        format!("{event} · {} · {}", cur.author, cur.when)
+    let event = if cur.as_run().map_or("", |r| r.event.as_str()).is_empty() {
+        "pull_request"
     } else {
-        format!(
-            "runner: ubuntu-24.04 / macos-15 · billable 6m 20s · queued {}",
-            cur.when
-        )
+        cur.as_run().map_or("", |r| r.event.as_str())
     };
+    let trigger = format!("{event} · {} · {}", cur.author, cur.when);
     put_trunc(
         buf,
         area.x + 2,

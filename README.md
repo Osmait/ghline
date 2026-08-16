@@ -40,10 +40,9 @@ A GitHub TUI in Rust (`ratatui` + `crossterm`), ported 1:1 from the
 `GitHub TUI.dc.html` design in the Claude Design project.
 
 It works against real GitHub through the `gh` CLI: the repos, issues, pull
-requests, workflow runs and Actions logs are yours. The design's fake data is
-still here as a demo mode, but it is a development fixture rather than part of
-the program — behind a cargo feature the tests turn on and a released binary
-does not carry.
+requests, workflow runs and Actions logs are yours. There is no offline mode:
+what remains of the design's fake data is a page of fixture the tests and the
+golden frames are written against, and nothing you can start the program on.
 
 ## Install
 
@@ -100,7 +99,7 @@ That is `cargo install --path . --locked`: an optimised build put in
 `~/.cargo/bin`, which the Rust installer already adds to your PATH. `make
 uninstall` takes it off again.
 
-`make` on its own lists the rest — `build`, `run`, `demo`, `test`, `lint`,
+`make` on its own lists the rest — `build`, `run`, `test`, `lint`,
 `check`. They are thin wrappers over cargo, and `make check` runs exactly what
 CI runs.
 
@@ -114,14 +113,9 @@ Or without installing, from a clone:
 
 ```sh
 make run           # cargo run --release
-make demo          # cargo run --release --features demo -- --demo
 ```
 
-`--demo` runs the design's fixture with no network at all, and needs
-`--features demo` to build: the fixture is what the tests are written against,
-and a released binary has no use for a screenful of somebody else's issues.
-
-Real mode needs a signed-in `gh`:
+It needs a signed-in `gh`, and says so and exits if there is not one:
 
 ```sh
 gh auth login
@@ -633,9 +627,9 @@ From the PR detail, `enter` on the body opens that same view.
 
 ## Pull request flow
 
-In real mode the action is executed by `gh` and the list is reloaded from what
-GitHub reports; in demo mode the in-memory copy is mutated. The flow is the
-same:
+The action is executed by `gh` and the list is reloaded from what GitHub
+reports, never from a local guess — a merge that failed should not leave a row
+that says it worked. The flow:
 
 1. `m` opens the merge confirmation, which first shows the state of the checks,
    how many approvals there are and whether anyone requested changes.
@@ -656,8 +650,7 @@ cannot be closed, and the branch is only deleted once the PR is resolved. When
 an action does not apply, the reason appears in the status bar. Closing a PR can
 be undone by reopening it with `c`.
 
-In demo mode everything lives in memory and a restart brings the original data
-back. In real mode the changes are real changes on GitHub.
+The changes are real changes on GitHub.
 
 ## Layout
 
@@ -665,7 +658,7 @@ back. In real mode the changes are real changes on GitHub.
 |---|---|
 | `src/theme.rs` | the design's palette and glyphs (`sc()` / `si()`) |
 | `src/data.rs` | the model: items, statuses, diffs — no dependencies of its own |
-| `src/demo.rs` | the design's fixture, apart from the model it fills in |
+| `src/github/source/fixture.rs` | deterministic data for the tests, apart from the model it fills in |
 | `src/app/` | the state: `mod` what it is, `select` what it answers, `load` what it fetches, `input` how it reacts |
 | `src/gh.rs` | invoking `gh` and translating its JSON into the model |
 | `src/service.rs` | worker thread: requests and responses over channels |
@@ -683,7 +676,7 @@ check:
 ```
 data, error        model and failures, no dependencies of their own
 theme, gh          presentation and infrastructure, both read the model
-demo               the design's fixture
+fixture            deterministic data for the tests
 service            blocking gh calls on a worker thread, over channels
 app                state and reducer
 ui                 render per region; reads the state, mutates nothing
@@ -724,12 +717,12 @@ with no echo.
 
 ## Tests
 
-The fixture the golden frames and most of the state tests are written against
-is behind the `demo` cargo feature, which is off by default and turned on for
-the test build by this crate depending on itself in `[dev-dependencies]`. So
-`cargo test` compiles it in and `cargo build` does not, and the compiler is
-what says which is which — `cargo clippy` with no `--all-targets` is CI's
-check of the shape that ships.
+The golden frames and most of the state tests are written against
+`github::source::fixture`: two accounts, seven repositories and rows built from
+a table. It used to be nine hundred lines of designed GitHub behind a cargo
+feature, so a released binary would not carry it; at a page it is cheaper to
+compile in than to gate, and `App::new` no longer has to ask which kind of data
+it is holding.
 
 ```sh
 cargo test          # 586 unit tests and 18 golden frames
@@ -754,7 +747,7 @@ list.
 Those tests say what a view is *about* — a count in a tab, a line that stops at
 the pane's edge — which is why they survive a redesign of everything around the
 thing they name, and also why the layout can move underneath them. `tests/`
-takes the other half: ten whole frames of the demo, compared character for
+takes the other half: ten whole frames of the fixture, compared character for
 character, so any change to any of them fails with the screen before and after
 as the diff.
 
@@ -834,10 +827,10 @@ cargo run -- --svg-live "<enter><enter>" 150 40 > logs.svg
 # diffline draws whatever repository you point it at
 cargo run --bin diffline -- . --svg "j" 150 40 > diff.svg
 
-# the three that draw the fixture, so they want the feature
-cargo run --features demo -- --snapshot "3<enter><enter>" 150 40 6
-cargo run --features demo -- --svg "" 150 40 > list.svg
-cargo run --features demo -- --svg-loading "" 150 40 5 > loading.svg
+# the three that draw the fixture rather than GitHub
+cargo run -- --snapshot "3<enter><enter>" 150 40 6
+cargo run -- --svg "" 150 40 > list.svg
+cargo run -- --svg-loading "" 150 40 5 > loading.svg
 ```
 
 Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>`, `<del>`,

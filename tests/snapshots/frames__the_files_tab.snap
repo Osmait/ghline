@@ -2,7 +2,7 @@
 source: tests/frames.rs
 expression: "frame(\"4\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Files                                                                   synced 3s ago · idle  ?  help 
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Files                                                                              gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   0 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

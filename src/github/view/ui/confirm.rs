@@ -54,17 +54,15 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     let max = modal.right() - 2;
 
     let tx = put(buf, x, modal.y + 1, max, title, base.fg(accent));
-    if app.live() {
-        let cx = put(buf, tx, modal.y + 1, max, "  ", base);
-        put_trunc(
-            buf,
-            cx,
-            modal.y + 1,
-            max - 22,
-            &app.item_repo_key(),
-            base.fg(theme::dimmer()),
-        );
-    }
+    let cx = put(buf, tx, modal.y + 1, max, "  ", base);
+    put_trunc(
+        buf,
+        cx,
+        modal.y + 1,
+        max - 22,
+        &app.item_repo_key(),
+        base.fg(theme::dimmer()),
+    );
     put_right(
         buf,
         max,

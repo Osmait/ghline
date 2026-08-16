@@ -17,7 +17,7 @@
 //! An integration test rather than a unit one, so it goes through the same
 //! public surface anything else depending on this crate would use.
 //!
-//! Determinism: `snapshot::demo` reads nobody's config and runs the design's
+//! Determinism: `snapshot::seeded` reads nobody's config and runs the test
 //! fixture, so there is no network, no clock and no `$HOME` in any of this.
 
 use github_tui::github::snapshot;

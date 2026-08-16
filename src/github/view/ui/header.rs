@@ -115,22 +115,10 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     x = put(buf, x, y, max, "  │  ", base.fg(theme::dim()));
 
     // breadcrumbs; the right-hand side is reserved
-    let sync = if app.live() {
-        if app.waiting() {
-            "gh · syncing…".to_string()
-        } else {
-            "gh · live".to_string()
-        }
+    let sync = if app.waiting() {
+        "gh · syncing…"
     } else {
-        format!(
-            "synced {}s ago · {}",
-            3 + (app.tick % 40),
-            if app.view == View::Logs {
-                "streaming"
-            } else {
-                "idle"
-            }
-        )
+        "gh · live"
     };
     let right_w = sync.chars().count() as u16 + 10;
     let crumb_max = max.saturating_sub(right_w).max(x);
@@ -145,5 +133,5 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
 
     let help_x = put_right(buf, max - 1, y, "?  help", base.fg(theme::dimmest()));
-    put_right(buf, help_x - 2, y, &sync, base.fg(theme::dim()));
+    put_right(buf, help_x - 2, y, sync, base.fg(theme::dim()));
 }

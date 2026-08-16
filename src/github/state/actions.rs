@@ -1,8 +1,8 @@
 //! Pull request actions: merge, close, reopen and delete the branch.
 //!
 //! This layer is deliberately separate from the UI and the reducer: `App::apply`
-//! is the single place that mutates state, so swapping the demo data for real
-//! GitHub calls does not require touching the render.
+//! is the single place that mutates state, so what a confirmation does can
+//! change without touching the render.
 
 use crate::github::app::App;
 use crate::github::data::{Kind, MERGE_METHODS, Status};
@@ -15,9 +15,9 @@ pub enum Prompt {
     Merge(usize),
     Close,
     Reopen,
-    /// Carries the branch and number explicitly: in live mode this prompt
-    /// appears after the merge, once the list has already been reloaded, so it
-    /// cannot depend on where the selection happens to be by then.
+    /// Carries the branch and number explicitly: this prompt appears after
+    /// the merge, once the list has already been reloaded, so it cannot
+    /// depend on where the selection happens to be by then.
     DeleteBranch {
         num: i64,
         branch: String,
@@ -121,8 +121,7 @@ impl App {
         }
     }
 
-    /// Runs the pending confirmation: against `gh` in live mode, or against the
-    /// in-memory data in demo mode.
+    /// Runs the pending confirmation against `gh`.
     pub fn confirm(&mut self) {
         let Some(prompt) = self.prompt.take() else {
             return;
@@ -164,15 +163,11 @@ impl App {
             },
         };
 
-        if self.live() {
-            self.dispatch(&prompt, num, branch);
-        } else {
-            self.apply_local(&prompt, num, branch);
-        }
+        self.dispatch(&prompt, num, branch);
     }
 
-    /// Live mode: the action goes to the service thread and the list is
-    /// refreshed from what GitHub reports, not from a local guess.
+    /// The action goes to the service thread and the list is refreshed from
+    /// what GitHub reports, not from a local guess.
     fn dispatch(&mut self, prompt: &Prompt, num: i64, branch: String) {
         let repo = self.item_repo_key();
         self.busy = true;
@@ -206,51 +201,6 @@ impl App {
         }
     }
 
-    /// Demo mode: the in-memory copy is mutated.
-    fn apply_local(&mut self, prompt: &Prompt, num: i64, branch: String) {
-        let Some(idx) = self.current_index() else {
-            return;
-        };
-        let key = (self.repo_key(), self.tab);
-        let Some(item) = self.lists.get_mut(&key).and_then(|v| v.get_mut(idx)) else {
-            return;
-        };
-
-        match prompt {
-            Prompt::Merge(m) => {
-                let method = MERGE_METHODS[*m];
-                item.state = Status::Merged;
-                if let Some(pr) = item.as_pr_mut() {
-                    pr.merged_with = Some(method.short().into());
-                }
-                self.bump_open_prs(-1);
-                self.flash_ok(format!("#{num} merged into main via {}", method.short()));
-                if !branch.is_empty() {
-                    self.prompt = Some(Prompt::DeleteBranch { num, branch });
-                }
-            }
-            Prompt::Close => {
-                item.state = Status::Closed;
-                self.bump_open_prs(-1);
-                self.flash_ok(format!("#{num} closed"));
-            }
-            Prompt::Reopen => {
-                item.state = Status::Open;
-                self.bump_open_prs(1);
-                self.flash_ok(format!("#{num} reopened"));
-            }
-            Prompt::DeleteBranch { .. } => {
-                if let Some(pr) = item.as_pr_mut() {
-                    pr.branch_deleted = true;
-                }
-                self.flash_ok(format!("deleted branch {branch}"));
-            }
-            // never confirmed through the demo path: they act on this
-            // machine, which is just as real in demo mode
-            Prompt::Dispatch { .. } | Prompt::Clone { .. } => {}
-        }
-    }
-
     pub fn cancel_prompt(&mut self) {
         // a plan for a worktree only outlives the question it was asked with
         self.pending_fresh = None;
@@ -263,18 +213,5 @@ impl App {
         if let Some(svc) = &self.service {
             svc.send(req);
         }
-    }
-
-    /// Keeps the active repo's open-PR count consistent (demo only).
-    fn bump_open_prs(&mut self, delta: i32) {
-        let repo = self.repo_idx();
-        let Some(r) = self
-            .accounts
-            .get_mut(self.acc)
-            .and_then(|a| a.repos.get_mut(repo))
-        else {
-            return;
-        };
-        r.prs = (r.prs as i32 + delta).max(0) as u32;
     }
 }

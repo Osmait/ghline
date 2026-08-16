@@ -11,6 +11,9 @@
 //!                       it, and what is pending — a confirmation, a toast.
 //!   `view`              drawing it, and nothing else.
 //!
+//! `cli` sits at the process boundary rather than in that stack: it turns raw
+//! operating-system arguments into commands before any source or view exists.
+//!
 //! The arrows point one way: `view` reads `state`, `state` asks `source`,
 //! everything knows `data`, and `data` knows none of them — pinned by a test
 //! in that file since the first week.
@@ -41,25 +44,24 @@
 //! something says so by existing.
 //!
 //! Two exceptions, named rather than quietly true. `source::service` imports
-//! `state::finder::Source` to know what a search is for; it is request
-//! vocabulary that happens to live with the finder, and moving it collides
-//! with `app::Source`, which means something else entirely. And `app`'s tests
-//! call `view::ui::draw` — a test that renders a frame is crossing the layers
-//! on purpose, which is what a test is for.
+//! `data::Source` to know what a search is for; it is request vocabulary that
+//! happens to live with the data. It used to collide with an `app::Source`
+//! that said where the data came from — that one is gone with the demo mode,
+//! and the name means one thing now. And `app`'s tests call `view::ui::draw`
+//! — a test that renders a frame is crossing the layers on purpose, which is
+//! what a test is for.
 
+pub mod cli;
 pub mod data;
 pub mod subject;
 
 pub mod source {
-    // The design's fixture. Behind the `demo` feature, which is off unless
-    // the tests turned it on — so it is compiled by `cargo test` and is not
-    // in the binary anybody downloads. It is data that was written to build
-    // the interface against and is now what the interface is tested against;
-    // neither is a reason for a released program to carry it.
-    #[cfg(feature = "demo")]
-    pub mod demo;
-    #[cfg(feature = "demo")]
-    pub mod demo_diffs;
+    // Deterministic data for the tests and the golden frames. Not behind a
+    // feature: it used to be nine hundred lines of designed GitHub backing a
+    // `--demo` mode, and hiding that from the released binary was worth a
+    // flag. What is left is a page of scaffolding, which is cheaper to carry
+    // than the `#[cfg]` branches were.
+    pub mod fixture;
     pub mod forge;
     pub mod gh;
     pub mod service;
@@ -72,17 +74,15 @@ pub mod state {
 }
 
 pub mod view {
-    // Drawing into an off-screen terminal. Half of it renders the fixture and
-    // is behind the feature function by function; `to_svg` and the live
-    // render are not — they take whatever is on screen, which is how
-    // `--svg-live` replays a real session and how diffline draws a real diff.
+    // Drawing into an off-screen terminal: the fixture for the golden frames,
+    // and `to_svg` and the live render for whatever is on screen, which is
+    // how `--svg-live` replays a real session and how diffline draws a real
+    // diff.
     pub mod snapshot;
     pub mod ui;
 }
 
 // Filed by layer, spoken about by name.
-#[cfg(feature = "demo")]
-pub use source::{demo, demo_diffs};
-pub use source::{forge, gh, service};
+pub use source::{fixture, forge, gh, service};
 pub use state::{actions, app, finder};
 pub use view::{snapshot, ui};

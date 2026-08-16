@@ -779,7 +779,7 @@ mod tests {
                 icon: "◆",
                 status: AgentStatus::Idle,
                 title: "",
-                detail: "/demo/other",
+                detail: "/src/other",
                 trailing: "",
                 selected: false,
                 mark: None,
@@ -790,7 +790,7 @@ mod tests {
             row(&buf, 0),
             "  ○ ◆ codex".to_string() + &" ".repeat(53) + "idle"
         );
-        assert_eq!(row(&buf, 1).trim_end(), "      /demo/other");
+        assert_eq!(row(&buf, 1).trim_end(), "      /src/other");
     }
 
     /// A one-line slot is what a pane with an odd number of rows left hands

@@ -331,18 +331,13 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
             "no textual changes".to_string(),
             format!("{} · 0 hunks · mode 100644", f.path),
         )
-    } else if app.live() {
+    } else {
         (
             "diff not fetched yet".to_string(),
             format!(
                 "{} · {} {} · press r to fetch it again",
                 f.path, f.add, f.del
             ),
-        )
-    } else {
-        (
-            "diff not available".to_string(),
-            format!("{} · {} {}", f.path, f.add, f.del),
         )
     };
 

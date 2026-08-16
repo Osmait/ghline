@@ -51,10 +51,6 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
         let (msg, color) = match state.error() {
             Some(e) => (e.to_string(), theme::red()),
-            None if !app.live() => (
-                "agents are a live-mode feature; herdr is not consulted in demo".to_string(),
-                theme::dimmer(),
-            ),
             None if !app.filter.is_empty() => ("no matches".to_string(), theme::dimmer()),
             None => (
                 "no agents running · start one in herdr, or dispatch an issue with x".to_string(),

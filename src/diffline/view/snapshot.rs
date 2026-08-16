@@ -1,9 +1,9 @@
 //! A fixed review, for rendering without a repository.
 //!
-//! github-tui has had one of these since the design was ported: `--demo` runs
-//! it on a fixture, and the golden frames compare against that. diffline had
-//! nothing equivalent, because what it reviews is whatever `git` says is in
-//! front of you — which is exactly what a test cannot depend on.
+//! github-tui has had one of these since the design was ported, and its
+//! golden frames compare against it. diffline had nothing equivalent, because
+//! what it reviews is whatever `git` says is in front of you — which is
+//! exactly what a test cannot depend on.
 //!
 //! So the fixture is written here instead: two files, a diff with each kind of
 //! row in it, a queued comment and an agent to send it to. No `git`, no disk,
@@ -31,14 +31,14 @@ fn row(kind: Kind, old: Option<u32>, new: Option<u32>, text: &str) -> Row {
 ///
 /// Deterministic on any machine: the only things that could vary are the
 /// config and the clock, and neither is read. `blink` is set for the same
-/// reason github-tui's demo sets it — a cursor is on in half the frames it
+/// reason github-tui's fixture sets it — a cursor is on in half the frames it
 /// appears in, and the half worth looking at is the one where it shows.
-pub fn demo(keys: &str) -> App {
+pub fn seeded(keys: &str) -> App {
     let _ =
         crate::shared::settings::use_store(Box::new(crate::shared::settings::Memory::default()));
 
     let mut app = App::new(
-        "/demo/tuikit".into(),
+        "/src/tuikit".into(),
         Scope::WorkingTree,
         vec![
             Scope::WorkingTree,
@@ -131,7 +131,7 @@ pub fn demo(keys: &str) -> App {
             kind: "claude".into(),
             status: AgentStatus::Idle,
             focused: false,
-            cwd: "/demo/tuikit".into(),
+            cwd: "/src/tuikit".into(),
             pane: "wK:p1".into(),
             title: "waiting".into(),
         },
@@ -139,7 +139,7 @@ pub fn demo(keys: &str) -> App {
             kind: "codex".into(),
             status: AgentStatus::Working,
             focused: false,
-            cwd: "/demo/other".into(),
+            cwd: "/src/other".into(),
             pane: "wK:p2".into(),
             title: "rewriting the reducer".into(),
         },
@@ -159,7 +159,7 @@ pub fn demo(keys: &str) -> App {
 /// on, so nothing in here can fail. See the twin in `github::view::snapshot`
 /// for why the irrefutable `let Ok(…)` is the right way to say that.
 pub fn frame(keys: &str, width: u16, height: u16) -> String {
-    let mut app = demo(keys);
+    let mut app = seeded(keys);
     let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
     let Ok(_) = term.draw(|f| super::draw(f, &mut app));
     crate::tui::probe::screen(&term)

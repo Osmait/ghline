@@ -74,10 +74,8 @@ jobs:
       - name: Tests
         run: cargo nextest run --all-targets --locked
 
-      # The shape that ships. Everything above builds the tests, and building
-      # the tests turns the `demo` feature on — so without this step the
-      # fixture-free build, which is the only one anybody downloads, is
-      # compiled by nothing.
+      # The shape that ships. Everything above builds the tests and benches
+      # too; this is the only step that compiles what anybody downloads.
       - name: Lints, without the fixture
         run: cargo clippy --locked -- -D warnings
 

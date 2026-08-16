@@ -537,9 +537,6 @@ pub struct LogLine {
     pub kind: LogKind,
 }
 
-/// A demo line: text plus what kind of line it is.
-pub type DemoLine = (&'static str, LogKind);
-
 pub struct Tab {
     pub id: &'static str,
     pub label: &'static str,

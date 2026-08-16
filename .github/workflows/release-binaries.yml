@@ -108,10 +108,9 @@ jobs:
         with:
           subject-path: github-tui-${{ matrix.target }}.tar.gz
 
-      # A released binary has no fixture in it and so no `--snapshot`: what
-      # that flag used to draw is the design's fake data, which is now behind
-      # the `demo` feature and compiled only for the tests. `--help` is what
-      # is left that runs the real argument handling and exits. The drawing
+      # `--snapshot` draws the test fixture rather than GitHub, so it says
+      # nothing about a released binary talking to `gh`. `--help` is what
+      # runs the real argument handling and exits. The drawing
       # path is covered by the eighteen golden frames in CI, on the same
       # commit.
       - name: Smoke test the binary

@@ -64,9 +64,9 @@ fn main() -> io::Result<()> {
 
     // `--svg <keys> <w> <h>` draws one frame and exits. The same headless
     // check the other program has, and for the same reason: a terminal is not
-    // something a test can hold. Not behind the `demo` feature: what this
-    // draws is the repository in front of it, so it works in a released
-    // binary — which is what the last line of a `--log` file points at.
+    // something a test can hold. What this draws is the repository in front
+    // of it, so it works in a released binary — which is what the last line
+    // of a `--log` file points at.
     let svg = args.iter().position(|a| a == "--svg");
 
     let base = vcs.base_branch(&repo);

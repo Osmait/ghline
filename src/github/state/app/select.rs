@@ -4,8 +4,6 @@
 use super::input::strip_ws_only;
 use super::{App, Load, LogRow, NodeKind, Pane, TreeNode, View};
 use crate::github::data::{self, Account, Item, Job, Kind, LogLine, Repo, Status};
-#[cfg(feature = "demo")]
-use crate::github::demo;
 
 impl App {
     pub fn account(&self) -> Option<&Account> {
@@ -499,34 +497,10 @@ impl App {
     }
 
     pub fn jobs(&self) -> Vec<Job> {
-        if self.live() {
-            let id = self.run_id();
-            return self
-                .jobs_by_run
-                .get(&(self.item_repo_key(), id))
-                .cloned()
-                .unwrap_or_default();
-        }
-        // Not live, so this is the fixture — and without one there is nothing
-        // below to show.
-        #[cfg(not(feature = "demo"))]
-        return Vec::new();
-        #[cfg(feature = "demo")]
-        {
-            let all = demo::job_templates();
-            let only_success = match self.current() {
-                Some(c) if c.kind() == Kind::Run && c.state == Status::Success => true,
-                Some(c) if c.kind() == Kind::Pr && c.checks() == Status::Success => true,
-                _ => false,
-            };
-            if only_success {
-                all.into_iter()
-                    .filter(|j| j.status == Status::Success)
-                    .collect()
-            } else {
-                all
-            }
-        }
+        self.jobs_by_run
+            .get(&(self.item_repo_key(), self.run_id()))
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn jobs_status(&self) -> Load {
@@ -573,65 +547,7 @@ impl App {
     }
 
     pub fn log_lines(&self) -> Vec<LogRow> {
-        if self.live() {
-            return self.live_log_lines();
-        }
-        #[cfg(not(feature = "demo"))]
-        return Vec::new();
-        #[cfg(feature = "demo")]
-        self.demo_log_lines()
-    }
-
-    /// The fixture's logs: a canned dump per step, per status, and the
-    /// stream that arrives a line at a time while something is running.
-    #[cfg(feature = "demo")]
-    fn demo_log_lines(&self) -> Vec<LogRow> {
-        let tree = self.flat_tree();
-        let idx = self.tree_sel_idx(tree.len());
-        let (status, name) = match tree.get(idx) {
-            Some(n) => (n.status, n.name.clone()),
-            None => (Status::Pending, String::new()),
-        };
-        let is_step = tree
-            .get(idx)
-            .map(|n| n.kind == NodeKind::Step)
-            .unwrap_or(false);
-
-        let step_specific = if is_step && status != Status::Failure && status != Status::Running {
-            demo::step_log(&name)
-        } else {
-            None
-        };
-
-        let mut lines: Vec<(String, crate::github::data::LogKind)> = match step_specific {
-            Some(v) => v,
-            None => demo::logs_for(status)
-                .iter()
-                .map(|(t, k)| (t.to_string(), *k))
-                .collect(),
-        };
-
-        if status == Status::Running {
-            lines.extend(
-                demo::STREAM
-                    .iter()
-                    .take(self.extra_lines)
-                    .map(|(t, k)| (t.to_string(), *k)),
-            );
-        }
-
-        let f = self.log_filter.trim().to_lowercase();
-        lines
-            .into_iter()
-            .enumerate()
-            .map(|(i, (text, kind))| LogRow {
-                n: i + 1,
-                time: format!("10:4{}:0{}", (i + 1) % 10, (i + 1) % 6),
-                text,
-                kind,
-            })
-            .filter(|l| f.is_empty() || l.text.to_lowercase().contains(&f))
-            .collect()
+        self.live_log_lines()
     }
 
     /// Real log: the run's dump is narrowed to the selected job (and step).

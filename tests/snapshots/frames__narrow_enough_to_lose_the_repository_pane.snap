@@ -1,28 +1,28 @@
 ---
 source: tests/frames.rs
-expression: f
+expression: "snapshot::frame(\"\", 88, 24, 0)"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › synced 3s ago · idle  ?  help 
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requesgh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                  
 ────────────────────────────────────────────────────────────────────────────────────────
-▌ ⇅ #217   fix(layout): clamp sidebar width to a minimum of 12 … [bug]  open  ✗ checks  
-▌          fix/sidebar-clamp · marasanz · +128/-34 · 6 files · 26m ago                  
-  ⇅ #214   feat(actions): stream job logs with follow mode [feature]    open  ◐ checks  
-           feat/log-stream · kdev · +342/-9 · 4 files · 5h ago                          
-  ⇅ #209   chore(deps): bump crossterm to 0.28 [deps]                   open  ✓ checks  
-           dependabot/crossterm · dependabot · +9/-9 · 2 files · 1d ago                 
-  ⑂ #203   feat(auth): multi-account switcher with … [feature] [auth]  draft  ○ checks  
-           feat/multi-account · sofi · +611/-56 · 6 files · 2d ago                      
-  ⑃ #196   refactor: move keymap into its own crate                   merged  ✓ checks  
-           refactor/keymap-crate · tsuki · +370/-648 · 5 files · 4d ago                 
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
-                                                                                        
+▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]      open  ✗ checks  
+▌          fix/sidebar-clamp · marasanz · +12/-3 · 4 files · 26m ago                    
+  ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]      open  ✓ checks  
+           feat/fuzzy-rank · kdev · +29/-8 · 2 files · 3h ago                           
+  ⇅ #212   perf(render): reuse the cell buffer between frames [chore]   open  ✓ checks  
+           perf/reuse-buffer · sofi · +46/-13 · 3 files · 5h ago                        
+  ⑂ #211   wip: split the reducer by view [chore]                      draft  ○ checks  
+           wip/split-reducer · tsuki · +63/-18 · 4 files · 6h ago                       
+  ⑃ #209   chore: drop the unused ansi crate [chore]                  merged  ✓ checks  
+           chore/deps · tsuki · +80/-23 · 1 files · 2d ago                              
+  ⇅ #207   fix(logs): keep the filter across a job change [bug]         open  ✓ checks  
+           fix/log-filter · lmoreno · +97/-28 · 2 files · 2d ago                        
+  ⇅ #205   feat(diff): word-level highlighting [feature]                open  ◐ checks  
+           feat/word-diff · kdev · +114/-33 · 3 files · 3d ago                          
+  ⇅ #202   docs: write down the key map [docs]                          open  ✓ checks  
+           docs/keymap · marasanz · +131/-38 · 4 files · 4d ago                         
+  ⇅ #199   fix(finder): do not steal the escape key [bug]               open  ✗ checks  
+           fix/finder-esc · sofi · +148/-43 · 1 files · 5d ago                          
 ────────────────────────────────────────────────────────────────────────────────────────
-  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filt…  1/5  marasanz/tuikit
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / fil…  1/12  marasanz/tuikit

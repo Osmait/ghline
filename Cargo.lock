@@ -167,6 +167,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
+name = "cli-parser"
+version = "0.1.0"
+
+[[package]]
 name = "compact_str"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -546,9 +550,9 @@ name = "github-tui"
 version = "0.1.0"
 dependencies = [
  "allocation-counter",
+ "cli-parser",
  "crossterm",
  "divan",
- "github-tui",
  "insta",
  "proptest",
  "ratatui",

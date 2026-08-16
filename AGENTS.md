@@ -37,7 +37,6 @@ make audit     # machete, deny, typos, zizmor
 make bench     # divan, grouped by module
 make bench-cmp # the same ones either side of your changes, with a noise check
 make flame     # perf + inferno, where the time inside one goes
-make demo      # run against the fixture, no network
 ```
 
 `make check` is the gate. Run it before saying a change is done; do not

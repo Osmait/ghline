@@ -2,12 +2,12 @@
 source: tests/frames.rs
 expression: "frame(\"5\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Agents                                                                  synced 3s ago · idle  ?  help 
+ gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Agents                                                                             gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   0 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                                                                                 
-   agents are a live-mode feature; herdr is not consulted in demo                                                                                               
+   no agents running · start one in herdr, or dispatch an issue with x                                                                                          
                                                                                                                                                                 
                                                                                                                                                                 
                                                                                                                                                                 
