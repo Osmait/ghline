@@ -235,6 +235,64 @@ proptest! {
     }
 }
 
+// --- keys, written down and read back ------------------------------------
+
+/// Every press except `Key::Other`, which is the name for a key with no name
+/// and so has nothing to be spelt as.
+fn a_press() -> impl Strategy<Value = github_tui::shared::key::Press> {
+    use github_tui::shared::key::{Key, Press};
+    // The characters that mean something to the notation itself, over-
+    // represented: `any::<char>()` is uniform across a million code points
+    // and would reach `<` about never, which is the one that decides how
+    // everything after it is read.
+    let ch = prop_oneof![
+        3 => prop::char::range('!', '~'),
+        3 => Just('<'),
+        3 => Just('>'),
+        2 => Just('-'),
+        2 => prop::char::range('a', 'z'),
+        1 => any::<char>(),
+    ];
+    let key = prop_oneof![
+        6 => ch.prop_map(Key::Char),
+        1 => Just(Key::Enter),
+        1 => Just(Key::Esc),
+        1 => Just(Key::Tab),
+        1 => Just(Key::BackTab),
+        1 => Just(Key::Backspace),
+        1 => Just(Key::Delete),
+        1 => Just(Key::Up),
+        1 => Just(Key::Down),
+        1 => Just(Key::Left),
+        1 => Just(Key::Right),
+        1 => Just(Key::Home),
+        1 => Just(Key::End),
+        1 => Just(Key::PageUp),
+        1 => Just(Key::PageDown),
+    ];
+    (key, any::<bool>(), any::<bool>()).prop_map(|(key, ctrl, alt)| Press { key, ctrl, alt })
+}
+
+proptest! {
+    /// `--log` writes with `spell` and `--snapshot` reads with `parse_keys`,
+    /// so a session that does not survive the trip is a bug report that
+    /// replays as something other than what happened. A whole sequence at
+    /// once, because the risk is at the joins: a key whose spelling ends
+    /// where the next one's begins.
+    #[test]
+    fn a_session_written_down_reads_back_as_itself(
+        presses in proptest::collection::vec(a_press(), 0..12),
+    ) {
+        let written: String = presses.iter().map(|p| p.spell()).collect();
+        prop_assert_eq!(
+            github_tui::shared::key::parse_keys(&written),
+            presses,
+            "wrote {:?}",
+            written,
+        );
+    }
+}
+
 // --- parse_unified -------------------------------------------------------
 
 /// Something shaped like `git diff` output, including the shapes git would

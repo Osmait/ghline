@@ -266,11 +266,22 @@ pub fn run(term: &mut Terminal_, program: &mut impl Program) -> io::Result<()> {
         let timeout = program.next_wake().max(FLOOR);
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => program.on_key(press(key)),
+                // Logged here rather than in either program: this is the one
+                // place both of them receive a keystroke, and a log written
+                // twice would be two logs that could disagree.
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    let p = press(key);
+                    crate::shared::log::key(p);
+                    program.on_key(p);
+                }
                 // Motion arrives for every cell the pointer crosses whether
                 // or not anything is pressed, and nothing here follows a
                 // pointer. Dropped before it can cost a frame.
-                Event::Mouse(m) if m.kind != MouseEventKind::Moved => program.on_mouse(mouse(m)),
+                Event::Mouse(m) if m.kind != MouseEventKind::Moved => {
+                    let m = mouse(m);
+                    crate::shared::log::mouse(m);
+                    program.on_mouse(m);
+                }
                 _ => {}
             }
         }

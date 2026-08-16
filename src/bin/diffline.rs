@@ -34,12 +34,19 @@ fn main() -> io::Result<()> {
         return Ok(());
     }
 
+    // The file `--log` writes to, which is also the one argument that does not
+    // start with a dash and is not the repository. Without this, `diffline
+    // --log run.log` reviews a file called run.log — and says so, which is
+    // how it was found.
+    let log_at = args.iter().position(|a| a == "--log");
+
     // The repository is where you are unless you say otherwise, because that
     // is almost always the one whose diff you meant.
     let repo = args
         .iter()
-        .find(|a| !a.starts_with('-'))
-        .cloned()
+        .enumerate()
+        .find(|(i, a)| !a.starts_with('-') && Some(*i) != log_at.map(|j| j + 1))
+        .map(|(_, a)| a.clone())
         .unwrap_or_else(|| ".".into());
 
     let repo = std::fs::canonicalize(&repo)
@@ -100,15 +107,41 @@ fn main() -> io::Result<()> {
         return headless(&mut app, &keys, w, h);
     }
 
+    // Opened after the repository is known, so the first line of the log says
+    // which one this was — and before the terminal is taken, so a failure to
+    // open the file is still something that can be printed.
+    if let Some(i) = log_at {
+        let path = args.get(i + 1).cloned().unwrap_or_else(|| {
+            eprintln!("diffline: --log wants a file; writing to diffline.log");
+            "diffline.log".into()
+        });
+        if let Err(e) = github_tui::shared::log::to(std::path::Path::new(&path), "diffline") {
+            eprintln!("diffline: cannot write to {path}: {e}");
+            return Ok(());
+        }
+        github_tui::shared::log::say(format_args!("repo {}", app.repo));
+    }
+
     let mouse = !args.iter().any(|a| a == "--no-mouse");
-    let mut term = Terminal_::enter(mouse)?;
+    // Not `?`: "it does not start" is the report a log is most wanted for,
+    // and propagating here would close the file having written the header
+    // and nothing else.
+    let mut term = match Terminal_::enter(mouse) {
+        Ok(t) => t,
+        Err(e) => {
+            github_tui::shared::log::say(format_args!("could not take the terminal: {e}"));
+            return Err(e);
+        }
+    };
     let res = run(&mut term, &mut Diffline::new(&mut app));
     // the guard gives the terminal back even if `run` returned an error
     drop(term);
 
     if let Err(e) = &res {
+        github_tui::shared::log::say(format_args!("ended with: {e}"));
         eprintln!("diffline: {e}");
     }
+    github_tui::shared::log::finish();
     res
 }
 
@@ -117,6 +150,7 @@ fn usage() {
     println!();
     println!("  diffline [path]     the repository to read, default the current directory");
     println!("  --no-mouse          leave the terminal's own click-to-select alone");
+    println!("  --log <file>        record the session; the last line replays it");
     println!("  --version           print the version and exit");
     println!();
     println!("  [ ]   working tree · this branch · the last commit");

@@ -19,6 +19,7 @@ fn usage() {
     println!("  github-tui            read real GitHub through `gh`");
     println!("  --demo                the design's fixture, no network needed");
     println!("  --no-mouse            leave the terminal's own click-to-select alone");
+    println!("  --log <file>          record the session; the last line replays it");
     println!("  --version             print the version and exit");
     println!();
     println!("  ?                     every key, once you are inside");
@@ -85,14 +86,46 @@ fn main() -> io::Result<()> {
     // to say no.
     let mouse = !args.iter().any(|a| a == "--no-mouse");
 
-    let mut term = Terminal_::enter(mouse)?;
+    // Before the terminal is taken: a file that cannot be opened is worth
+    // saying so about while there is still a screen to say it on.
+    if let Some(i) = args.iter().position(|a| a == "--log") {
+        let path = args.get(i + 1).cloned().unwrap_or_else(|| {
+            eprintln!("gh-tui: --log wants a file; writing to github-tui.log");
+            "github-tui.log".into()
+        });
+        if let Err(e) = github_tui::shared::log::to(std::path::Path::new(&path), "github-tui") {
+            eprintln!("gh-tui: cannot write to {path}: {e}");
+            return Ok(());
+        }
+        github_tui::shared::log::say(format_args!(
+            "source {}",
+            if matches!(source, Source::Demo) {
+                "demo"
+            } else {
+                "gh"
+            }
+        ));
+    }
+
+    // Not `?`: "it does not start" is the report a log is most wanted for,
+    // and propagating here would close the file having written the header and
+    // nothing else.
+    let mut term = match Terminal_::enter(mouse) {
+        Ok(t) => t,
+        Err(e) => {
+            github_tui::shared::log::say(format_args!("could not take the terminal: {e}"));
+            return Err(e);
+        }
+    };
     let res = run(&mut term, &mut GithubTui::new(source));
     // the guard restores the terminal even if `run` returns an error
     drop(term);
 
     if let Err(e) = &res {
+        github_tui::shared::log::say(format_args!("ended with: {e}"));
         eprintln!("gh-tui: {e}");
     }
+    github_tui::shared::log::finish();
     res
 }
 

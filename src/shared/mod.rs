@@ -15,6 +15,7 @@ pub mod fuzzy;
 pub mod herdr;
 pub mod icons;
 pub mod key;
+pub mod log;
 pub mod mux;
 pub mod nav;
 pub mod settings;

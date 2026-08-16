@@ -828,8 +828,40 @@ cargo run -- --svg-live "<enter><enter>" 150 40 > logs.svg
 cargo run -- --svg-loading "" 150 40 5 > loading.svg
 ```
 
-Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>` and the
-arrows in angle brackets.
+Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>`, `<del>`,
+`<home>`, `<end>`, `<pgup>`, `<pgdn>` and the arrows in angle brackets. A
+modifier goes inside them — `<c-c>` is control-c, `<a-x>` is alt-x, `<c-up>` is
+control-up — and `<lt>` and `<gt>` are the two characters the notation is
+otherwise made of.
+
+## Recording a session
+
+Neither program can print anything while it runs: the screen is theirs, and a
+`println!` lands in the middle of a frame and is gone at the next redraw. So a
+bug report has been whatever the reader remembered doing.
+
+```sh
+diffline --log run.log .
+github-tui --log run.log
+```
+
+Every keystroke, click and error goes into the file, stamped with the
+milliseconds since it opened — and the last line is the command that plays the
+session back:
+
+```
++      0ms diffline 0.1.0 — unix 1786839021
++      0ms repo /home/you/project
++    412ms key j
++    588ms key /
++   1104ms mouse down Left at 12,4
++   3320ms replay: diffline --snapshot "j/" 160 44
+```
+
+Which is the point of it. What is recorded is written in the notation
+`--snapshot` reads, so a report is not a description of the bug — paste the
+last line and the frame is in front of you. A round-trip test keeps the two
+honest with each other.
 
 ## Differences from the design
 

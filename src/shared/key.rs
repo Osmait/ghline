@@ -77,6 +77,58 @@ impl Press {
             _ => None,
         }
     }
+
+    /// This press written the way `parse_keys` reads it.
+    ///
+    /// The inverse, so that a session can be written down and played back:
+    /// `--log` records what was pressed in this notation, and what it records
+    /// is what `--snapshot` takes. A bug report becomes a frame.
+    ///
+    /// `Key::Other` is the one press that cannot survive the trip, because it
+    /// is already the name for "we have no name for this" — it spells as
+    /// `<?>`, which reads back as three characters, and a replay that reached
+    /// one would be replaying a key nothing is bound to anyway.
+    pub fn spell(self) -> String {
+        let name = match self.key {
+            // The two the notation is built out of. `<` because it opens a
+            // name, and `>` because it closes one — `<a->` reads as four
+            // literal characters, since the `>` meant as the key is taken as
+            // the bracket first. Both are named instead.
+            Key::Char('<') => "<lt>".to_string(),
+            Key::Char('>') => "<gt>".into(),
+            Key::Char(c) => c.to_string(),
+            Key::Enter => "<enter>".into(),
+            Key::Esc => "<esc>".into(),
+            Key::Tab => "<tab>".into(),
+            Key::BackTab => "<btab>".into(),
+            Key::Backspace => "<bs>".into(),
+            Key::Delete => "<del>".into(),
+            Key::Up => "<up>".into(),
+            Key::Down => "<down>".into(),
+            Key::Left => "<left>".into(),
+            Key::Right => "<right>".into(),
+            Key::Home => "<home>".into(),
+            Key::End => "<end>".into(),
+            Key::PageUp => "<pgup>".into(),
+            Key::PageDown => "<pgdn>".into(),
+            Key::Other => "<?>".into(),
+        };
+        match (self.ctrl, self.alt) {
+            (false, false) => name,
+            // The modifier wraps whatever the key spelled as, including the
+            // angle brackets: `<c-<up>>` would be unreadable, so a named key
+            // loses its own brackets inside a chord.
+            (c, a) => {
+                let inner = name.trim_start_matches('<').trim_end_matches('>');
+                let mods = match (c, a) {
+                    (true, true) => "c-a-",
+                    (true, false) => "c-",
+                    _ => "a-",
+                };
+                format!("<{mods}{inner}>")
+            }
+        }
+    }
 }
 
 /// Which button.
@@ -119,25 +171,54 @@ pub struct Mouse {
 ///
 /// Anything in angle brackets that is not a name below is taken literally,
 /// character by character: an unknown `<foo>` is `<`, `f`, `o`, `o`, `>`.
+///
+/// A leading `c-` or `a-` inside the brackets is the modifier: `<c-a>` is
+/// control-a and `<c-up>` is control-up. `<lt>` and `<gt>` are the two
+/// characters this notation is made of, spelt out so that a chord over one of
+/// them does not eat its own bracket. Together with `Press::spell` this reads
+/// back everything it writes.
 pub fn parse_keys(spec: &str) -> Vec<Press> {
     let mut out = Vec::new();
     let mut rest = spec;
     while !rest.is_empty() {
         if let Some(end) = rest.strip_prefix('<').and_then(|r| r.find('>')) {
             let name = &rest[1..end + 1];
+            // Both, in either order, before the key itself.
+            let (ctrl, name) = match name.strip_prefix("c-") {
+                Some(n) => (true, n),
+                None => (false, name),
+            };
+            let (alt, name) = match name.strip_prefix("a-") {
+                Some(n) => (true, n),
+                None => (false, name),
+            };
             let code = match name {
                 "enter" => Some(Key::Enter),
                 "esc" => Some(Key::Esc),
                 "tab" => Some(Key::Tab),
+                "btab" => Some(Key::BackTab),
                 "bs" => Some(Key::Backspace),
+                "del" => Some(Key::Delete),
                 "down" => Some(Key::Down),
                 "up" => Some(Key::Up),
                 "left" => Some(Key::Left),
                 "right" => Some(Key::Right),
+                "home" => Some(Key::Home),
+                "end" => Some(Key::End),
+                "pgup" => Some(Key::PageUp),
+                "pgdn" => Some(Key::PageDown),
+                "lt" => Some(Key::Char('<')),
+                "gt" => Some(Key::Char('>')),
+                // A chord over an ordinary letter: `<c-a>`. Only when a
+                // modifier was given, so a bare `<a>` stays the three
+                // characters it has always been.
+                _ if (ctrl || alt) && name.chars().count() == 1 => {
+                    name.chars().next().map(Key::Char)
+                }
                 _ => None,
             };
             if let Some(c) = code {
-                out.push(Press::new(c));
+                out.push(Press { key: c, ctrl, alt });
                 rest = &rest[end + 2..];
                 continue;
             }
@@ -174,6 +255,52 @@ mod tests {
             alt: true,
         };
         assert_eq!(alt.typed(), None, "a meta chord is a command, not a letter");
+    }
+
+    #[test]
+    fn what_is_spelt_is_what_is_read_back() {
+        // The point of the pair: `--log` writes with one and `--snapshot`
+        // reads with the other, so a session recorded is a session replayed.
+        let every = [
+            Press::new(Key::Char('j')),
+            Press::new(Key::Char('<')),
+            Press::new(Key::Char('漢')),
+            Press::new(Key::Enter),
+            Press::new(Key::PageDown),
+            Press::new(Key::BackTab),
+            Press::ctrl(Key::Char('c')),
+            Press::ctrl(Key::Up),
+            Press {
+                key: Key::Char('x'),
+                ctrl: false,
+                alt: true,
+            },
+            Press {
+                key: Key::Delete,
+                ctrl: true,
+                alt: true,
+            },
+        ];
+        for p in every {
+            assert_eq!(
+                parse_keys(&p.spell()),
+                vec![p],
+                "{} did not survive",
+                p.spell()
+            );
+        }
+        // and a whole session at once, which is how it is actually used
+        let session: String = every.iter().map(|p| p.spell()).collect();
+        assert_eq!(parse_keys(&session), every.to_vec());
+    }
+
+    #[test]
+    fn an_unknown_name_is_still_read_literally() {
+        // The old behaviour, which the modifiers must not have taken away:
+        // `<foo>` is five characters, and so is a bare `<a>`.
+        assert_eq!(parse_keys("<foo>").len(), 5);
+        assert_eq!(parse_keys("<a>").len(), 3, "a bare letter is not a chord");
+        assert_eq!(parse_keys("<c-a>"), vec![Press::ctrl(Key::Char('a'))]);
     }
 
     #[test]
