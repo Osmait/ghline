@@ -32,6 +32,9 @@ pub struct RowSlot {
     pub area: Rect,
     /// The background it was filled with, to build styles from.
     pub style: Style,
+    /// Whether this is the row the cursor is on. Its ground and its bar are
+    /// already painted; this is here so the caller can brighten its text too,
+    /// which is the one part of a selected row that varies by caller.
     pub selected: bool,
 }
 
@@ -114,6 +117,11 @@ pub struct Dialog<'a> {
 }
 
 impl<'a> Dialog<'a> {
+    /// A dialog with only a title, and defaults for the rest.
+    ///
+    /// The defaults are the commonest modal in either program: 60 by 12,
+    /// diffline's yellow, no scrim, no footer, centred in the whole area. Each
+    /// builder method below names what it changes.
     pub fn new(title: &'a str) -> Self {
         Self {
             title,
@@ -133,11 +141,20 @@ impl<'a> Dialog<'a> {
         self
     }
 
+    /// The frame, title and caret colour. github-tui's modals are cyan and
+    /// diffline's are yellow, which is a fact about the program rather than
+    /// about a dialog.
     pub fn accent(mut self, accent: Color) -> Self {
         self.accent = accent;
         self
     }
 
+    /// The box's size in cells, before it is centred.
+    ///
+    /// Clamped by `centered` to what the area can hold, so asking for more
+    /// than the terminal has gives a smaller box rather than one drawn off the
+    /// edge. A box too short for its own four rows of chrome gets an empty
+    /// body, not a body outside the frame — see `open`.
     pub fn size(mut self, width: u16, height: u16) -> Self {
         self.width = width;
         self.height = height;
@@ -222,6 +239,10 @@ pub struct AgentRow<'a> {
     /// stays out of the settings file: `shared::config::agent_icon` is what
     /// both callers use.
     pub icon: &'a str,
+    /// What it is doing. Drives both the glyph on the left of the first line
+    /// and the word right-aligned on it, which are the same fact twice on
+    /// purpose: the glyph is readable at a glance down a column of rows, the
+    /// word is readable at all.
     pub status: AgentStatus,
     /// The rest of the first line, after the kind. Empty draws nothing —
     /// diffline's modal has no room for it and github-tui's pane does.
@@ -345,6 +366,8 @@ pub struct Body {
     pub inner: Rect,
     /// Empty when none was asked for.
     pub footer: Rect,
+    /// The dialog's accent, carried through so that what a caller draws inside
+    /// the body matches the frame around it without being told twice.
     pub accent: Color,
 }
 
@@ -417,6 +440,8 @@ pub struct Section<'a> {
 }
 
 impl<'a> Section<'a> {
+    /// A section with only a title: no count, unfocused, on the darker of the
+    /// two panel grounds.
     pub fn new(title: &'a str) -> Self {
         Self {
             title,

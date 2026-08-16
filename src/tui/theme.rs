@@ -6,6 +6,24 @@
 //!
 //! Call sites read through the accessors below rather than naming a constant,
 //! which is what makes the swap possible at all.
+//!
+//! ## The accessor family
+//!
+//! At the bottom of this file there is one `pub fn` per field of [`Palette`],
+//! and every one of them is `p().that_field`. They are read once per cell per
+//! frame, which is why they are twenty-eight separate functions rather than a
+//! single `role(Role) -> Color`: an enum would put a match in the hottest loop
+//! either program has, and `theme::dimmer()` reads at a call site in a way that
+//! `theme::role(Role::Dimmer)` does not.
+//!
+//! Choosing between them is choosing a *role*, never a colour. Four of the
+//! surfaces are within a few points of black under both themes bundled here and
+//! a theme read off disk may make any of them anything at all, so pick by what
+//! the cell is — the ground, a panel, a selected row, a rule — and not by which
+//! one happens to look right in the theme you have open. The doc line on each
+//! accessor names where it is drawn, so the nearest match to what you are
+//! drawing is the right one. [`ROLES`] carries the same list as text, and is
+//! what a theme file on disk is written against.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,38 +35,82 @@ const fn rgb(hex: u32) -> Color {
 }
 
 /// Every colour the interface draws with, in the roles the design defines.
+///
+/// One field per role, and one accessor per field. A theme is a whole one of
+/// these, so a palette with a hole in it would draw an invisible pane rather
+/// than fall back to anything — which is why `parse_palette` fills from Mocha
+/// and a test walks every role of every theme.
+///
+/// Field order is the order the roles are grouped in and in [`ROLES`], and the
+/// grouping is worth keeping: a surface and a text colour are never
+/// interchangeable, however close they look.
 #[derive(Clone, Copy)]
 pub struct Palette {
     // surfaces
+    /// The terminal's own background. Anything that is not a panel sits on it.
     pub bg: Color,
+    /// Headers, status bars and the inside of every modal.
     pub panel: Color,
+    /// Sidebars and trees — a shade apart from `panel` so two adjacent panes
+    /// are told apart without a border between them costing a column.
     pub panel_alt: Color,
+    /// The tab in force. Also the ground of a hunk header and of both halves
+    /// of a split diff, which want the same lift away from `bg`.
     pub tab_active_bg: Color,
+    /// Rules between panes.
     pub border: Color,
+    /// Rules inside a pane: under a heading, above a footer, and the divider
+    /// down the middle of a split diff.
     pub border_soft: Color,
+    /// The ground of the selected row.
     pub sel: Color,
+    /// The cursor bar down a row of a pane that does not have focus. Also the
+    /// travelling band of a loading skeleton, which is the same "present but
+    /// not yours" reading.
     pub sel_mark_idle: Color,
+    /// Behind a failed step in the Actions log.
     pub err_bg: Color,
+    /// Behind an added line.
     pub diff_add_bg: Color,
+    /// Behind a deleted line.
     pub diff_del_bg: Color,
+    /// Behind the empty half of a split-view pair, where the other side has a
+    /// line and this one never had one.
     pub diff_void_bg: Color,
     // text
+    /// Ordinary text: what a row says when nothing about it is special.
     pub fg: Color,
+    /// Text that matters — a selected row's own words, a modal's answer.
     pub bright: Color,
+    /// Prose: markdown paragraphs, a confirmation's question, a review body.
     pub body: Color,
+    /// Step names in the Actions log, and context lines in a diff.
     pub step_fg: Color,
+    /// Plain log output, as distinct from the step names around it.
     pub log_fg: Color,
+    /// Text that matters less: metadata beside something.
     pub dim: Color,
+    /// Text that matters least: placeholders, hints, an agent's idle glyph.
     pub dimmer: Color,
+    /// Barely there — the `?  help` hint, and detail nobody is reading.
     pub dimmest: Color,
+    /// Line numbers, in a diff and in a log, and the `/` between breadcrumbs.
     pub gutter: Color,
     // accents
+    /// Links, TypeScript, and github-tui's modal accent.
     pub cyan: Color,
+    /// A second cyan, for what is beside something already cyan: a tree's
+    /// disclosure arrow, a hunk header, an agent's kind.
     pub cyan_soft: Color,
+    /// Added, passing, approved.
     pub green: Color,
+    /// Running, queued, and diffline's modal accent.
     pub yellow: Color,
+    /// Deleted, failing, refused.
     pub red: Color,
+    /// Merged, closed, visual mode, and an agent's icon.
     pub purple: Color,
+    /// Rust, and warnings.
     pub orange: Color,
 }
 
@@ -127,9 +189,17 @@ const MOCHA: Palette = Palette {
     orange: rgb(0x00fab387), // peach
 };
 
+/// Which palette is in force.
+///
+/// `Copy`, and small enough to be worth passing about, because it is stored as
+/// a single index in the `ACTIVE` atomic and reconstructed from it on every colour
+/// lookup. That is also why `Custom` carries an index rather than a `Palette`:
+/// the palette lives in the `custom()` table for the life of the process.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Theme {
+    /// The palette of `GitHub TUI.dc.html`, and the default.
     Design,
+    /// Catppuccin Mocha.
     Mocha,
     /// One the reader wrote, by index into `custom()`.
     Custom(usize),
@@ -143,6 +213,7 @@ impl Theme {
         v
     }
 
+    /// What the picker shows. Free to be reworded; `key` is what is stored.
     pub fn name(self) -> &'static str {
         match self {
             Self::Design => "design",
@@ -161,6 +232,11 @@ impl Theme {
         }
     }
 
+    /// The theme a saved config names.
+    ///
+    /// `None` for a key that matches nothing, which is the ordinary case for a
+    /// config written when a theme file existed that has since been deleted —
+    /// the caller falls back rather than treating it as an error.
     pub fn from_key(key: &str) -> Option<Self> {
         Self::all().into_iter().find(|t| t.key() == key)
     }
@@ -187,8 +263,15 @@ impl Theme {
 
 /// A theme somebody wrote, read out of the themes directory.
 pub struct Custom {
+    /// Shown in the picker. The file's stem, since a theme file has no place
+    /// to write a prettier name.
     pub name: &'static str,
+    /// Stored in the config. Also the file's stem, so the two coincide today —
+    /// they are separate fields because `name` is the half that may be
+    /// reworded later without invalidating anyone's saved choice.
     pub key: &'static str,
+    /// Parsed over the top of Mocha, so every role is filled whatever the file
+    /// left out.
     pub palette: Palette,
 }
 
@@ -200,6 +283,10 @@ pub struct Custom {
 /// at a colour.
 static CUSTOM: OnceLock<Vec<Custom>> = OnceLock::new();
 
+/// The themes found in the themes directory, in filename order.
+///
+/// The first call does the directory listing; every call after it is a load.
+/// Empty when there is no directory, which is the normal case.
 pub fn custom() -> &'static [Custom] {
     CUSTOM.get_or_init(load_custom)
 }
@@ -456,6 +543,11 @@ pub fn current() -> Theme {
 /// How many themes ship, and so where the custom ones start.
 const BUILT_IN: usize = 2;
 
+/// Makes `theme` the one the accessors read, from the next lookup on.
+///
+/// A single relaxed store, so the change lands on the very next frame with
+/// nothing to rebuild. A theme that is not in `all()` — one whose file has gone
+/// since it was chosen — falls back to index 0 rather than being refused.
 pub fn set(theme: Theme) {
     let i = Theme::all().iter().position(|t| *t == theme).unwrap_or(0);
     ACTIVE.store(i, Ordering::Relaxed);
@@ -466,91 +558,119 @@ fn p() -> &'static Palette {
 }
 
 // --- surfaces ---
+/// The terminal's own background. Anything that is not a panel sits on it.
 pub fn bg() -> Color {
     p().bg
 }
+/// Headers, status bars, and the inside of every modal.
 pub fn panel() -> Color {
     p().panel
 }
+/// Sidebars and trees, told apart from `panel` without a border between them.
 pub fn panel_alt() -> Color {
     p().panel_alt
 }
+/// The tab in force, a hunk header's ground, and both halves of a split diff.
 pub fn tab_active_bg() -> Color {
     p().tab_active_bg
 }
+/// Rules between panes.
 pub fn border() -> Color {
     p().border
 }
+/// Rules inside a pane, and the divider down the middle of a split diff.
 pub fn border_soft() -> Color {
     p().border_soft
 }
+/// The ground of the selected row.
 pub fn sel() -> Color {
     p().sel
 }
+/// The cursor bar of an unfocused pane, and a loading skeleton's band.
 pub fn sel_mark_idle() -> Color {
     p().sel_mark_idle
 }
+/// Behind a failed step in the Actions log.
 pub fn err_bg() -> Color {
     p().err_bg
 }
+/// Behind an added line.
 pub fn diff_add_bg() -> Color {
     p().diff_add_bg
 }
+/// Behind a deleted line.
 pub fn diff_del_bg() -> Color {
     p().diff_del_bg
 }
+/// Behind the half of a split-view pair that never had a line.
 pub fn diff_void_bg() -> Color {
     p().diff_void_bg
 }
 
 // --- text ---
+/// Ordinary text, where nothing about the row is special.
 pub fn fg() -> Color {
     p().fg
 }
+/// Text that matters: a selected row's own words, a modal's answer.
 pub fn bright() -> Color {
     p().bright
 }
+/// Prose: markdown paragraphs, a confirmation's question, a review body.
 pub fn body() -> Color {
     p().body
 }
+/// Step names in the Actions log, and context lines in a diff.
 pub fn step_fg() -> Color {
     p().step_fg
 }
+/// Plain log output, as against the step names around it.
 pub fn log_fg() -> Color {
     p().log_fg
 }
+/// Metadata beside something: text that matters less.
 pub fn dim() -> Color {
     p().dim
 }
+/// Placeholders, hints, an idle agent's glyph: text that matters least.
 pub fn dimmer() -> Color {
     p().dimmer
 }
+/// Barely there — the `?  help` hint, and detail nobody is reading.
 pub fn dimmest() -> Color {
     p().dimmest
 }
+/// Line numbers in a diff and a log, and the separator between breadcrumbs.
 pub fn gutter() -> Color {
     p().gutter
 }
 
 // --- accents ---
+/// Links, TypeScript, and github-tui's modal accent.
 pub fn cyan() -> Color {
     p().cyan
 }
+/// A disclosure arrow, a hunk header, an agent's kind: cyan beside cyan.
 pub fn cyan_soft() -> Color {
     p().cyan_soft
 }
+/// Added, passing, approved.
 pub fn green() -> Color {
     p().green
 }
+/// Running, queued, and diffline's modal accent.
 pub fn yellow() -> Color {
     p().yellow
 }
+/// Deleted, failing, refused.
 pub fn red() -> Color {
     p().red
 }
+/// Merged, closed, visual mode, and an agent's icon.
 pub fn purple() -> Color {
     p().purple
 }
+/// Rust, and warnings.
 pub fn orange() -> Color {
     p().orange
 }
@@ -586,7 +706,12 @@ pub fn label(rgb: (u8, u8, u8)) -> Color {
 
 /// Visibility markers for the repo pane. The design leaves both empty (the
 /// Nerd Font glyphs were lost on save), though the colour is still defined.
+///
+/// Empty on purpose, then, and not a placeholder waiting to be filled: an
+/// empty marker writes no cells, so the pane's arithmetic must not assume
+/// either of these is one column wide.
 pub const PRIVATE_MARK: &str = "";
+/// The marker beside a public repository. Empty, for the reason above.
 pub const PUBLIC_MARK: &str = "";
 
 #[cfg(test)]
