@@ -15,6 +15,11 @@ use unicode_width::UnicodeWidthStr;
 
 use super::theme;
 
+/// Paints the background of every cell in `area`, leaving the text alone.
+///
+/// The pair to `clear`: this is what a row's ground is painted with, where
+/// whatever glyphs are already there — a mark, a tree's arrow — are meant to
+/// survive. Use `clear` when they are not.
 pub fn fill(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
@@ -104,6 +109,16 @@ pub fn put_trunc(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style
     put(buf, end, y, max_x, "…", style)
 }
 
+/// Writes `text` so that it ends at `right_x` (exclusive). Returns the x it
+/// began at.
+///
+/// That return is the useful half: it is where the *next* thing to the left has
+/// to stop, and laying the right of a line out first is how a row keeps its
+/// right-aligned parts from being written over. `agent_row` does exactly this.
+///
+/// The width is measured in columns, not bytes and not `char`s, so an accented
+/// letter takes one and a CJK glyph takes two. Text wider than `right_x` starts
+/// at column 0 and is cut on the right rather than underflowing to the left.
 pub fn put_right(buf: &mut Buffer, right_x: u16, y: u16, text: &str, style: Style) -> u16 {
     let w = text.width() as u16;
     let x = right_x.saturating_sub(w);
@@ -111,6 +126,13 @@ pub fn put_right(buf: &mut Buffer, right_x: u16, y: u16, text: &str, style: Styl
     x
 }
 
+/// Draws `w` columns of `─` from (x, y), on the theme's background.
+///
+/// `w` is a count of columns rather than a right edge, which is the opposite of
+/// `put`'s `max_x` and the reason both spellings exist: a rule is nearly always
+/// asked for as "the width of this pane", and the callers that write
+/// `area.width` would otherwise all write `area.right()` and one of them would
+/// get it wrong.
 pub fn hline(buf: &mut Buffer, x: u16, y: u16, w: u16, color: ratatui::style::Color) {
     let s = "─".repeat(w as usize);
     put(
@@ -123,6 +145,11 @@ pub fn hline(buf: &mut Buffer, x: u16, y: u16, w: u16, color: ratatui::style::Co
     );
 }
 
+/// Draws `h` rows of `│` down column `x` from `y`, on the theme's background.
+///
+/// `h` is a count of rows, matching `hline`'s count of columns. One cell per
+/// row rather than one `put` of a repeated glyph, because a buffer is laid out
+/// by rows and there is no vertical run to write.
 pub fn vline(buf: &mut Buffer, x: u16, y: u16, h: u16, color: ratatui::style::Color) {
     for yy in y..y + h {
         put(
@@ -241,6 +268,12 @@ pub fn skel_bar(buf: &mut Buffer, x: u16, y: u16, w: u16, row: usize, phase: u64
     );
 }
 
+/// The same style, emboldened.
+///
+/// Here so that a call site can say `bold(base)` inline where it would
+/// otherwise break the expression up to reach `add_modifier`. It adds to the
+/// modifiers rather than replacing them, so it composes with whatever the base
+/// already carries.
 pub fn bold(style: Style) -> Style {
     style.add_modifier(Modifier::BOLD)
 }

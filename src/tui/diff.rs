@@ -18,7 +18,9 @@ pub enum Side {
     Header,
     /// Unchanged, and so on both sides.
     Context,
+    /// A `-` line: it goes on the left, opposite whatever replaced it.
     Deleted,
+    /// A `+` line: it goes on the right, opposite whatever it replaced.
     Added,
 }
 
@@ -29,8 +31,13 @@ pub enum Side {
 /// knowing those things exist.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct Pair {
+    /// The old side. `None` where the run of additions outlasted the run of
+    /// deletions, and the honest thing to draw is a void.
     pub left: Option<usize>,
+    /// The new side. `None` the other way round.
     pub right: Option<usize>,
+    /// Set instead of both sides on a `@@ … @@` line, which spans the width
+    /// rather than belonging to either column.
     pub header: Option<usize>,
 }
 

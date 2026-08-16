@@ -98,6 +98,8 @@ pub struct Query<'a> {
     /// Whether the caret is in its visible half. The blink belongs to the
     /// program's clock, not to this.
     pub caret: bool,
+    /// The colour of the lead and the caret. See `query_line` for why this is
+    /// a field and not a call to `theme::yellow()`.
     pub accent: Color,
 }
 
@@ -239,10 +241,17 @@ pub fn empty(buf: &mut Buffer, area: Rect, state: &Empty<'_>, ground: Color) {
 
 /// Why a pane is empty.
 pub enum Empty<'a> {
-    /// On its way. `widths` are percentages, so a skeleton keeps its
-    /// proportions at any pane size; `phase` travels the highlight down them,
-    /// which is what separates "coming" from "stuck".
-    Loading { widths: &'a [u16], phase: u64 },
+    /// On its way, drawn as a skeleton rather than a word.
+    Loading {
+        /// One bar per entry, each a **percentage** of the pane's inner width
+        /// and not a column count — so a skeleton keeps its proportions at any
+        /// pane size. The slice's length is how many rows are drawn.
+        widths: &'a [u16],
+        /// Ticks the highlight band down the rows. Taken from the program's
+        /// own clock, since a molecule has no clock; a `phase` that never
+        /// moves is what "stuck" looks like, which is the point of it.
+        phase: u64,
+    },
     /// Came back with nothing, which is an answer.
     Nothing(&'a str),
     /// Went wrong.

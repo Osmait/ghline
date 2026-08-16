@@ -17,7 +17,12 @@ use ratatui::layout::{Position, Rect};
 /// row to an entry.
 #[derive(Clone, Copy, Debug)]
 pub struct Region<T> {
+    /// What a click here means, in whatever vocabulary the program uses for
+    /// its panes. Generic because the two programs name their panes with two
+    /// unrelated enums, and this arithmetic never looks at it.
     pub target: T,
+    /// Where it was drawn, in terminal cells. Right and bottom are exclusive,
+    /// as everywhere else in ratatui.
     pub area: Rect,
     /// Rows one entry occupies: list cards are two tall, log lines one.
     pub row_h: u16,
@@ -46,6 +51,10 @@ impl<T: Copy> Region<T> {
         Self::rows(target, area, 1, 0, 0)
     }
 
+    /// Whether this cell is inside the rectangle.
+    ///
+    /// `col` and `row` are absolute terminal coordinates, as a mouse event
+    /// reports them — not offsets into the region.
     pub fn contains(&self, col: u16, row: u16) -> bool {
         self.area.contains(Position::new(col, row))
     }
