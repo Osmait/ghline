@@ -52,6 +52,7 @@ pub mod source {
     pub mod git;
     pub mod service;
     pub mod vcs;
+    pub mod watch;
 }
 
 pub mod state {
@@ -67,5 +68,5 @@ pub mod view;
 // The layers are how it is filed, not how it is spoken about: `diffline::app`
 // reads better at a call site than `diffline::state::app`, and the layer is
 // still there in the path on disk for anyone who wants to know.
-pub use source::{git, service, vcs};
+pub use source::{git, service, vcs, watch};
 pub use state::{app, hit, input, keys};

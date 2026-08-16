@@ -151,6 +151,10 @@ pub struct Hit {
 pub struct App {
     pub repo: String,
     pub service: Option<Box<dyn Worker<Request, Response>>>,
+    /// One live refresh may be in flight; another event is remembered rather
+    /// than racing its older answer.
+    refreshing: bool,
+    refresh_again: bool,
 
     // --- what is being reviewed ---
     pub scope: Scope,
@@ -255,6 +259,8 @@ impl App {
         Self {
             repo,
             service,
+            refreshing: false,
+            refresh_again: false,
             scope,
             scopes,
             files: Vec::new(),
@@ -490,6 +496,8 @@ impl App {
         // Dropped so this runs once rather than on every frame from here on.
         self.service = None;
         self.busy = false;
+        self.refreshing = false;
+        self.refresh_again = false;
         let gone = || Self::gone();
         if self.files_state.is_loading() {
             self.files_state = gone();
@@ -518,10 +526,35 @@ impl App {
     /// Is anything requested and unanswered? The loop waits less if so.
     pub fn waiting(&self) -> bool {
         self.busy
+            || self.refreshing
             || self.files_state.is_loading()
             || self.agents_state.is_loading()
             || self.rows_state.values().any(Load::is_loading)
             || self.blame_state.values().any(Load::is_loading)
+    }
+
+    /// Re-reads the working tree without discarding the frame being viewed.
+    ///
+    /// A second filesystem event while Git is running becomes one follow-up
+    /// request, so an older answer can never land after a newer one.
+    pub fn refresh_live(&mut self) {
+        if self.scope != Scope::WorkingTree {
+            return;
+        }
+        if self.refreshing {
+            self.refresh_again = true;
+            return;
+        }
+
+        self.refreshing = true;
+        if !self.ask(Request::Refresh {
+            repo: self.repo.clone(),
+            scope: self.scope.clone(),
+            path: self.path().to_string(),
+            context: self.context,
+        }) {
+            self.refreshing = false;
+        }
     }
 
     /// Requests whatever the current view still needs. Idempotent: each piece
@@ -622,6 +655,77 @@ impl App {
                         self.rows_state
                             .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
                     }
+                }
+            }
+
+            Response::Refresh {
+                scope,
+                path,
+                context,
+                files,
+                diff,
+            } => {
+                self.refreshing = false;
+
+                if scope == self.scope {
+                    if let Ok(files) = files {
+                        let selected = self.path().to_string();
+                        let previous = self.file_idx;
+                        let changed = self.files != files;
+                        if changed {
+                            self.files = files;
+                            self.file_idx = self
+                                .files
+                                .iter()
+                                .position(|file| file.path == selected)
+                                .unwrap_or_else(|| {
+                                    previous.min(self.files.len().saturating_sub(1))
+                                });
+                            if self.path() != selected {
+                                self.cursor = 0;
+                                self.anchor = None;
+                            }
+                        }
+
+                        // Any path not on screen is cheap to fetch when it is
+                        // next selected. Keeping those cached after an event
+                        // is how an edit to the second file stayed invisible.
+                        let current = self.path().to_string();
+                        self.rows.retain(|cached, _| cached == &current);
+                        self.spans.retain(|cached, _| cached == &current);
+                        self.rows_state.retain(|cached, _| cached == &current);
+                        self.blame.retain(|cached, _| cached == &current);
+                        self.blame_state.retain(|cached, _| cached == &current);
+                    }
+
+                    if context == self.context
+                        && path == self.path()
+                        && let Some(result) = diff
+                    {
+                        match result {
+                            Ok((rows, spans)) => {
+                                let changed = self.rows.get(&path) != Some(&rows);
+                                if changed {
+                                    self.cursor = first_code(&rows, self.cursor);
+                                    self.rows.insert(path.clone(), rows);
+                                    self.spans.insert(path.clone(), spans);
+                                    self.rows_state.insert(path.clone(), Load::Ready);
+                                    self.blame.remove(&path);
+                                    self.blame_state.remove(&path);
+                                    if self.comments.iter().any(|comment| comment.path() == path) {
+                                        self.flash(
+                                            "file changed — queued comments kept at their original lines",
+                                        );
+                                    }
+                                }
+                            }
+                            Err(error) => self.flash(error.brief()),
+                        }
+                    }
+                }
+
+                if std::mem::take(&mut self.refresh_again) {
+                    self.refresh_live();
                 }
             }
 
@@ -886,6 +990,105 @@ mod tests {
             "so `ensure` fetches the width that is now wanted"
         );
         assert_eq!(a.diff_rows().len(), 5, "and the old rows still stand");
+    }
+
+    #[test]
+    fn a_live_refresh_keeps_the_selected_file_and_cursor() {
+        use crate::shared::worker::Immediate;
+
+        let mut a = app();
+        a.files.push(ChangedFile {
+            path: "src/b.rs".into(),
+            status: crate::diffline::model::Status::Modified,
+            add: 1,
+            del: 0,
+        });
+        a.file_idx = 1;
+        a.cursor = 3;
+        a.rows.insert("src/b.rs".into(), rows());
+        a.rows_state.insert("src/b.rs".into(), Load::Ready);
+        let refreshed = vec![Row {
+            kind: Kind::Added,
+            old: None,
+            new: Some(1),
+            text: "changed while diffline was open".into(),
+        }];
+        a.service = Some(Box::new(Immediate::new(move |req| match req {
+            Request::Refresh {
+                scope,
+                path,
+                context,
+                ..
+            } => Response::Refresh {
+                scope,
+                path,
+                context,
+                files: Ok(vec![
+                    ChangedFile {
+                        path: "src/new.rs".into(),
+                        status: crate::diffline::model::Status::Added,
+                        add: 1,
+                        del: 0,
+                    },
+                    ChangedFile {
+                        path: "src/b.rs".into(),
+                        status: crate::diffline::model::Status::Modified,
+                        add: 1,
+                        del: 0,
+                    },
+                ]),
+                diff: Some(Ok((refreshed.clone(), vec![Vec::new()]))),
+            },
+            _ => Response::Sent(Ok(())),
+        })));
+
+        a.refresh_live();
+        while let Some(response) = a.poll() {
+            a.apply(response);
+        }
+
+        assert_eq!(a.path(), "src/b.rs", "selection follows its path");
+        assert_eq!(a.cursor, 0, "the shorter answer clamps the old cursor");
+        assert_eq!(a.diff_rows()[0].text, "changed while diffline was open");
+    }
+
+    #[test]
+    fn changes_during_a_live_refresh_are_read_once_more() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        use crate::shared::worker::Immediate;
+
+        let requests = Rc::new(Cell::new(0));
+        let seen = Rc::clone(&requests);
+        let mut a = app();
+        a.service = Some(Box::new(Immediate::new(move |req| match req {
+            Request::Refresh {
+                scope,
+                path,
+                context,
+                ..
+            } => {
+                seen.set(seen.get() + 1);
+                Response::Refresh {
+                    scope,
+                    path,
+                    context,
+                    files: Ok(Vec::new()),
+                    diff: Some(Ok((Vec::new(), Vec::new()))),
+                }
+            }
+            _ => Response::Sent(Ok(())),
+        })));
+
+        a.refresh_live();
+        a.refresh_live();
+        while let Some(response) = a.poll() {
+            a.apply(response);
+        }
+
+        assert_eq!(requests.get(), 2, "the event in flight was not lost");
+        assert!(!a.refreshing);
     }
 
     #[test]

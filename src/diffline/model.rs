@@ -120,7 +120,7 @@ impl Status {
 }
 
 /// One file in the diff.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ChangedFile {
     pub path: String,
     pub status: Status,
@@ -161,7 +161,7 @@ impl Kind {
 }
 
 /// One rendered row of a file's diff.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Row {
     pub kind: Kind,
     /// Line number on the old side, when the row has one.

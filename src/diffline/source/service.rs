@@ -14,11 +14,24 @@ use crate::diffline::model::{ChangedFile, Row, Scope};
 use crate::shared::error::{Error, Result as Res};
 use crate::shared::mux::Agent;
 
+/// Diff rows paired with the syntax spans computed for each one.
+pub type HighlightedRows = (Vec<Row>, Vec<Vec<crate::shared::syntax::Span>>);
+
 pub enum Request {
     /// Which files a scope touches.
     Files { repo: String, scope: Scope },
     /// One file's diff, at a context width.
     Diff {
+        repo: String,
+        scope: Scope,
+        path: String,
+        context: u32,
+    },
+    /// Re-read the active working-tree view after a filesystem event.
+    ///
+    /// Files and the open diff travel together so an ignored path produces
+    /// one unchanged answer rather than a destructive refresh.
+    Refresh {
         repo: String,
         scope: Scope,
         path: String,
@@ -56,7 +69,14 @@ pub enum Response {
         path: String,
         context: u32,
         /// The rows, and the colour spans that go with them.
-        result: Res<(Vec<Row>, Vec<Vec<crate::shared::syntax::Span>>)>,
+        result: Res<HighlightedRows>,
+    },
+    Refresh {
+        scope: Scope,
+        path: String,
+        context: u32,
+        files: Res<Vec<ChangedFile>>,
+        diff: Option<Res<HighlightedRows>>,
     },
     Blame {
         path: String,
@@ -170,6 +190,30 @@ fn handle(req: Request) -> Response {
                 path,
                 context,
                 result,
+            }
+        }
+
+        Request::Refresh {
+            repo,
+            scope,
+            path,
+            context,
+        } => {
+            let files = vcs(&repo).changed_files(&repo, &scope);
+            let diff = (!path.is_empty()).then(|| {
+                vcs(&repo)
+                    .file_diff(&repo, &scope, &path, context)
+                    .map(|rows| {
+                        let spans = highlight_rows(&path, &rows);
+                        (rows, spans)
+                    })
+            });
+            Response::Refresh {
+                scope,
+                path,
+                context,
+                files,
+                diff,
             }
         }
 

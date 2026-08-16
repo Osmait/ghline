@@ -9,6 +9,7 @@ use github_tui::tui::run::Program;
 
 use github_tui::diffline::app::App;
 use github_tui::diffline::view as ui;
+use github_tui::diffline::watch::{Notice, Watch};
 
 /// Cursor blink, and the beat the toast fades on.
 const BLINK: Duration = Duration::from_millis(500);
@@ -16,6 +17,8 @@ const BLINK: Duration = Duration::from_millis(500);
 const ANIM: Duration = Duration::from_millis(110);
 /// How often the toast is aged out.
 const TICK: Duration = Duration::from_millis(1200);
+/// Quiet time after an editor's burst of writes before Git is asked again.
+const CHANGE_DEBOUNCE: Duration = Duration::from_millis(200);
 
 /// diffline's borrowed state and the timers its terminal runtime advances.
 pub(super) struct Diffline<'a> {
@@ -23,16 +26,20 @@ pub(super) struct Diffline<'a> {
     blink: Instant,
     anim: Instant,
     tick: Instant,
+    watch: Option<Watch>,
+    changed: Option<Instant>,
 }
 
 impl<'a> Diffline<'a> {
-    pub(super) fn new(app: &'a mut App) -> Self {
+    pub(super) fn new(app: &'a mut App, watch: Option<Watch>) -> Self {
         let now = Instant::now();
         Self {
             app,
             blink: now,
             anim: now,
             tick: now,
+            watch,
+            changed: None,
         }
     }
 }
@@ -58,6 +65,20 @@ impl Program for Diffline<'_> {
         while let Some(response) = self.app.poll() {
             self.app.apply(response);
         }
+
+        let notice = self.watch.as_ref().map(Watch::poll);
+        match notice {
+            Some(Notice::Changed) => self.changed = Some(Instant::now()),
+            Some(Notice::Failed(error)) => {
+                self.app.flash(format!("file watch stopped: {error}"));
+                self.watch = None;
+            }
+            Some(Notice::Gone) => {
+                self.app.flash("file watch stopped");
+                self.watch = None;
+            }
+            Some(Notice::Quiet) | None => {}
+        }
     }
 
     /// The soonest of the three, and only the skeletons when something is
@@ -66,6 +87,9 @@ impl Program for Diffline<'_> {
         BLINK
             .saturating_sub(self.blink.elapsed())
             .min(TICK.saturating_sub(self.tick.elapsed()))
+            .min(self.changed.map_or(Duration::MAX, |at| {
+                CHANGE_DEBOUNCE.saturating_sub(at.elapsed())
+            }))
             .min(if self.app.waiting() {
                 ANIM.saturating_sub(self.anim.elapsed())
             } else {
@@ -74,6 +98,13 @@ impl Program for Diffline<'_> {
     }
 
     fn on_wake(&mut self) {
+        if self
+            .changed
+            .is_some_and(|at| at.elapsed() >= CHANGE_DEBOUNCE)
+        {
+            self.changed = None;
+            self.app.refresh_live();
+        }
         if self.app.waiting() && self.anim.elapsed() >= ANIM {
             self.app.anim = self.app.anim.wrapping_add(1);
             self.anim = Instant::now();

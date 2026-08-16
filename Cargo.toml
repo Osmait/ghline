@@ -23,8 +23,11 @@ rust-version = "1.96"
 workspace = true
 
 [dependencies]
-cli-parser = { path = "crates/cli-parser" }
+cli-parser = { version = "0.1.0", path = "crates/cli-parser" }
 crossterm = "0.29"
+# Native filesystem events keep diffline current without running git forever
+# in idle repositories. One dependency replaces four platform-specific APIs.
+notify = "8.2.0"
 ratatui = "0.30"
 ratatui-core = "0.1.2"
 serde_json = "1.0.151"

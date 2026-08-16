@@ -55,6 +55,17 @@ fn interactive(args: RunArgs) -> io::Result<()> {
         github_tui::shared::log::say(format_args!("repo {}", app.repo));
     }
 
+    // A watcher failure should not make the existing manual refresh unusable.
+    // Started before taking the terminal so its concrete backend error has a
+    // normal stderr to be printed on.
+    let watch = match github_tui::diffline::watch::Watch::start(Path::new(&app.repo)) {
+        Ok(watch) => Some(watch),
+        Err(error) => {
+            eprintln!("diffline: cannot watch {}: {error}", app.repo);
+            None
+        }
+    };
+
     // Not `?`: "it does not start" is the report a log is most wanted for,
     // and propagating here would close the file having written the header
     // and nothing else.
@@ -65,7 +76,7 @@ fn interactive(args: RunArgs) -> io::Result<()> {
             return Err(error);
         }
     };
-    let result = run_tui(&mut term, &mut Diffline::new(&mut app));
+    let result = run_tui(&mut term, &mut Diffline::new(&mut app, watch));
     // The guard gives the terminal back even if the loop returned an error.
     drop(term);
 
