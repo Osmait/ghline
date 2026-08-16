@@ -14,6 +14,13 @@ categories = ["command-line-utilities", "development-tools"]
 # syntax error an older compiler happens to reach first. Raise both together.
 rust-version = "1.96"
 
+# The design's fixture and the headless renders that draw it. Off by default,
+# so the binary somebody downloads carries neither. Turned on for the test
+# build by the dev-dependency on this crate below, which is how a feature is
+# said to be for tests and nothing else.
+[features]
+demo = []
+
 [dependencies]
 crossterm = "0.28"
 ratatui = "0.29"
@@ -91,6 +98,11 @@ strip = true
 
 # Neither of these is compiled into anything that ships.
 [dev-dependencies]
+# This crate, depending on itself, purely to turn `demo` on while the tests
+# are built. Cargo unifies the features of a package with those its
+# dev-dependencies ask for, so `cargo test` compiles the fixture in and
+# `cargo build` does not.
+github-tui = { path = ".", features = ["demo"] }
 # The bench harness. divan rather than criterion: a tenth of the dependencies
 # for what is wanted here, which is four numbers and a comparison against the
 # last run.

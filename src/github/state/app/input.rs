@@ -5,6 +5,7 @@ use crate::shared::key::{Key, Press};
 
 use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::github::data::{Kind, TABS};
+#[cfg(feature = "demo")]
 use crate::github::demo;
 use crate::shared::nav::{Dir, Place};
 
@@ -988,6 +989,10 @@ impl App {
 
     /// 1400 ms heartbeat: advances the log stream like the design's `setInterval`.
     pub fn tick(&mut self) {
+        // Only the fixture has a stream to advance, and `extra_lines` is only
+        // read where it is drawn from. It used to count up in live mode too,
+        // bounded by the length of a fixture that was not being shown.
+        #[cfg(feature = "demo")]
         if self.view == View::Logs && self.extra_lines < demo::STREAM.len() {
             self.extra_lines += 1;
         }

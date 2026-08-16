@@ -42,8 +42,10 @@ run: ## Run github-tui against real GitHub through gh
 diff: ## Run diffline on this repository
 	cargo run --release --bin diffline -- .
 
+# `--features demo` because the fixture is not in a normal build — see the
+# feature in Cargo.toml. `cargo test` turns it on by itself.
 demo: ## Run on the design's fixture, no network needed
-	cargo run --release -- --demo
+	cargo run --release --features demo -- --demo
 
 # CI runs these through `cargo nextest`, which reports the same pass or fail
 # in a form that is easier to read when one of six hundred goes red. Plain
@@ -68,6 +70,9 @@ test-nvim: ## The neovim plugin's tests (needs nvim and a running herdr)
 lint: ## Formatting and lints, exactly as CI runs them
 	cargo fmt --all --check
 	cargo clippy --all-targets -- -D warnings
+	# Again without the fixture, which is the shape that ships: `--all-targets`
+	# builds the tests, and building the tests turns the `demo` feature on.
+	cargo clippy -- -D warnings
 	cargo doc --no-deps
 
 # The last two are not cargo crates, and `uvx` runs them without installing

@@ -40,8 +40,10 @@ A GitHub TUI in Rust (`ratatui` + `crossterm`), ported 1:1 from the
 `GitHub TUI.dc.html` design in the Claude Design project.
 
 It works against real GitHub through the `gh` CLI: the repos, issues, pull
-requests, workflow runs and Actions logs are yours. It also ships the design's
-fake data as a demo mode.
+requests, workflow runs and Actions logs are yours. The design's fake data is
+still here as a demo mode, but it is a development fixture rather than part of
+the program — behind a cargo feature the tests turn on and a released binary
+does not carry.
 
 ## Install
 
@@ -83,7 +85,8 @@ gh attestation verify github-tui-aarch64-apple-darwin.tar.gz --repo Osmait/githu
 Releases published before this was added have no attestation to check.
 
 You also need the [`gh` CLI](https://cli.github.com), signed in — that is how
-this reads GitHub. Without it the demo mode still runs.
+this reads GitHub. Without it the program says so and stops; there is nothing
+it could show.
 
 ### From source
 
@@ -105,15 +108,18 @@ CI runs.
 
 ```sh
 github-tui         # real data via gh
-github-tui --demo  # the design's fake data
 ```
 
 Or without installing, from a clone:
 
 ```sh
 make run           # cargo run --release
-make demo          # cargo run --release -- --demo
+make demo          # cargo run --release --features demo -- --demo
 ```
+
+`--demo` runs the design's fixture with no network at all, and needs
+`--features demo` to build: the fixture is what the tests are written against,
+and a released binary has no use for a screenful of somebody else's issues.
 
 Real mode needs a signed-in `gh`:
 
@@ -121,9 +127,9 @@ Real mode needs a signed-in `gh`:
 gh auth login
 ```
 
-If `gh` is missing or not signed in, it starts in demo mode and says so on
-stderr. The scopes it needs are `repo` (read, merge, close and delete branches)
-and `workflow` (Actions logs).
+If `gh` is missing or not signed in it says which of the two it was and stops.
+The scopes it needs are `repo` (read, merge, close and delete branches) and
+`workflow` (Actions logs).
 
 Requires a truecolor terminal. The design's font is JetBrains Mono.
 
@@ -718,6 +724,13 @@ with no echo.
 
 ## Tests
 
+The fixture the golden frames and most of the state tests are written against
+is behind the `demo` cargo feature, which is off by default and turned on for
+the test build by this crate depending on itself in `[dev-dependencies]`. So
+`cargo test` compiles it in and `cargo build` does not, and the compiler is
+what says which is which — `cargo clippy` with no `--all-targets` is CI's
+check of the shape that ships.
+
 ```sh
 cargo test          # 586 unit tests and 18 golden frames
 cargo clippy        # the lint set configured in Cargo.toml
@@ -815,17 +828,16 @@ worth catching.
 Useful for comparing against the design or debugging the layout:
 
 ```sh
-# ANSI dump to stdout: <keys> <width> <height> <ticks>
-cargo run -- --snapshot "3<enter><enter>" 150 40 6
-
-# the same render as SVG
-cargo run -- --svg "" 150 40 > list.svg
-
-# with real data, waiting on gh between keys
+# with real data, waiting on gh between keys — in every build
 cargo run -- --svg-live "<enter><enter>" 150 40 > logs.svg
 
-# any view held in its loading state, to look at the skeletons
-cargo run -- --svg-loading "" 150 40 5 > loading.svg
+# diffline draws whatever repository you point it at
+cargo run --bin diffline -- . --svg "j" 150 40 > diff.svg
+
+# the three that draw the fixture, so they want the feature
+cargo run --features demo -- --snapshot "3<enter><enter>" 150 40 6
+cargo run --features demo -- --svg "" 150 40 > list.svg
+cargo run --features demo -- --svg-loading "" 150 40 5 > loading.svg
 ```
 
 Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>`, `<del>`,
@@ -855,13 +867,18 @@ session back:
 +    412ms key j
 +    588ms key /
 +   1104ms mouse down Left at 12,4
-+   3320ms replay: diffline --snapshot "j/" 160 44
++   3320ms replay: diffline --svg "j/" 160 44
 ```
 
-Which is the point of it. What is recorded is written in the notation
-`--snapshot` reads, so a report is not a description of the bug — paste the
+Which is the point of it. What is recorded is written in the notation the
+headless renders read, so a report is not a description of the bug — paste the
 last line and the frame is in front of you. A round-trip test keeps the two
 honest with each other.
+
+Each program names the flag it actually has, and both of them work in a
+released binary: `--svg` draws the repository diffline was pointed at, and
+`--svg-live` replays the keys against real GitHub. Neither touches the
+fixture, which is why neither went behind the feature with it.
 
 ## Differences from the design
 

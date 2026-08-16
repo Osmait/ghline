@@ -17,6 +17,7 @@ fn usage() {
     println!("github-tui — repositories, issues, pull requests and Actions, over the gh CLI");
     println!();
     println!("  github-tui            read real GitHub through `gh`");
+    #[cfg(feature = "demo")]
     println!("  --demo                the design's fixture, no network needed");
     println!("  --no-mouse            leave the terminal's own click-to-select alone");
     println!("  --log <file>          record the session; the last line replays it");
@@ -36,20 +37,29 @@ const ANIM: Duration = Duration::from_millis(110);
 const FIND: Duration = Duration::from_millis(260);
 
 fn main() -> io::Result<()> {
-    // `--snapshot [keys] [width] [height] [ticks]` prints one render and exits.
     let args: Vec<String> = std::env::args().skip(1).collect();
+
     let mode = args.first().map(String::as_str).unwrap_or("");
-    if matches!(
-        mode,
-        "--snapshot" | "--svg" | "--svg-live" | "--svg-loading"
-    ) {
+    let headless = |i: usize, d: u16| args.get(i).and_then(|s| s.parse().ok()).unwrap_or(d);
+
+    // `--svg-live [keys] [w] [h] [ticks]` replays a session against real
+    // GitHub, waiting on `gh` between keys. No fixture involved, so it is in
+    // every build — and it is what the last line of a `--log` file names.
+    if mode == "--svg-live" {
         let keys = args.get(1).cloned().unwrap_or_default();
-        let w = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(160);
-        let h = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(44);
+        let ticks = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
+        return snapshot::svg_live(&keys, headless(2, 160), headless(3, 44), ticks);
+    }
+
+    // The other three draw the design's fixture, so they exist where the
+    // fixture does: under `cargo test`, and under `--features demo`.
+    #[cfg(feature = "demo")]
+    if matches!(mode, "--snapshot" | "--svg" | "--svg-loading") {
+        let keys = args.get(1).cloned().unwrap_or_default();
+        let (w, h) = (headless(2, 160), headless(3, 44));
         let ticks = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
         return match mode {
             "--svg" => snapshot::svg(&keys, w, h, ticks),
-            "--svg-live" => snapshot::svg_live(&keys, w, h, ticks),
             "--svg-loading" => snapshot::svg_loading(&keys, w, h, ticks as u64),
             _ => snapshot::run(&keys, w, h, ticks),
         };
@@ -71,6 +81,7 @@ fn main() -> io::Result<()> {
 
     // `--demo` forces the design's data; with no signed-in `gh` we fall back to
     // demo anyway rather than starting an empty interface.
+    #[cfg(feature = "demo")]
     let source = if args.iter().any(|a| a == "--demo") {
         Source::Demo
     } else if gh::available() {
@@ -79,6 +90,20 @@ fn main() -> io::Result<()> {
         eprintln!("gh is unavailable or not signed in; starting in demo mode.");
         eprintln!("run `gh auth login` to use real data.");
         Source::Demo
+    };
+
+    // Without the fixture there is nothing to fall back to, so not being able
+    // to reach GitHub is the end of the run rather than the start of a
+    // pretend one. Saying which of the two it was, because "not installed"
+    // and "not signed in" are fixed differently.
+    #[cfg(not(feature = "demo"))]
+    let source = {
+        if !gh::available() {
+            eprintln!("gh-tui: gh is unavailable or not signed in.");
+            eprintln!("        install it from https://cli.github.com, then `gh auth login`.");
+            return Ok(());
+        }
+        Source::Live
     };
 
     // Capturing the mouse takes the terminal's own click-to-select with it,
@@ -93,18 +118,21 @@ fn main() -> io::Result<()> {
             eprintln!("gh-tui: --log wants a file; writing to github-tui.log");
             "github-tui.log".into()
         });
-        if let Err(e) = github_tui::shared::log::to(std::path::Path::new(&path), "github-tui") {
+        if let Err(e) =
+            github_tui::shared::log::to(std::path::Path::new(&path), "github-tui", "--svg-live")
+        {
             eprintln!("gh-tui: cannot write to {path}: {e}");
             return Ok(());
         }
-        github_tui::shared::log::say(format_args!(
-            "source {}",
-            if matches!(source, Source::Demo) {
-                "demo"
-            } else {
-                "gh"
-            }
-        ));
+        #[cfg(feature = "demo")]
+        let name = if matches!(source, Source::Demo) {
+            "demo"
+        } else {
+            "gh"
+        };
+        #[cfg(not(feature = "demo"))]
+        let name = "gh";
+        github_tui::shared::log::say(format_args!("source {name}"));
     }
 
     // Not `?`: "it does not start" is the report a log is most wanted for,

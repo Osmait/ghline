@@ -23,6 +23,7 @@ use std::sync::Arc;
 use crate::shared::error::{Error, Failure};
 
 use crate::github::data::{Account, Item, Job, RawLog, Status};
+#[cfg(feature = "demo")]
 use crate::github::demo;
 use crate::github::service::{Request, Response};
 use crate::shared::worker::Worker;
@@ -30,7 +31,10 @@ use crate::shared::worker::Worker;
 /// Where the data comes from.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    /// The design's fake data, with no network.
+    /// The design's fake data, with no network. Only where there is a fixture
+    /// to read: without the `demo` feature there is no such source, which is
+    /// the compiler saying what the release binary can and cannot start as.
+    #[cfg(feature = "demo")]
     Demo,
     /// The `gh` CLI against real GitHub.
     Live,
@@ -425,38 +429,77 @@ pub struct App {
     pub last_click: Option<(ratatui::layout::Position, Instant)>,
 }
 
+/// What the fixture puts into a fresh `App`, and nothing else.
+///
+/// Two implementations rather than four `#[cfg]`s scattered through
+/// `App::new`: with the feature there is a fixture to read, and without it
+/// there is not, and the constructor should not have to say so five times.
+struct Seed {
+    is_demo: bool,
+    accounts: Vec<Account>,
+    lists: HashMap<(String, usize), Vec<Item>>,
+    lists_state: HashMap<(String, usize), Load>,
+}
+
+#[cfg(feature = "demo")]
+fn seed(source: Source) -> Seed {
+    if source != Source::Demo {
+        return seed_nothing();
+    }
+    let accounts = demo::accounts();
+    let mut lists = HashMap::new();
+    let mut lists_state = HashMap::new();
+    for a in &accounts {
+        for (r, repo) in a.repos.iter().enumerate() {
+            let key = format!("{}/{}", a.login, repo.name);
+            lists.insert((key.clone(), 0), demo::issues(r));
+            lists.insert((key.clone(), 1), demo::prs(r));
+            lists.insert((key.clone(), 2), demo::runs(r));
+            for t in 0..3 {
+                lists_state.insert((key.clone(), t), Load::Ready);
+            }
+        }
+    }
+    Seed {
+        is_demo: true,
+        accounts,
+        lists,
+        lists_state,
+    }
+}
+
+/// No fixture compiled in, so there is nothing to seed and no source that
+/// could have asked for it.
+#[cfg(not(feature = "demo"))]
+fn seed(_source: Source) -> Seed {
+    seed_nothing()
+}
+
+fn seed_nothing() -> Seed {
+    Seed {
+        is_demo: false,
+        accounts: Vec::new(),
+        lists: HashMap::new(),
+        lists_state: HashMap::new(),
+    }
+}
+
 impl App {
     /// The worker is handed in rather than made here — the binary is the only
     /// part that should decide there is one.
     pub fn new(source: Source, service: Option<Box<dyn Worker<Request, Response>>>) -> Self {
-        let accounts = if source == Source::Demo {
-            demo::accounts()
-        } else {
-            Vec::new()
-        };
-        let mut lists = HashMap::new();
-        let mut lists_state = HashMap::new();
-        if source == Source::Demo {
-            for a in &accounts {
-                for (r, repo) in a.repos.iter().enumerate() {
-                    let key = format!("{}/{}", a.login, repo.name);
-                    lists.insert((key.clone(), 0), demo::issues(r));
-                    lists.insert((key.clone(), 1), demo::prs(r));
-                    lists.insert((key.clone(), 2), demo::runs(r));
-                    for t in 0..3 {
-                        lists_state.insert((key.clone(), t), Load::Ready);
-                    }
-                }
-            }
-        }
+        // Everything the fixture puts in before the first frame, and the one
+        // place in this file that knows whether there is a fixture at all.
+        let Seed {
+            is_demo,
+            accounts,
+            lists,
+            lists_state,
+        } = seed(source);
         Self {
             source,
             service,
-            accounts_state: if source == Source::Demo {
-                Load::Ready
-            } else {
-                Load::Idle
-            },
+            accounts_state: if is_demo { Load::Ready } else { Load::Idle },
             repos_state: HashMap::new(),
             lists,
             lists_state,
@@ -473,7 +516,7 @@ impl App {
             flash: None,
             acc: 0,
             // the design starts on the third repo; with real data, on the first
-            repo: if source == Source::Demo { 2 } else { 0 },
+            repo: if is_demo { 2 } else { 0 },
             tab: 1, // 'prs'
             pane: Pane::List,
             item: 0,

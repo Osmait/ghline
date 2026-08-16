@@ -153,15 +153,14 @@ check_path() {
     say "  fish_add_path $INSTALL_DIR"
 }
 
-# github-tui reads GitHub through the `gh` CLI, so without it the app starts
-# and then has nothing to show. Worth saying at install time rather than
-# leaving the user to work it out from an empty pane. Not fatal: the demo mode
-# runs without it.
+# github-tui reads GitHub through the `gh` CLI, and without it there is
+# nothing to read: it says so and exits. Worth saying at install time rather
+# than at the first run.
 check_gh() {
     if ! command -v gh >/dev/null 2>&1; then
         say ""
-        say "note: \`gh\` is not installed. $BIN reads GitHub through it, and"
-        say "      falls back to demo data without it. See https://cli.github.com"
+        say "note: \`gh\` is not installed. $BIN reads GitHub through it and"
+        say "      will not start without it. See https://cli.github.com"
     elif ! gh auth status >/dev/null 2>&1; then
         say ""
         say "note: \`gh\` is installed but not signed in. Run \`gh auth login\`."

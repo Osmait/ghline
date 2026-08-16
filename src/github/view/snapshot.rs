@@ -12,6 +12,8 @@ use ratatui::style::Color;
 use crate::github::app::{App, Source};
 use crate::github::ui;
 
+// Only the ANSI text render uses this, and that one draws the fixture.
+#[cfg(feature = "demo")]
 fn ansi(c: Color, fg: bool) -> String {
     let lead = if fg { 38 } else { 48 };
     match c {
@@ -120,6 +122,7 @@ fn settle(app: &mut App) {
     }
 }
 
+#[cfg(feature = "demo")]
 /// The demo, with the keys applied and the clock wound on.
 ///
 /// Four callers built this the same way and one of them would eventually have
@@ -141,6 +144,7 @@ pub fn demo(keys: &str, ticks: usize) -> App {
     app
 }
 
+#[cfg(feature = "demo")]
 /// One frame of the demo as plain text, a row per line and no colour.
 ///
 /// What the golden tests in `tests/` compare against. The SVG below is the
@@ -179,6 +183,7 @@ pub fn svg_live(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::R
     Ok(())
 }
 
+#[cfg(feature = "demo")]
 /// Renders the demo with every pane held in its loading state, which is the
 /// only way to look at the skeletons without racing the network.
 pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::Result<()> {
@@ -198,6 +203,7 @@ pub fn svg_loading(keys: &str, width: u16, height: u16, frame: u64) -> std::io::
     Ok(())
 }
 
+#[cfg(feature = "demo")]
 pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
     let mut app = demo(keys, ticks);
     let mut term = Terminal::new(TestBackend::new(width, height))?;
@@ -206,6 +212,7 @@ pub fn svg(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result
     Ok(())
 }
 
+#[cfg(feature = "demo")]
 pub fn run(keys: &str, width: u16, height: u16, ticks: usize) -> std::io::Result<()> {
     let mut app = demo(keys, ticks);
     let mut term = Terminal::new(TestBackend::new(width, height))?;

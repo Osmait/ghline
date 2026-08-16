@@ -51,7 +51,14 @@ pub mod data;
 pub mod subject;
 
 pub mod source {
+    // The design's fixture. Behind the `demo` feature, which is off unless
+    // the tests turned it on — so it is compiled by `cargo test` and is not
+    // in the binary anybody downloads. It is data that was written to build
+    // the interface against and is now what the interface is tested against;
+    // neither is a reason for a released program to carry it.
+    #[cfg(feature = "demo")]
     pub mod demo;
+    #[cfg(feature = "demo")]
     pub mod demo_diffs;
     pub mod forge;
     pub mod gh;
@@ -65,11 +72,17 @@ pub mod state {
 }
 
 pub mod view {
+    // Drawing into an off-screen terminal. Half of it renders the fixture and
+    // is behind the feature function by function; `to_svg` and the live
+    // render are not — they take whatever is on screen, which is how
+    // `--svg-live` replays a real session and how diffline draws a real diff.
     pub mod snapshot;
     pub mod ui;
 }
 
 // Filed by layer, spoken about by name.
-pub use source::{demo, demo_diffs, forge, gh, service};
+#[cfg(feature = "demo")]
+pub use source::{demo, demo_diffs};
+pub use source::{forge, gh, service};
 pub use state::{actions, app, finder};
 pub use view::{snapshot, ui};

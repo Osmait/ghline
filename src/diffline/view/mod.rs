@@ -12,6 +12,9 @@ mod diff;
 mod header;
 mod parts;
 mod queue;
+// diffline's own fixture and the frames drawn from it — see `github::source`
+// for why it is a feature rather than a module everybody carries.
+#[cfg(feature = "demo")]
 pub mod snapshot;
 mod status;
 mod tree;

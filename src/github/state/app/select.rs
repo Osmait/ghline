@@ -4,6 +4,7 @@
 use super::input::strip_ws_only;
 use super::{App, Load, LogRow, NodeKind, Pane, TreeNode, View};
 use crate::github::data::{self, Account, Item, Job, Kind, LogLine, Repo, Status};
+#[cfg(feature = "demo")]
 use crate::github::demo;
 
 impl App {
@@ -506,18 +507,25 @@ impl App {
                 .cloned()
                 .unwrap_or_default();
         }
-        let all = demo::job_templates();
-        let only_success = match self.current() {
-            Some(c) if c.kind() == Kind::Run && c.state == Status::Success => true,
-            Some(c) if c.kind() == Kind::Pr && c.checks() == Status::Success => true,
-            _ => false,
-        };
-        if only_success {
-            all.into_iter()
-                .filter(|j| j.status == Status::Success)
-                .collect()
-        } else {
-            all
+        // Not live, so this is the fixture — and without one there is nothing
+        // below to show.
+        #[cfg(not(feature = "demo"))]
+        return Vec::new();
+        #[cfg(feature = "demo")]
+        {
+            let all = demo::job_templates();
+            let only_success = match self.current() {
+                Some(c) if c.kind() == Kind::Run && c.state == Status::Success => true,
+                Some(c) if c.kind() == Kind::Pr && c.checks() == Status::Success => true,
+                _ => false,
+            };
+            if only_success {
+                all.into_iter()
+                    .filter(|j| j.status == Status::Success)
+                    .collect()
+            } else {
+                all
+            }
         }
     }
 
@@ -568,6 +576,16 @@ impl App {
         if self.live() {
             return self.live_log_lines();
         }
+        #[cfg(not(feature = "demo"))]
+        return Vec::new();
+        #[cfg(feature = "demo")]
+        self.demo_log_lines()
+    }
+
+    /// The fixture's logs: a canned dump per step, per status, and the
+    /// stream that arrives a line at a time while something is running.
+    #[cfg(feature = "demo")]
+    fn demo_log_lines(&self) -> Vec<LogRow> {
         let tree = self.flat_tree();
         let idx = self.tree_sel_idx(tree.len());
         let (status, name) = match tree.get(idx) {

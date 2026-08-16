@@ -7,8 +7,10 @@
 //!
 //! `--log <file>` is the answer to that, and what it writes is chosen for one
 //! purpose: to be replayable. Keystrokes are recorded in the notation
-//! `parse_keys` reads, and the last line of the file is the `--snapshot`
-//! command that plays the session back into a frame. What a reader sends is
+//! `parse_keys` reads, and the last line of the file is the command that
+//! plays the session back into a frame — `--svg` for diffline, which draws
+//! the repository in front of it, and `--svg-live` for github-tui, which
+//! replays against real GitHub. What a reader sends is
 //! then not a description of the bug — it is the bug.
 //!
 //! No logging crate. `log` and `tracing` are levels, targets, filters and
@@ -41,6 +43,11 @@ struct Sink {
     /// name and the crate builds both, so a diffline log headed `github-tui`
     /// would be the first line of the file being wrong.
     program: &'static str,
+    /// The flag that program replays a key sequence with. They differ —
+    /// diffline draws the repository in front of it with `--svg`, github-tui
+    /// replays against real GitHub with `--svg-live` — and a last line naming
+    /// the wrong one is a last line nobody can run.
+    replay_with: &'static str,
 }
 
 static SINK: OnceLock<Sink> = OnceLock::new();
@@ -49,7 +56,7 @@ static SINK: OnceLock<Sink> = OnceLock::new();
 ///
 /// Truncates: a log from the run before is a log of a different bug, and
 /// appending would leave the reader to find where one ended.
-pub fn to(path: &Path, program: &'static str) -> std::io::Result<()> {
+pub fn to(path: &Path, program: &'static str, replay_with: &'static str) -> std::io::Result<()> {
     let file = File::create(path)?;
     // A second call is not an error and is not a second log — whichever
     // opened first keeps the file.
@@ -58,6 +65,7 @@ pub fn to(path: &Path, program: &'static str) -> std::io::Result<()> {
         start: Instant::now(),
         keys: Mutex::new(String::new()),
         program,
+        replay_with,
     });
     let unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -102,7 +110,7 @@ pub fn key(press: Press) {
 
 /// A click, a drag or a scroll, with where it landed.
 ///
-/// Not part of the replay: `--snapshot` takes keys and nothing else, and a
+/// Not part of the replay: a replay takes keys and nothing else, and a
 /// mouse position means nothing without the layout that was on screen when it
 /// happened. It is here because "the pane I clicked" is most of what a report
 /// says.
@@ -129,8 +137,8 @@ pub fn finish() {
     let Some(sink) = SINK.get() else { return };
     let keys = sink.keys.lock().map(|k| k.clone()).unwrap_or_default();
     say(format_args!(
-        "replay: {} --snapshot \"{keys}\" 160 44",
-        sink.program,
+        "replay: {} {} \"{keys}\" 160 44",
+        sink.program, sink.replay_with,
     ));
 }
 

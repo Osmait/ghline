@@ -14,7 +14,7 @@ use github_tui::shared::log;
 #[test]
 fn the_last_line_replays_the_session() -> io::Result<()> {
     let path = std::env::temp_dir().join(format!("diffline-log-{}.log", std::process::id()));
-    log::to(&path, "diffline")?;
+    log::to(&path, "diffline", "--svg")?;
 
     // A session with the awkward presses in it: a chord, a named key, and the
     // two characters the notation itself is made of.
