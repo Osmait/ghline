@@ -104,10 +104,27 @@ pub trait Program {
     /// point of the worker thread is that this returns immediately.
     fn ensure(&mut self) {}
 
+    /// Paints the current state, once per pass of the loop.
+    ///
+    /// `&mut self` rather than `&self` because a pane's height is not known
+    /// until it is being drawn into, and that is where the scroll offset is
+    /// settled against it. The alternative was a layout pass computing every
+    /// rectangle a second time to keep this method honest.
     fn draw(&mut self, f: &mut Frame<'_>);
 
+    /// A keystroke, already normalised.
+    ///
+    /// Only presses arrive: a terminal that also reports releases would
+    /// otherwise act on every key twice. It comes as this crate's `Press`
+    /// rather than crossterm's event, so a program never names the backend.
     fn on_key(&mut self, press: Press);
 
+    /// A click, a scroll or a drag.
+    ///
+    /// Never a pointer merely crossing the screen — motion is dropped in the
+    /// loop before it can cost a frame. Empty by default: a program that does
+    /// not want the mouse says so by not implementing this, and whether the
+    /// events are captured at all is `Terminal_::enter`'s argument.
     fn on_mouse(&mut self, _mouse: Mouse) {}
 
     /// Take whatever the worker has answered since the last pass.
@@ -139,6 +156,9 @@ pub trait Program {
         None
     }
 
+    /// Asked at the end of every pass, once the event and whatever fell due
+    /// have both been handled — so a program can decide to quit inside
+    /// `on_key` and still finish the pass it is in.
     fn should_quit(&self) -> bool;
 }
 
@@ -156,6 +176,13 @@ pub struct Terminal_ {
 }
 
 impl Terminal_ {
+    /// Takes the terminal: raw mode, the alternate screen, and the mouse if
+    /// `mouse` is set.
+    ///
+    /// Installs a panic hook that restores it before the message is printed,
+    /// so a panic lands in a console you can still read. On failure it puts
+    /// back whatever it managed to set — half-entered is worse than not
+    /// entered, because the shell underneath is the one left broken.
     pub fn enter(mouse: bool) -> io::Result<Self> {
         enable_raw_mode()?;
         let entered = if mouse {

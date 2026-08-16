@@ -52,6 +52,14 @@
 //! same function. Call sites use the short path; the level is for whoever is
 //! deciding where a new component belongs.
 
+// A toolkit with two consumers, which is the whole reason this directory
+// exists — and a toolkit is documented or it is guessed at. Scoped here
+// rather than set crate-wide in `Cargo.toml` because the two programs above
+// are not in the same position: their types are read by whoever is changing
+// them, this one's are read by whoever is calling it. Every item under `tui`
+// carries a `///` today; the lint is what keeps the next one from not.
+#![warn(missing_docs)]
+
 pub mod diff;
 pub mod hit;
 pub mod probe;
