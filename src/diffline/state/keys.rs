@@ -226,31 +226,6 @@ impl Action {
     pub fn from_name(name: &str) -> Option<Self> {
         ALL.iter().copied().find(|a| a.name() == name)
     }
-
-    /// A motion moves and so also extends a selection; a command acts. The
-    /// division is what makes visual mode work without a keymap of its own.
-    pub fn is_motion(self) -> bool {
-        matches!(
-            self,
-            Self::LineDown
-                | Self::LineUp
-                | Self::Top
-                | Self::Bottom
-                | Self::ScreenTop
-                | Self::ScreenMiddle
-                | Self::ScreenBottom
-                | Self::HalfDown
-                | Self::HalfUp
-                | Self::PageDown
-                | Self::PageUp
-                | Self::HunkPrev
-                | Self::HunkNext
-                | Self::ChangePrev
-                | Self::ChangeNext
-                | Self::SearchNext
-                | Self::SearchPrev
-        )
-    }
 }
 
 /// Every action, so that `from_name` and the help have one list to walk.

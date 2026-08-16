@@ -26,19 +26,6 @@ impl Dir {
             Self::Next => 1,
         }
     }
-
-    /// The opposite direction.
-    ///
-    /// Nothing in either program reaches for this yet — it is here so that
-    /// reversing a direction stays one word, rather than being written out as
-    /// a `match` at whichever call site wants it first and then again at the
-    /// second one.
-    pub fn flip(self) -> Self {
-        match self {
-            Self::Prev => Self::Next,
-            Self::Next => Self::Prev,
-        }
-    }
 }
 
 /// One of the ends, or the middle.
@@ -71,12 +58,5 @@ mod tests {
     fn a_direction_steps_one_either_way() {
         assert_eq!(Dir::Prev.step(), -1);
         assert_eq!(Dir::Next.step(), 1);
-    }
-
-    #[test]
-    fn flipping_twice_is_where_you_started() {
-        for d in [Dir::Prev, Dir::Next] {
-            assert_eq!(d.flip().flip(), d);
-        }
     }
 }

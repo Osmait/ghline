@@ -355,16 +355,6 @@ impl App {
             .collect()
     }
 
-    /// The comments attached to a row, if any.
-    pub fn comments_at(&self, row: &Row) -> usize {
-        let path = self.path();
-        let Some(a) = row.anchor(path) else { return 0 };
-        self.comments
-            .iter()
-            .filter(|c| c.anchors.contains(&a))
-            .count()
-    }
-
     /// Whether a row is the *first* line of a comment, which is where the
     /// badge goes: repeating it down a twelve-line note would be noise.
     pub fn comment_head_at(&self, row: &Row) -> usize {
@@ -866,7 +856,6 @@ mod tests {
         let rows = a.diff_rows().to_vec();
         assert_eq!(a.comment_head_at(&rows[1]), 1, "the first line carries it");
         assert_eq!(a.comment_head_at(&rows[2]), 0, "the rest do not");
-        assert_eq!(a.comments_at(&rows[2]), 1, "but they are still covered");
     }
 
     #[test]

@@ -49,52 +49,11 @@ impl Checkouts for Disk {
     }
 }
 
-/// One that was told what it would find, for tests and for anything that must
-/// not depend on whose machine it is running on.
-#[derive(Default)]
-pub struct Told {
-    /// Handed back by `scan`, unchanged and in full — no root is consulted,
-    /// so an entry here can name a path that does not exist.
-    pub index: Index,
-    /// Checkout root → branch name, answering `head_branch`. A root missing
-    /// from this map reads as a detached head, which is the same answer the
-    /// disk gives and the reason it is a map rather than a pair of vectors.
-    pub branches: HashMap<String, String>,
-    /// Handed back by `roots`, and whose first entry is `clone_dir` — see the
-    /// override below for why that differs from `Disk`.
-    pub roots: Vec<PathBuf>,
-}
-
-impl Checkouts for Told {
-    fn scan(&self) -> Index {
-        self.index.clone()
-    }
-
-    fn head_branch(&self, repo_root: &str) -> Option<String> {
-        self.branches.get(repo_root).cloned()
-    }
-
-    fn roots(&self) -> Vec<PathBuf> {
-        self.roots.clone()
-    }
-
-    /// Whatever it was told, without asking whether it is there: a test that
-    /// needed the directory to exist would be a test about the machine.
-    fn clone_dir(&self) -> Option<PathBuf> {
-        self.roots.first().cloned()
-    }
-}
-
 static CHOSEN: std::sync::OnceLock<Box<dyn Checkouts>> = std::sync::OnceLock::new();
 
 /// The one in use — the disk, unless something said otherwise first.
 pub fn current() -> &'static dyn Checkouts {
     CHOSEN.get_or_init(|| Box::new(Disk)).as_ref()
-}
-
-/// Uses `what` instead of the disk. Takes only if nothing has asked yet.
-pub fn use_checkouts(what: Box<dyn Checkouts>) -> bool {
-    CHOSEN.set(what).is_ok()
 }
 
 use std::collections::HashMap;

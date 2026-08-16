@@ -179,8 +179,3 @@ static CHOSEN: std::sync::OnceLock<Box<dyn Forge>> = std::sync::OnceLock::new();
 pub fn current() -> &'static dyn Forge {
     CHOSEN.get_or_init(|| Box::new(Cli)).as_ref()
 }
-
-/// Uses `forge` instead of the CLI. Takes only if nothing has asked yet.
-pub fn use_forge(forge: Box<dyn Forge>) -> bool {
-    CHOSEN.set(forge).is_ok()
-}
