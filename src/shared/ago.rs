@@ -5,6 +5,21 @@
 //! no business importing `gh` to borrow a phrase.
 
 /// How long ago a unix timestamp was.
+///
+/// Coarsens as it goes back — minutes, then hours, then days, then weeks — and
+/// stops there: a year expressed in weeks is still readable, and every unit
+/// past a week has to decide how long a month is.
+///
+/// ```rust
+/// use github_tui::shared::ago::since;
+///
+/// let now = std::time::SystemTime::now()
+///     .duration_since(std::time::UNIX_EPOCH)
+///     .map_or(0, |d| d.as_secs() as i64);
+/// assert_eq!(since(now - 7200), "2h ago");
+/// assert_eq!(since(now + 600), "just now", "a server clock ahead of ours");
+/// ```
+#[must_use]
 pub fn since(then: i64) -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

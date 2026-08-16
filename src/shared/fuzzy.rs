@@ -32,6 +32,15 @@ const EXACT_CASE: i32 = 2;
 /// have scored better — "gt" against "github-tui" takes the `t` of "github",
 /// not the one starting "tui". Finding the best alignment needs a second pass
 /// over the string; for names this short the ranking is the same either way.
+///
+/// ```rust
+/// use github_tui::shared::fuzzy::score;
+///
+/// // Greedy: the `t` taken is the one inside "github", not the one starting "tui".
+/// assert_eq!(score("gt", "github-tui").map(|(_, at)| at), Some(vec![0, 2]));
+/// assert!(score("tg", "github-tui").is_none(), "order matters");
+/// ```
+#[must_use]
 pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
     if query.is_empty() {
         return Some((0, Vec::new()));
@@ -75,6 +84,7 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
 
 /// Is this the first letter of a word? Separators, and the lowercase-to-
 /// uppercase step of camelCase, both start one.
+#[must_use]
 fn is_boundary(hay: &[char], i: usize) -> bool {
     if i == 0 {
         return true;
@@ -88,6 +98,18 @@ fn is_boundary(hay: &[char], i: usize) -> bool {
 
 /// Keeps what matches, best first. Ties keep their original order, so a list
 /// with no query is left exactly as it was given.
+///
+/// The indices are into `items`, not into a filtered copy of it — the caller
+/// still owns the list, and a hit carries the positions the view underlines.
+///
+/// ```rust
+/// use github_tui::shared::fuzzy::rank;
+///
+/// let repos = ["dotfiles", "github-tui", "gh-dash"];
+/// let hits: Vec<&str> = rank("gh", &repos, |r| r).iter().map(|(i, _)| repos[*i]).collect();
+/// assert_eq!(hits, ["gh-dash", "github-tui"], "dotfiles has no g before an h");
+/// ```
+#[must_use]
 pub fn rank<T, F>(query: &str, items: &[T], text: F) -> Vec<(usize, Positions)>
 where
     F: Fn(&T) -> &str,
