@@ -18,7 +18,7 @@ use crate::tui::Seg;
 use crate::tui::theme;
 
 /// Renders a Markdown body into styled lines of at most `width` columns.
-pub fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {
+pub(crate) fn render(body: &str, width: usize) -> Vec<Vec<Seg>> {
     let prepared = hard_breaks(body);
     let parsed = tui_markdown::from_str(&prepared);
     let mut out = Vec::new();

@@ -17,13 +17,13 @@ mod status;
 mod tree;
 
 mod modal {
-    pub mod agents;
-    pub mod comment;
-    pub mod deps;
-    pub mod finder;
-    pub mod help;
-    pub mod palette;
-    pub mod themes;
+    pub(crate) mod agents;
+    pub(crate) mod comment;
+    pub(crate) mod deps;
+    pub(crate) mod finder;
+    pub(crate) mod help;
+    pub(crate) mod palette;
+    pub(crate) mod themes;
 }
 
 use ratatui::Frame;

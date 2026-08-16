@@ -670,7 +670,7 @@ pub(crate) mod tests {
 
     /// The active theme is process-wide, so the tests that move it take turns.
     /// Everything else asserts against the accessors and is theme-agnostic.
-    pub static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(crate) static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn switching_theme_changes_what_the_accessors_return() {

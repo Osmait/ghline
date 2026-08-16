@@ -18,7 +18,7 @@ use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc, scroll_into_view};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let width = area.width.saturating_sub(8).min(96);

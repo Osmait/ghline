@@ -9,7 +9,7 @@ use crate::github::app::{App, Pane};
 use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());
 
     let top = Rect {

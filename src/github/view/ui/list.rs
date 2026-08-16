@@ -12,7 +12,7 @@ use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar};
 
 /// The tab row (`area.height == 1`) plus its bottom border at `y + 1`.
-pub fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn tabs(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel());
     let y = area.y;
     let repo = app
@@ -175,7 +175,7 @@ fn sub_for(it: &Item) -> String {
     format!("{where_from}{rest}")
 }
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     // the scroll is settled before the list is borrowed
     let visible = app.visible();
     let sel_pos = app.item_idx(visible.len());

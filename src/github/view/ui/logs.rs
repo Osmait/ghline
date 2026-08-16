@@ -28,7 +28,7 @@ fn log_color(kind: LogKind) -> Color {
     }
 }
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let tree_w = TREE_W.min(area.width / 2);
     let tree = Rect {
         x: area.x,

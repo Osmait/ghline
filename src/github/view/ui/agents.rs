@@ -14,7 +14,7 @@ use crate::github::app::{App, Pane};
 use crate::tui::theme;
 use crate::tui::{AgentRow, agent_row, fill, pct, put_trunc, scroll_into_view, skel_bar};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let rows = (area.height / 2) as usize;
     let sel = app.agent_idx();
     let len = app.agents_visible().len();

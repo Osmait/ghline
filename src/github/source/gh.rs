@@ -176,7 +176,7 @@ pub fn accounts() -> Res<Vec<Account>> {
     let host = "github.com";
 
     let mut out = vec![Account {
-        login: login.clone(),
+        login,
         kind: "(personal)".into(),
         sub: format!("{host} · {}", s(&me, "name")),
         repos: Vec::new(),

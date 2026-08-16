@@ -10,7 +10,7 @@ use crate::github::data::Kind;
 use crate::tui::theme;
 use crate::tui::{bold, fill, hline, put, put_right};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     hline(buf, area.x, area.y, area.width, theme::border());
 
     let y = area.y + 1;

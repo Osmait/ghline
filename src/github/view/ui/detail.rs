@@ -11,7 +11,7 @@ use crate::github::data::{Kind, Status};
 use crate::tui::theme;
 use crate::tui::{Seg, bold, fill, hline, pct, put, put_right, put_trunc, skel_bar, vline, wrap};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let Some(cur) = app.current() else { return };
     if cur.kind() == Kind::Issue {
         issue(buf, area, app);

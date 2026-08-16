@@ -21,7 +21,7 @@ use crate::tui::{
 /// the file still gets most of the screen — which is what you came to read.
 const TREE_W: u16 = 42;
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     // The gathering row has no tree of its own: there is no such thing as the
     // files of a hundred and forty repositories at once.
     if app.is_all() {

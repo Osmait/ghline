@@ -24,13 +24,13 @@ use crate::github::data::TABS;
 use crate::tui::theme;
 use crate::tui::{bold, fill, put, put_right};
 
-pub struct Crumb {
+pub(crate) struct Crumb {
     pub label: String,
     pub color: Color,
     pub sep: &'static str,
 }
 
-pub fn crumbs(app: &App) -> Vec<Crumb> {
+pub(crate) fn crumbs(app: &App) -> Vec<Crumb> {
     let mut out = vec![
         Crumb {
             label: app.login().to_string(),
@@ -88,7 +88,7 @@ pub fn crumbs(app: &App) -> Vec<Crumb> {
     out
 }
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     fill(buf, area, theme::panel());
     let y = area.y;
     let max = area.right();

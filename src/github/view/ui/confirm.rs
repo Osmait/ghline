@@ -12,7 +12,7 @@ use crate::tui::theme;
 use crate::tui::{centered, frame, rule};
 use crate::tui::{fill, put, put_right, put_trunc};
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     // Dispatching is not about a pull request, so it does not fit the layout
     // below and does not need a selection to still be there.
     if let Prompt::Dispatch { who, text, .. } = prompt {

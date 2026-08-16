@@ -27,6 +27,13 @@ unicode-width = "0.2"
 [lints.rust]
 unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
+# `pub` had drifted into meaning two different things: part of the crate's
+# published surface, and reachable from the file next door. The second is a
+# claim a private module cannot back — `pub fn draw` in `github::view::ui`
+# was never callable from outside the crate, and reading it said otherwise.
+# Twenty-four of them, all inside private trees. Written `pub(crate)` they
+# say the true thing, and what is still `pub` afterwards is the API.
+unreachable_pub = "warn"
 
 # The crate is documented at a density that only holds if breaking it is an
 # error. A link that names a moved item is a doc comment that lies, and it

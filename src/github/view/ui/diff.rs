@@ -33,7 +33,7 @@ fn row_fg(kind: DiffKind) -> Color {
     }
 }
 
-pub fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
+pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let files_w = FILES_W.min(area.width / 2);
     let files = Rect {
         x: area.x,
