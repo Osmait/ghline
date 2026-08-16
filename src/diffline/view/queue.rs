@@ -105,7 +105,7 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
         let sel = focused && i == app.queue_sel;
         let border = match c.state {
-            State::Sending | State::Sent => theme::green(),
+            State::Sending => theme::green(),
             State::Queued if sel => theme::yellow(),
             State::Queued => theme::border(),
         };
@@ -133,7 +133,6 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
         let state = match c.state {
             State::Queued => "queued",
             State::Sending => "sending →",
-            State::Sent => "sent",
         };
         let sx = put_right(buf, area.right() - 1, y, state, base.fg(border));
         put_trunc(

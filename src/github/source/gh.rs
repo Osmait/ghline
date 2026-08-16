@@ -199,7 +199,7 @@ const REPO_QUERY: &str = r#"query($login:String!){
   repositoryOwner(login:$login){
     repositories(first:60, orderBy:{field:PUSHED_AT,direction:DESC}, ownerAffiliations:OWNER){
       nodes{
-        name isPrivate stargazerCount
+        name isPrivate
         primaryLanguage{ name }
         issues(states:OPEN){ totalCount }
         pullRequests(states:OPEN){ totalCount }
@@ -247,11 +247,6 @@ pub fn repos(login: &str) -> Res<Vec<Repo>> {
                 .pointer("/pullRequests/totalCount")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or(0) as u32,
-            star: r
-                .get("stargazerCount")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0)
-                .to_string(),
             // a tree is only there when the directory is
             has_workflows: r.pointer("/object/entries").is_some(),
         })

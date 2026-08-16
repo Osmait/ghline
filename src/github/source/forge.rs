@@ -22,8 +22,6 @@ pub trait Forge: Send + Sync + 'static {
     /// What to call it, for a message that has to name it.
     fn name(&self) -> &'static str;
 
-    fn available(&self) -> bool;
-
     fn accounts(&self) -> Res<Vec<Account>>;
 
     fn repos(&self, login: &str) -> Res<Vec<Repo>>;
@@ -78,10 +76,6 @@ pub struct Cli;
 impl Forge for Cli {
     fn name(&self) -> &'static str {
         "gh"
-    }
-
-    fn available(&self) -> bool {
-        gh::available()
     }
 
     fn accounts(&self) -> Res<Vec<Account>> {

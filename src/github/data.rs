@@ -92,7 +92,6 @@ pub struct Repo {
     pub lang: String,
     pub issues: u32,
     pub prs: u32,
-    pub star: String,
     /// Whether the default branch has a `.github/workflows` directory.
     ///
     /// Carried on the repository because there is no cross-repository Actions
@@ -117,7 +116,6 @@ impl Repo {
             lang: String::new(),
             issues: repos.iter().map(|r| r.issues).sum(),
             prs: repos.iter().map(|r| r.prs).sum(),
-            star: "0".into(),
             has_workflows: repos.iter().any(|r| r.has_workflows),
         }
     }
@@ -143,7 +141,6 @@ impl Repo {
             lang: String::new(),
             issues: 0,
             prs: 0,
-            star: "0".into(),
             has_workflows: false,
         }
     }

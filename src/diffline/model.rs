@@ -236,7 +236,6 @@ impl fmt::Display for Anchor {
 pub enum State {
     Queued,
     Sending,
-    Sent,
 }
 
 /// A note attached to one line or a run of them.
