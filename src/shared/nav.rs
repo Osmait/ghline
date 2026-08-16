@@ -12,7 +12,9 @@
 /// Backwards or forwards through a list.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Dir {
+    /// Towards the start of the list, which on screen is upwards.
     Prev,
+    /// Towards the end, which on screen is downwards.
     Next,
 }
 
@@ -25,6 +27,12 @@ impl Dir {
         }
     }
 
+    /// The opposite direction.
+    ///
+    /// Nothing in either program reaches for this yet — it is here so that
+    /// reversing a direction stays one word, rather than being written out as
+    /// a `match` at whichever call site wants it first and then again at the
+    /// second one.
     pub fn flip(self) -> Self {
         match self {
             Self::Prev => Self::Next,
@@ -39,8 +47,13 @@ impl Dir {
 /// of; the ends mean the same everywhere.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Place {
+    /// The first row — of the list, for a jump to the start, or of the
+    /// window, for the screen-relative moves.
     Top,
+    /// The middle row of the window. Only the screen-relative moves and the
+    /// scroll-cursor-here ones pass this; a jump through a list never does.
     Middle,
+    /// The last row, read the same two ways as `Top`.
     Bottom,
 }
 

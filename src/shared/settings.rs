@@ -134,6 +134,11 @@ pub struct Memory {
 }
 
 impl Memory {
+    /// A store already holding `pairs`.
+    ///
+    /// The whole setup a snapshot test needs on one line. Each `set` here
+    /// cannot fail, so the results are discarded rather than collected into a
+    /// `Result` the caller would have nothing to do with.
     pub fn with(pairs: &[(&str, &str)]) -> Self {
         let m = Self::default();
         for (k, v) in pairs {

@@ -38,11 +38,19 @@ pub enum AgentStatus {
     Blocked,
     /// Finished what it was asked.
     Done,
+    /// Nobody said. The default, and the honest answer from a backend that
+    /// cannot see into a pane — which is why `is_free` reads it as busy
+    /// rather than making each caller invent a rule.
     #[default]
     Unknown,
 }
 
 impl AgentStatus {
+    /// The lowercase word for this status.
+    ///
+    /// One spelling for two jobs: it is what gets drawn, and it is what
+    /// `parse` reads back, so a status shown and a status stored cannot drift
+    /// apart.
     pub fn label(self) -> &'static str {
         match self {
             Self::Working => "working",
@@ -53,6 +61,11 @@ impl AgentStatus {
         }
     }
 
+    /// Reads back what `label` wrote.
+    ///
+    /// A word this does not know becomes `Unknown` rather than an error: a
+    /// backend that grows a state we have no name for should cost that one
+    /// agent its status, not the whole listing.
     pub fn parse(raw: &str) -> Self {
         match raw {
             "working" => Self::Working,
@@ -83,6 +96,8 @@ impl std::fmt::Display for AgentStatus {
 pub struct Agent {
     /// `claude`, `codex`, `pi` — what is running, not what it is called.
     pub kind: String,
+    /// What it is doing, as of the last listing. `Unknown` when the backend
+    /// does not watch panes — see the module doc.
     pub status: AgentStatus,
     /// Where it is working. The only clue to which repository it is in.
     pub cwd: String,

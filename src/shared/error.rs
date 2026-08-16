@@ -12,28 +12,49 @@
 use std::fmt;
 use std::io;
 
+/// A program we ran did not give us what we asked for.
+///
+/// Four cases because they are fixed four different ways, and the reader is
+/// the one doing the fixing: a `Spawn` is an install, a `Command` is the
+/// program's own complaint and belongs to them, and `Json` or `Field` mean
+/// the output moved under us and belongs to this crate.
 #[derive(Debug)]
 pub enum Error {
     /// The program could not be launched: it is missing or not executable.
     Spawn {
         /// `gh`, `git`, `herdr` — whichever one this was.
         program: &'static str,
+        /// What the operating system said. `NotFound` is the case worth its
+        /// own wording, since it is the only one the reader can act on.
         source: io::Error,
     },
     /// The program exited with a non-zero status.
     Command {
         /// The subcommand that was run, so the failure can be placed.
         args: String,
+        /// The exit code, or `None` when a signal ended it instead.
         status: Option<i32>,
+        /// Everything it wrote to stderr, unedited. `brief` takes the first
+        /// non-blank line, which for `gh` and `git` is usually the sentence
+        /// worth showing; the rest is kept because a log wants all of it.
         stderr: String,
     },
     /// The output was not the JSON we expected.
     Json {
+        /// The subcommand whose output would not parse.
         args: String,
+        /// Where serde gave up. Carried so `source()` can reach the line and
+        /// column, which is the only thing that makes a schema drift findable.
         source: serde_json::Error,
     },
     /// A required field is missing from an otherwise valid response.
-    Field { args: String, field: &'static str },
+    Field {
+        /// The subcommand that answered.
+        args: String,
+        /// The field we asked for and did not get. Our spelling of it, taken
+        /// from the request — the response, by definition, does not have it.
+        field: &'static str,
+    },
 }
 
 impl Error {
@@ -137,6 +158,11 @@ impl std::error::Error for Error {
     }
 }
 
+/// `std::result::Result` with this module's `Error` already filled in.
+///
+/// Imported under an alias where it would shadow the standard one — `Result
+/// as Res` in `mux` — because a module with both kinds in it is a module
+/// where the bare name has to be looked up rather than read.
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Why a piece of data is not here.

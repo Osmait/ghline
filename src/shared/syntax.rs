@@ -20,9 +20,17 @@
 /// a variant for that would only be a second way to say nothing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
+    /// A comment, opening marker included. Wins over everything inside it,
+    /// which is why a keyword in prose is not coloured as one.
     Comment,
+    /// A string, quotes included. Named short so it does not read as a
+    /// mention of `String`, which is a `Type`.
     Str,
+    /// A numeric literal, taken as one run with its separators and suffix:
+    /// `1_000u64` is a single span, not three.
     Number,
+    /// A whole word from the language's list. Whole only — `iffy` is not
+    /// `if`, which is the one bug this pass had and has a test for.
     Keyword,
     /// A word that looks like a type: it starts with a capital.
     Type,
@@ -31,8 +39,14 @@ pub enum Kind {
 /// A run of one kind within a line, as byte offsets into that line.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Span {
+    /// Byte offset where the run starts.
+    ///
+    /// Bytes rather than characters because the caller slices the line with
+    /// these; on a line with a `漢` in it the two counts differ.
     pub from: usize,
+    /// Byte offset one past the run's last byte, so `line[from..to]` is it.
     pub to: usize,
+    /// What the run is.
     pub kind: Kind,
 }
 
@@ -47,6 +61,11 @@ pub struct Lang {
     /// Whether a backslash escapes inside a string. Not universal: in TOML and
     /// in a shell's single quotes it does not.
     pub escapes: bool,
+    /// The words coloured as keywords, matched whole rather than as prefixes.
+    ///
+    /// A slice searched linearly, not a set: these lists are a few dozen
+    /// short strings, and a hash per word would cost more than the scan it
+    /// replaces. Being sorted is for whoever edits the list, not for lookup.
     pub keywords: &'static [&'static str],
 }
 

@@ -17,10 +17,16 @@ pub enum Style {
     Nerd,
     /// A file and a folder mark, both in the range any terminal can draw.
     Plain,
+    /// Nothing at all. The mark comes back as an empty string rather than a
+    /// space, so the column it would have taken is not reserved either.
     None,
 }
 
 impl Style {
+    /// Reads the `file-icons` setting.
+    ///
+    /// Anything unrecognised is `Nerd`, which is also the default: a typo in
+    /// the config should leave the icons as they were, not turn them off.
     pub fn parse(raw: &str) -> Self {
         match raw.trim() {
             "plain" => Self::Plain,
