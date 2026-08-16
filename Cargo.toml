@@ -121,5 +121,5 @@ proptest = { version = "1.11.0", default-features = false, features = ["std", "h
 # `harness = false` because divan brings its own; without it, libtest runs
 # first and finds no `#[test]` to run.
 [[bench]]
-name = "frame"
+name = "cost"
 harness = false

@@ -19,7 +19,8 @@ src/github/     one program: data → source → state → view
 src/diffline/   the other:   model → source → state → view
 src/bin/        one entry point each
 tests/          golden frames (insta), properties (proptest)
-benches/        divan, what a frame costs
+benches/        divan, what each layer costs
+scripts/        the one job the Makefile could not say in five lines
 ```
 
 Within a program every arrow points down and none point back up. The two
@@ -33,7 +34,9 @@ make check     # everything CI checks — fmt, clippy, doc, tests
 make test      # cargo test
 make lint      # fmt --check, clippy -D warnings, cargo doc
 make audit     # machete, deny, typos, zizmor
-make bench     # divan
+make bench     # divan, grouped by module
+make bench-cmp # the same ones either side of your changes, with a noise check
+make flame     # perf + inferno, where the time inside one goes
 make demo      # run against the fixture, no network
 ```
 

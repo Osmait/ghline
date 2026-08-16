@@ -255,8 +255,12 @@ There are around 617 of them. The conventions that got there:
   nobody here wrote: diff output, source lines, text about to be cut into
   cells. `tests/props.proptest-regressions` is committed, so a shrunk failure
   becomes a permanent example.
-- **Benchmarks** (`divan`, `benches/frame.rs`) exist so that a claim about
-  cost is measured. Do not optimise on the strength of reading the code.
+- **Benchmarks** (`divan`, `benches/cost.rs`) exist so that a claim about
+  cost is measured, and they are grouped by module so the number can be read
+  against the code it came from. Do not optimise on the strength of reading
+  the code. `make flame` says which line inside one of them is the cost, and
+  `make bench-cmp` is the before-and-after, with the noise check that says
+  whether to believe it.
 - **Architectural rules get a test.** The `shared` boundary is checked by
   reading the directory. That is unusual and it is correct: the rule was
   broken three times by people who had read the comment.
