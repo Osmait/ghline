@@ -48,7 +48,8 @@ fn main() -> io::Result<()> {
     if mode == "--svg-live" {
         let keys = args.get(1).cloned().unwrap_or_default();
         let ticks = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
-        return snapshot::svg_live(&keys, headless(2, 160), headless(3, 44), ticks);
+        snapshot::svg_live(&keys, headless(2, 160), headless(3, 44), ticks);
+        return Ok(());
     }
 
     // The other three draw the design's fixture, so they exist where the
@@ -58,11 +59,12 @@ fn main() -> io::Result<()> {
         let keys = args.get(1).cloned().unwrap_or_default();
         let (w, h) = (headless(2, 160), headless(3, 44));
         let ticks = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(0);
-        return match mode {
+        match mode {
             "--svg" => snapshot::svg(&keys, w, h, ticks),
             "--svg-loading" => snapshot::svg_loading(&keys, w, h, ticks as u64),
             _ => snapshot::run(&keys, w, h, ticks),
-        };
+        }
+        return Ok(());
     }
 
     if args.iter().any(|a| a == "--help" || a == "-h") {

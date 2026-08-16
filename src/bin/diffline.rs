@@ -106,7 +106,8 @@ fn main() -> io::Result<()> {
         let keys = args.get(i + 1).cloned().unwrap_or_default();
         let w = args.get(i + 2).and_then(|s| s.parse().ok()).unwrap_or(160);
         let h = args.get(i + 3).and_then(|s| s.parse().ok()).unwrap_or(44);
-        return headless(&mut app, &keys, w, h);
+        headless(&mut app, &keys, w, h);
+        return Ok(());
     }
 
     // Opened after the repository is known, so the first line of the log says
@@ -251,7 +252,7 @@ impl Program for Diffline<'_> {
 ///
 /// `settle` waits for the worker rather than guessing at a delay, so the frame
 /// is of the finished state and not of whatever had arrived by then.
-fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
+fn headless(app: &mut App, keys: &str, w: u16, h: u16) {
     use ratatui::backend::TestBackend;
 
     settle(app);
@@ -260,13 +261,15 @@ fn headless(app: &mut App, keys: &str, w: u16, h: u16) -> io::Result<()> {
         settle(app);
     }
 
-    let mut term = ratatui::Terminal::new(TestBackend::new(w, h))?;
-    term.draw(|f| ui::draw(f, app))?;
+    // `TestBackend`'s error type is `Infallible` from ratatui 0.30 on: an
+    // off-screen buffer has nowhere to fail. The irrefutable `let Ok(…)` is
+    // how that is said without an `unwrap` and without a panic.
+    let Ok(mut term) = ratatui::Terminal::new(TestBackend::new(w, h));
+    let Ok(_) = term.draw(|f| ui::draw(f, app));
     print!(
         "{}",
         github_tui::github::snapshot::to_svg(term.backend().buffer(), w, h)
     );
-    Ok(())
 }
 
 fn settle(app: &mut App) {

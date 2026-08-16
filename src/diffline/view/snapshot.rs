@@ -154,9 +154,13 @@ pub fn demo(keys: &str) -> App {
 }
 
 /// One frame of the fixture as plain text, a row per line and no colour.
-pub fn frame(keys: &str, width: u16, height: u16) -> std::io::Result<String> {
+///
+/// No `Result`: `TestBackend`'s error type is `Infallible` from ratatui 0.30
+/// on, so nothing in here can fail. See the twin in `github::view::snapshot`
+/// for why the irrefutable `let Ok(…)` is the right way to say that.
+pub fn frame(keys: &str, width: u16, height: u16) -> String {
     let mut app = demo(keys);
-    let mut term = Terminal::new(TestBackend::new(width, height))?;
-    term.draw(|f| super::draw(f, &mut app))?;
-    Ok(crate::tui::probe::screen(&term))
+    let Ok(mut term) = Terminal::new(TestBackend::new(width, height));
+    let Ok(_) = term.draw(|f| super::draw(f, &mut app));
+    crate::tui::probe::screen(&term)
 }

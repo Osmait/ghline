@@ -20,87 +20,77 @@
 //! Determinism: `snapshot::demo` reads nobody's config and runs the design's
 //! fixture, so there is no network, no clock and no `$HOME` in any of this.
 
-use std::io;
-
 use github_tui::github::snapshot;
 
 /// The size the design was drawn at.
 const WIDE: (u16, u16) = (160, 44);
 
-/// Every test returns `io::Result` and reaches the frame through `?`. The
-/// obvious `unwrap` is a clippy error here and correctly so: `clippy.toml`
-/// allows unwrapping in tests, but that only reaches `#[cfg(test)]` modules,
-/// and an integration test is its own crate with no such marking on it.
-fn frame(keys: &str) -> io::Result<String> {
+/// These used to return `io::Result` and reach the frame through `?`, because
+/// the obvious `unwrap` is a clippy error here — `clippy.toml` allows it in
+/// tests, but that only reaches `#[cfg(test)]` modules and an integration test
+/// is its own crate with no such marking. From ratatui 0.30 there is nothing
+/// to unwrap: drawing into a `TestBackend` cannot fail, and the ceremony that
+/// carried the impossible error is gone with it.
+fn frame(keys: &str) -> String {
     let (w, h) = WIDE;
     snapshot::frame(keys, w, h, 0)
 }
 
 #[test]
-fn pull_requests_is_what_it_opens_on() -> io::Result<()> {
-    insta::assert_snapshot!(frame("")?);
-    Ok(())
+fn pull_requests_is_what_it_opens_on() {
+    insta::assert_snapshot!(frame(""));
 }
 
 #[test]
-fn the_issues_tab() -> io::Result<()> {
-    insta::assert_snapshot!(frame("1")?);
-    Ok(())
+fn the_issues_tab() {
+    insta::assert_snapshot!(frame("1"));
 }
 
 #[test]
-fn the_actions_tab() -> io::Result<()> {
-    insta::assert_snapshot!(frame("3")?);
-    Ok(())
+fn the_actions_tab() {
+    insta::assert_snapshot!(frame("3"));
 }
 
 #[test]
-fn the_files_tab() -> io::Result<()> {
-    insta::assert_snapshot!(frame("4")?);
-    Ok(())
+fn the_files_tab() {
+    insta::assert_snapshot!(frame("4"));
 }
 
 #[test]
-fn the_agents_tab() -> io::Result<()> {
-    insta::assert_snapshot!(frame("5")?);
-    Ok(())
+fn the_agents_tab() {
+    insta::assert_snapshot!(frame("5"));
 }
 
 /// The diff, which is the widest thing drawn and the one with the most to get
 /// wrong: two columns of gutter, a split, and a scrollbar.
 #[test]
-fn the_diff_of_a_pull_request() -> io::Result<()> {
-    insta::assert_snapshot!(frame("<enter>d")?);
-    Ok(())
+fn the_diff_of_a_pull_request() {
+    insta::assert_snapshot!(frame("<enter>d"));
 }
 
 /// Modals are drawn over the panes they cover, and what shows around the edges
 /// is part of the frame.
 #[test]
-fn the_help_modal() -> io::Result<()> {
-    insta::assert_snapshot!(frame("?")?);
-    Ok(())
+fn the_help_modal() {
+    insta::assert_snapshot!(frame("?"));
 }
 
 #[test]
-fn the_finder() -> io::Result<()> {
-    insta::assert_snapshot!(frame("p")?);
-    Ok(())
+fn the_finder() {
+    insta::assert_snapshot!(frame("p"));
 }
 
 /// Below 90 columns the repository pane is meant to be gone. This is the
 /// frame that says whether it is.
 #[test]
-fn narrow_enough_to_lose_the_repository_pane() -> io::Result<()> {
-    insta::assert_snapshot!(snapshot::frame("", 88, 24, 0)?);
-    Ok(())
+fn narrow_enough_to_lose_the_repository_pane() {
+    insta::assert_snapshot!(snapshot::frame("", 88, 24, 0));
 }
 
 /// And below 40x8 there is a notice instead of an interface. A terminal this
 /// size is the one place the layout has no room to be wrong in, so it is the
 /// one that would break silently.
 #[test]
-fn too_small_to_draw_anything() -> io::Result<()> {
-    insta::assert_snapshot!(snapshot::frame("", 30, 6, 0)?);
-    Ok(())
+fn too_small_to_draw_anything() {
+    insta::assert_snapshot!(snapshot::frame("", 30, 6, 0));
 }
