@@ -72,7 +72,7 @@ fn help_is_generated_and_keeps_the_renderer_private() {
     assert!(help.contains("--log <file>"));
     assert!(help.contains("-h, --help"));
     assert!(help.contains("-V, --version"));
-    assert!(help.contains("V c  select a range"));
+    assert!(help.contains("V ␣n   select a range"));
     assert!(!help.contains("--svg"));
 }
 
@@ -112,4 +112,37 @@ fn missing_values_unknown_options_and_extra_arguments_are_rejected() {
         parse(&["--svg", "", "160", "44", "extra"]),
         Err(Error::UnexpectedArgument(_))
     ));
+}
+
+/// The footer of `--help` names four keys, and it is hand-written: nothing
+/// recompiles it when a binding moves. It had drifted a whole keymap — it
+/// still advertised `c`, `a` and `S`, none of which are bound at all — and a
+/// help text that names keys the program does not have is worse than none.
+#[test]
+fn the_help_footer_names_keys_that_are_actually_bound() {
+    use crate::state::keys::{Action, DEFAULTS};
+
+    let Ok(Command::Help(footer)) = parse(&["--help"]) else {
+        panic!("--help no longer prints help");
+    };
+    for (chord, action) in [
+        ("[s", Action::ScopePrev),
+        ("]s", Action::ScopeNext),
+        ("V", Action::Visual),
+        ("<leader>n", Action::Note),
+        ("<leader>a", Action::Agents),
+        ("<leader>s", Action::Send),
+        ("<leader>?", Action::Help),
+    ] {
+        assert!(
+            DEFAULTS.contains(&(chord, action)),
+            "{chord} is no longer bound to {action:?}, and --help still says it is"
+        );
+        // `<leader>x` is printed as `␣x`, and a bare chord as itself.
+        let shown = chord.replace("<leader>", "␣");
+        assert!(
+            footer.contains(&shown),
+            "--help no longer shows {shown}, which is what {action:?} is on"
+        );
+    }
 }

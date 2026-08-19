@@ -7,6 +7,10 @@ Everything here assumes a signed-in `gh` — see [the README](../README.md#insta
 for that. Sending any of it to a coding agent is [its own page](agents.md);
 settings, themes and colours are in [config.md](config.md).
 
+![the pull request list](img/ghline-list.svg)
+
+![a pull request, its files and its reviews](img/ghline-pr.svg)
+
 ## Where each panel comes from
 
 | Panel | Source |

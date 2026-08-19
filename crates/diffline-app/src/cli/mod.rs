@@ -91,10 +91,10 @@ fn definition() -> Cli<Id> {
                 .help("repository to read; default the current directory"),
         )
         .after_help(
-            "[ ]  working tree · this branch · the last commit\n\
-             V c  select a range, comment on it\n\
-             a S  pick an agent, send the queue\n\
-             ?    everything else",
+            "[s ]s  working tree · this branch · the last commit\n\
+             V ␣n   select a range, note on it\n\
+             ␣a ␣s  pick an agent, send the queue\n\
+             ␣?     everything else · ␣ is the leader",
         )
 }
 

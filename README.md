@@ -7,15 +7,15 @@ repositories, issues, pull requests, Actions, files — and can hand any of it t
 a coding agent.
 
 **`diffline`** reviews the diff in front of you. Three panes: what changed, the
-diff itself, and a queue of comments anchored to lines. Select a range with
-`V`, write a note with `c`, pick an agent with `a`, send the lot with `S`.
+diff itself, and a queue of notes anchored to lines. Modal and vim-shaped, with
+space as the leader.
 
 ```sh
 diffline            # the repository you are standing in
-[ ]                 # working tree · this branch · the last commit
-V c                 # take a range, comment on it
-a S                 # pick an agent, send the queue
-?                   # everything else
+[s ]s               # working tree · this branch · the last commit
+V ␣n                # take a range, note on it
+␣a ␣s               # pick an agent, send the queue
+␣?                  # everything else
 ```
 
 They are different programs — one asks a server what exists, the other asks the
@@ -26,6 +26,17 @@ needs.
 Written in Rust, on `ratatui` and `crossterm`. No offline mode and no
 telemetry: `ghline` shows what `gh` returns, `diffline` shows what `git` says
 is in front of you.
+
+![ghline listing pull requests across every repository](docs/img/ghline-list.svg)
+
+*`ghline`, on the pull requests of every repository at once.*
+
+![diffline with a note queued against two lines of a diff](docs/img/diffline.svg)
+
+*`diffline`, mid-review: a note anchored to two lines, and one comment queued.*
+
+Both frames are drawn by the programs themselves — see
+[terminal-free renders](docs/development.md#terminal-free-renders).
 
 ## Why
 
@@ -125,8 +136,10 @@ diffline            # the repository you are standing in
 ```
 
 `j`/`k` walks the changed files, `l` moves into the diff. `V` takes a range,
-`c` writes a note against it, `a` picks a destination and `S` sends everything
-queued as one message.
+`␣n` writes a note against it, `␣a` picks a destination and `␣s` sends
+everything queued as one message. The leader is space, and `␣?` lists every
+binding — generated from the live keymap, so it is right the moment you rebind
+something.
 
 ### The keys you need first
 
@@ -148,9 +161,9 @@ queued as one message.
 | `ctrl-c` | quit |
 
 `q` and `:q` go back or close the overlay; to quit the program use `ctrl-c`.
-The full tables are in [docs/ghline.md](docs/ghline.md#keys) and
-[docs/diffline.md](docs/diffline.md#keys) — and diffline's `?` is generated
-from the live keymap, so it is right the moment you rebind something.
+These are ghline's; diffline is modal and has its own, listed by `␣?`. The full
+tables are in [docs/ghline.md](docs/ghline.md#keys) and
+[docs/diffline.md](docs/diffline.md#keys).
 
 ## Documentation
 

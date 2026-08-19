@@ -8,9 +8,14 @@ diffline            # the repository you are standing in
 diffline ~/project  # or one you point it at
 ```
 
-Three panes: what changed, the diff itself, and a queue of comments anchored to
-lines. `[` and `]` step the scope through the working tree, this branch, and
+Three panes: what changed, the diff itself, and a queue of notes anchored to
+lines. `[s` and `]s` step the scope through the working tree, this branch, and
 the last commit.
+
+It is modal and vim-shaped: `j`/`k`, `gg`/`G`, `/` to search, `v`/`V` for a
+selection, and the commands behind a leader, which is space.
+
+![a note being anchored to a range of the diff](img/diffline.svg)
 
 ## Comments are anchored to lines, not to rows
 
@@ -30,10 +35,14 @@ separate prompts would get twelve separate answers and no shape.
 | Key | Action |
 | --- | --- |
 | `V` | take a range |
-| `c` | comment on it |
-| `a` | pick an agent |
-| `S` | send the queue |
-| `?` | every other binding, generated from the live keymap |
+| `␣n` | note on it |
+| `␣x` | delete the note under the cursor |
+| `␣a` | pick an agent |
+| `␣s` | send the queue |
+| `␣c` | the queue pane |
+| `␣?` | every other binding, generated from the live keymap |
+
+`␣` is the leader, which is space.
 
 Where the message can go, and what happens if the agent will not take it, is
 [agents.md](agents.md).

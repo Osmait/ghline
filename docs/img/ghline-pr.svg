@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="680" viewBox="0 0 1440 680">
+<rect width="100%" height="100%" fill="#0b0e14"/>
+<g font-family="JetBrainsMono Nerd Font, JetBrains Mono, monospace" font-size="16">
+<rect x="0.0" y="0.0" width="1440.0" height="20" fill="#10141c"/>
+<rect x="0.0" y="40.0" width="144.0" height="20" fill="#10141c"/>
+<rect x="144.0" y="40.0" width="201.6" height="20" fill="#151b25"/>
+<rect x="345.6" y="40.0" width="1094.4" height="20" fill="#10141c"/>
+<rect x="672.0" y="180.0" width="768.0" height="20" fill="#10141c"/>
+<rect x="672.0" y="220.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="240.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="260.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="280.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="300.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="320.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="340.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="360.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="380.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="400.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="420.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="440.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="460.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="480.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="500.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="520.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="540.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="560.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="580.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="600.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="672.0" y="620.0" width="768.0" height="20" fill="#0d1017"/>
+<rect x="0.0" y="660.0" width="9.6" height="20" fill="#10141c"/>
+<rect x="9.6" y="660.0" width="57.6" height="20" fill="#39bae6"/>
+<rect x="67.2" y="660.0" width="1372.8" height="20" fill="#10141c"/>
+<text x="9.6" y="15.0" fill="#ffb454" xml:space="preserve">gh</text>
+<text x="28.8" y="15.0" fill="#5c6773" xml:space="preserve">  │  </text>
+<text x="76.8" y="15.0" fill="#7fd962" xml:space="preserve">●</text>
+<text x="86.4" y="15.0" fill="#c5cdd9" xml:space="preserve"> marasanz </text>
+<text x="182.4" y="15.0" fill="#5c6773" xml:space="preserve">(personal) [a]  │  marasanz</text>
+<text x="451.2" y="15.0" fill="#323947" xml:space="preserve">/</text>
+<text x="470.4" y="15.0" fill="#e6e1cf" xml:space="preserve">tuikit</text>
+<text x="537.6" y="15.0" fill="#323947" xml:space="preserve">›</text>
+<text x="556.8" y="15.0" fill="#5c6773" xml:space="preserve">Pull Requests</text>
+<text x="691.2" y="15.0" fill="#323947" xml:space="preserve">›</text>
+<text x="710.4" y="15.0" fill="#39bae6" xml:space="preserve">#217</text>
+<text x="1257.6" y="15.0" fill="#5c6773" xml:space="preserve">gh · live</text>
+<text x="1363.2" y="15.0" fill="#565b66" xml:space="preserve">?  help</text>
+<text x="0.0" y="35.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="19.2" y="55.0" fill="#4d5566" xml:space="preserve">1</text>
+<text x="38.4" y="55.0" fill="#5c6773" xml:space="preserve">Issues</text>
+<text x="105.6" y="55.0" fill="#4d5566" xml:space="preserve">12</text>
+<text x="163.2" y="55.0" fill="#4d5566" xml:space="preserve">2</text>
+<text x="182.4" y="55.0" fill="#e6e1cf" xml:space="preserve">Pull Requests</text>
+<text x="316.8" y="55.0" fill="#39bae6" xml:space="preserve">4</text>
+<text x="364.8" y="55.0" fill="#4d5566" xml:space="preserve">3</text>
+<text x="384.0" y="55.0" fill="#5c6773" xml:space="preserve">Actions</text>
+<text x="489.6" y="55.0" fill="#4d5566" xml:space="preserve">4</text>
+<text x="508.8" y="55.0" fill="#5c6773" xml:space="preserve">Files</text>
+<text x="595.2" y="55.0" fill="#4d5566" xml:space="preserve">5</text>
+<text x="614.4" y="55.0" fill="#5c6773" xml:space="preserve">Agents</text>
+<text x="1209.6" y="55.0" fill="#4d5566" xml:space="preserve">12 items · / to filter</text>
+<text x="0.0" y="75.0" fill="#232936" xml:space="preserve">───────────────</text>
+<text x="144.0" y="75.0" fill="#39bae6" xml:space="preserve">─────────────────────</text>
+<text x="345.6" y="75.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="19.2" y="115.0" fill="#7fd962" xml:space="preserve">[ OPEN ]</text>
+<text x="115.2" y="115.0" fill="#4d5566" xml:space="preserve">#217</text>
+<text x="172.8" y="115.0" fill="#4d5566" xml:space="preserve">marasanz · 26m ago</text>
+<text x="364.8" y="115.0" fill="#f07178" xml:space="preserve">✗ failure checks</text>
+<text x="19.2" y="135.0" fill="#e6e1cf" xml:space="preserve">fix(layout): clamp the sidebar to a minimum width</text>
+<text x="19.2" y="155.0" fill="#4d5566" xml:space="preserve">merge fix/sidebar-clamp → main · +12 -3 across 4 files</text>
+<text x="0.0" y="175.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="662.4" y="195.0" fill="#232936" xml:space="preserve">│</text>
+<text x="681.6" y="195.0" fill="#5c6773" xml:space="preserve">CHECKS · checks</text>
+<text x="1315.2" y="195.0" fill="#4d5566" xml:space="preserve">enter → logs</text>
+<text x="0.0" y="215.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="215.0" fill="#5c6773" xml:space="preserve">DESCRIPTION</text>
+<text x="662.4" y="215.0" fill="#232936" xml:space="preserve">│</text>
+<text x="672.0" y="215.0" fill="#1a1f29" xml:space="preserve">────────────────────────────────────────────────────────────────────────────────</text>
+<text x="0.0" y="235.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="235.0" fill="#a9b2bf" xml:space="preserve">The layout solver could compute a negative width when the</text>
+<text x="662.4" y="235.0" fill="#232936" xml:space="preserve">│</text>
+<text x="691.2" y="235.0" fill="#4d5566" xml:space="preserve">no checks for this pull request</text>
+<text x="0.0" y="255.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="255.0" fill="#a9b2bf" xml:space="preserve">terminal was resized while the sidebar had focus.</text>
+<text x="662.4" y="255.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="275.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="275.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="295.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="295.0" fill="#a9b2bf" xml:space="preserve">- clamp the sidebar to MIN_SIDEBAR (12 cols)</text>
+<text x="662.4" y="295.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="315.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="315.0" fill="#a9b2bf" xml:space="preserve">- collapse it entirely below 90 columns</text>
+<text x="662.4" y="315.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="335.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="335.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="355.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="355.0" fill="#a9b2bf" xml:space="preserve">Closes #412</text>
+<text x="662.4" y="355.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="375.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="375.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="395.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="395.0" fill="#5c6773" xml:space="preserve">FILES CHANGED</text>
+<text x="144.0" y="395.0" fill="#4d5566" xml:space="preserve">   d → diff</text>
+<text x="662.4" y="395.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="415.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="415.0" fill="#a9b2bf" xml:space="preserve">src/layout/solver.rs                                    </text>
+<text x="566.4" y="415.0" fill="#7fd962" xml:space="preserve">+64</text>
+<text x="604.8" y="415.0" fill="#f07178" xml:space="preserve">-18</text>
+<text x="662.4" y="415.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="435.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="435.0" fill="#a9b2bf" xml:space="preserve">src/layout/mod.rs                                        </text>
+<text x="576.0" y="435.0" fill="#7fd962" xml:space="preserve">+12</text>
+<text x="614.4" y="435.0" fill="#f07178" xml:space="preserve">-4</text>
+<text x="662.4" y="435.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="455.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="455.0" fill="#a9b2bf" xml:space="preserve">tests/layout.rs                                           </text>
+<text x="585.6" y="455.0" fill="#7fd962" xml:space="preserve">+7</text>
+<text x="614.4" y="455.0" fill="#f07178" xml:space="preserve">-0</text>
+<text x="662.4" y="455.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="475.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="475.0" fill="#a9b2bf" xml:space="preserve">CHANGELOG.md                                              </text>
+<text x="585.6" y="475.0" fill="#7fd962" xml:space="preserve">+0</text>
+<text x="614.4" y="475.0" fill="#f07178" xml:space="preserve">-0</text>
+<text x="662.4" y="475.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="495.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="495.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="515.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="515.0" fill="#5c6773" xml:space="preserve">REVIEWS</text>
+<text x="662.4" y="515.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="535.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="535.0" fill="#f07178" xml:space="preserve">✗ </text>
+<text x="38.4" y="535.0" fill="#a9b2bf" xml:space="preserve">tsuki </text>
+<text x="96.0" y="535.0" fill="#4d5566" xml:space="preserve">changes requested</text>
+<text x="662.4" y="535.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="555.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="19.2" y="555.0" fill="#7fd962" xml:space="preserve">✓ </text>
+<text x="38.4" y="555.0" fill="#a9b2bf" xml:space="preserve">kdev </text>
+<text x="86.4" y="555.0" fill="#4d5566" xml:space="preserve">approved</text>
+<text x="662.4" y="555.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="575.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="575.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="595.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="595.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="615.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="615.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="635.0" fill="#39bae6" xml:space="preserve">▌</text>
+<text x="662.4" y="635.0" fill="#232936" xml:space="preserve">│</text>
+<text x="0.0" y="655.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="9.6" y="675.0" fill="#0b0e14" xml:space="preserve"> PULL </text>
+<text x="86.4" y="675.0" fill="#4d5566" xml:space="preserve">j/k scroll · ^d/^u page · h repos · l checks · esc back · d diff · m merge · c close · D branch</text>
+<text x="1248.0" y="675.0" fill="#5c6773" xml:space="preserve">+0  marasanz/tuikit</text>
+</g></svg>
