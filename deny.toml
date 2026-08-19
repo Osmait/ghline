@@ -13,9 +13,9 @@
 # every target's dependencies — including the Windows ones — and reports
 # advisories against crates that never get compiled into anything shipped.
 targets = [
-    { triple = "x86_64-unknown-linux-gnu" },
-    { triple = "aarch64-unknown-linux-gnu" },
-    { triple = "aarch64-apple-darwin" },
+  { triple = "x86_64-unknown-linux-gnu" },
+  { triple = "aarch64-unknown-linux-gnu" },
+  { triple = "aarch64-apple-darwin" },
 ]
 
 [advisories]
@@ -32,16 +32,16 @@ yanked = "deny"
 # three has a fixed version to move to: they arrive through ratatui, which is
 # where the fix has to happen.
 ignore = [
-    # `paste`, a proc-macro crate, is archived and unmaintained. It runs at
-    # compile time and is not in the binary. ratatui 0.30 drops it.
-    { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, pulled in by ratatui, no fix available" },
-    # Both of these are `lru` 0.12, which ratatui 0.29 uses for its layout
-    # cache. Neither is reachable from here: `IterMut` is never called, and
-    # `pop()` is only unsound if a `Drop` panics — the key is a `Rect` and the
-    # value is a layout, and neither has a `Drop`. ratatui-core 0.1 is already
-    # on `lru` 0.18, where both are fixed; this goes when ratatui follows.
-    { id = "RUSTSEC-2026-0002", reason = "lru 0.12 via ratatui 0.29; IterMut is never called from this crate" },
-    { id = "RUSTSEC-2026-0253", reason = "lru 0.12 via ratatui 0.29; a panicking Drop is unreachable for its key and value types" },
+  # `paste`, a proc-macro crate, is archived and unmaintained. It runs at
+  # compile time and is not in the binary. ratatui 0.30 drops it.
+  { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro, pulled in by ratatui, no fix available" },
+  # Both of these are `lru` 0.12, which ratatui 0.29 uses for its layout
+  # cache. Neither is reachable from here: `IterMut` is never called, and
+  # `pop()` is only unsound if a `Drop` panics — the key is a `Rect` and the
+  # value is a layout, and neither has a `Drop`. ratatui-core 0.1 is already
+  # on `lru` 0.18, where both are fixed; this goes when ratatui follows.
+  { id = "RUSTSEC-2026-0002", reason = "lru 0.12 via ratatui 0.29; IterMut is never called from this crate" },
+  { id = "RUSTSEC-2026-0253", reason = "lru 0.12 via ratatui 0.29; a panicking Drop is unreachable for its key and value types" },
 ]
 
 [licenses]
@@ -50,14 +50,14 @@ ignore = [
 # nobody — which matters because this crate is MIT OR Apache-2.0, and it can
 # only promise that if what it links can be given away on those terms.
 allow = [
-    "MIT",
-    "Apache-2.0",
-    "BSL-1.0",     # ryu
-    "CC0-1.0",     # notify
-    "ISC",         # inotify and inotify-sys
-    "Unicode-3.0", # unicode-ident
-    "Unlicense",   # aho-corasick, memchr — both dual with MIT
-    "Zlib",        # foldhash
+  "MIT",
+  "Apache-2.0",
+  "BSL-1.0",     # ryu
+  "CC0-1.0",     # notify
+  "ISC",         # inotify and inotify-sys
+  "Unicode-3.0", # unicode-ident
+  "Unlicense",   # aho-corasick, memchr — both dual with MIT
+  "Zlib",        # foldhash
 ]
 
 [bans]

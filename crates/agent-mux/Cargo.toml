@@ -1,0 +1,15 @@
+[package]
+name = "agent-mux"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Coding-agent discovery and dispatch over terminal multiplexers"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+process-error = { version = "0.1.0", path = "../process-error" }
+serde_json = "1.0.151"

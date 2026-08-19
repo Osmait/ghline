@@ -20,9 +20,9 @@
 
 use proptest::prelude::*;
 
-use github_tui::diffline::source::git::parse_unified;
-use github_tui::shared::syntax;
-use github_tui::shared::text::expand_tabs;
+use diffline_app::source::git::parse_unified;
+use line_shared::syntax;
+use line_shared::text::expand_tabs;
 
 /// Text with the awkward parts over-represented: control characters, wide
 /// glyphs, combining marks and the two newline conventions, none of which a
@@ -147,10 +147,10 @@ proptest! {
         }
     }
 
-    /// No piece is wider than the pane, unless it is one character that is —
-    /// which is the only honest answer for a glyph two columns wide in a
-    /// column one wide, and is why the exception is written down rather than
-    /// asserted away.
+    /// No piece is wider than the pane, unless it is one printable base that
+    /// is — which is the only honest answer for a two-column glyph in a
+    /// one-column pane. Zero-width modifiers stay attached to that base, so a
+    /// variation selector does not turn one glyph into two for this exception.
     ///
     /// On one expanded line, because that is the only thing this is ever
     /// called with and the only thing the property is true of. A control
@@ -164,12 +164,13 @@ proptest! {
         raw in awkward_text(),
         width in 1usize..40,
     ) {
+        use unicode_segmentation::UnicodeSegmentation;
         use unicode_width::UnicodeWidthStr;
         let line = expand_tabs(&raw).replace('\n', "");
         for (a, b) in syntax::wrap_ranges(&line, width) {
             let Some(piece) = line.get(a..b) else { continue };
             prop_assert!(
-                piece.width() <= width || piece.chars().count() == 1,
+                piece.width() <= width || piece.graphemes(true).count() == 1,
                 "{piece:?} is {} columns in a pane {width} wide",
                 piece.width(),
             );
@@ -239,8 +240,8 @@ proptest! {
 
 /// Every press except `Key::Other`, which is the name for a key with no name
 /// and so has nothing to be spelt as.
-fn a_press() -> impl Strategy<Value = github_tui::shared::key::Press> {
-    use github_tui::shared::key::{Key, Press};
+fn a_press() -> impl Strategy<Value = line_shared::key::Press> {
+    use line_shared::key::{Key, Press};
     // The characters that mean something to the notation itself, over-
     // represented: `any::<char>()` is uniform across a million code points
     // and would reach `<` about never, which is the one that decides how
@@ -285,7 +286,7 @@ proptest! {
     ) {
         let written: String = presses.iter().map(|p| p.spell()).collect();
         prop_assert_eq!(
-            github_tui::shared::key::parse_keys(&written),
+            line_shared::key::parse_keys(&written),
             presses,
             "wrote {:?}",
             written,
@@ -330,7 +331,7 @@ proptest! {
     /// panicked in a debug build before anybody saw it.
     #[test]
     fn the_line_numbers_never_go_backwards(text in diff_text()) {
-        use github_tui::diffline::model::Kind;
+        use diffline_app::model::Kind;
 
         let (mut old, mut new) = (0u32, 0u32);
         for row in parse_unified(&text) {

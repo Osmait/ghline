@@ -1,28 +1,28 @@
 #!/bin/sh
-# Install github-tui and diffline.
+# Install ghline and diffline.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Osmait/ghline/main/install.sh | sh
 #
 # Downloads the release binaries for this machine, checks them against the
 # published SHA-256, and puts them in ~/.local/bin. Nothing is built, nothing
 # needs root, and nothing outside the install directory is touched.
 #
 # Knobs, all optional:
-#   GITHUB_TUI_VERSION      tag to install, e.g. v0.1.0 (default: latest)
-#   GITHUB_TUI_INSTALL_DIR  where to put the binaries (default: ~/.local/bin)
+#   GHLINE_VERSION      tag to install, e.g. v0.1.0 (default: latest)
+#   GHLINE_INSTALL_DIR  where to put the binaries (default: ~/.local/bin)
 #
 # Plain POSIX sh on purpose: macOS still ships bash 3.2, and this has to run
 # before the user has installed anything at all.
 
 set -eu
 
-REPO="Osmait/github-tui"
+REPO="Osmait/ghline"
 # The archive is still named after the first one, because that is the name
 # install.sh builds the download URL from.
-BIN="github-tui"
-BINS="github-tui diffline"
+BIN="ghline"
+BINS="ghline diffline"
 
-INSTALL_DIR="${GITHUB_TUI_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${GHLINE_INSTALL_DIR:-$HOME/.local/bin}"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
@@ -74,8 +74,8 @@ main() {
 
     target="$(detect_target)"
 
-    if [ -n "${GITHUB_TUI_VERSION:-}" ]; then
-        tag="$GITHUB_TUI_VERSION"
+    if [ -n "${GHLINE_VERSION:-}" ]; then
+        tag="$GHLINE_VERSION"
         case "$tag" in v*) ;; *) tag="v$tag" ;; esac
     else
         tag="$(latest_tag || true)"
@@ -153,7 +153,7 @@ check_path() {
     say "  fish_add_path $INSTALL_DIR"
 }
 
-# github-tui reads GitHub through the `gh` CLI, and without it there is
+# ghline reads GitHub through the `gh` CLI, and without it there is
 # nothing to read: it says so and exits. Worth saying at install time rather
 # than at the first run.
 check_gh() {

@@ -1,31 +1,30 @@
 # Working in this repository
 
-Two terminal programs over one set of parts: `github-tui` browses GitHub
+Two terminal programs over one set of parts: `ghline` browses GitHub
 through the `gh` CLI, `diffline` reviews the diff in front of you and hands
 notes to a coding agent.
 
 **Read [CODE-STYLE.md](CODE-STYLE.md) before writing Rust here.** It is the
-rulebook, and this file is the map. `src/lib.rs`'s module documentation has
-the architecture diagram; the README is the user-facing tour.
+rulebook, and this file is the map. Each application crate's `lib.rs` explains
+its architecture; the README is the user-facing tour.
 
 ## Where things are
 
 ```
-src/shared/     what neither program owns — palette, fuzzy matcher, lexer,
-                agents, config, worker threads, the error types
-src/tui/        the drawing toolkit both use — geom, atom, molecule, organism,
-                theme, the terminal and its loop
-src/github/     one program: data → source → state → view
-src/diffline/   the other:   model → source → state → view
-src/bin/        one entry point each
-tests/          golden frames (insta), properties (proptest)
-benches/        divan, what each layer costs
-scripts/        the one job the Makefile could not say in five lines
+crates/ghline-app/   GitHub: data → source → state → view
+crates/diffline-app/ diffs:  model → source → state → view
+crates/line-shared/  application glue — config, clones, logging and workers
+crates/*/            reusable boundaries — parser, text, matching, errors,
+                     agent multiplexers and the TUI toolkit
+src/bin/             thin process adapters for `ghline` and `diffline`
+tests/               golden frames (insta), properties (proptest)
+benches/             divan, what each layer costs
+scripts/             the one job the Makefile could not say in five lines
 ```
 
 Within a program every arrow points down and none point back up. The two
-programs never name each other. Nothing in `src/shared` may name either
-program — that one is enforced by a test in `src/shared/mod.rs`.
+application crates never depend on each other. `line-shared` may compose the
+reusable crates, but Cargo prevents it from naming either application.
 
 ## Commands
 
@@ -50,7 +49,7 @@ someone moving fast:
 1. **No `unwrap`, `expect`, `panic!` or `todo!`** outside tests. They are
    lints. Invariants are `debug_assert!`. Values that came from `gh`, `git`, a
    config file or a terminal event are never indexed without a check.
-2. **Errors keep their type.** `shared::error::Error` for something we ran
+2. **Errors keep their type.** `line_shared::error::Error` for something we ran
    saying no, `Failure` for this program declining. Never `Box<dyn Error>`,
    never a `String`, never a flattened cause chain.
 3. **Comments say why, not what.** The signature already says what. A comment
@@ -60,7 +59,7 @@ someone moving fast:
    `scroll_into_view_never_scrolls_past_the_end`, not `test_scroll`. Prefer
    the lowest level that can fail.
 5. **Do not add a dependency** without saying in the commit message what it is
-   worth. There are six.
+   worth.
 6. **Do not widen the lint set casually, or narrow it at all.** `pedantic` was
    tried and rejected for reasons written down in `Cargo.toml`.
 

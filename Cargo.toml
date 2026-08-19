@@ -1,14 +1,36 @@
 [workspace]
-members = [".", "crates/cli-parser"]
-default-members = [".", "crates/cli-parser"]
+members = [
+  ".",
+  "crates/agent-mux",
+  "crates/cli-parser",
+  "crates/fuzzy-match",
+  "crates/process-error",
+  "crates/source-text",
+  "crates/tui-kit",
+  "crates/line-shared",
+  "crates/ghline-app",
+  "crates/diffline-app",
+]
+default-members = [
+  ".",
+  "crates/agent-mux",
+  "crates/cli-parser",
+  "crates/fuzzy-match",
+  "crates/process-error",
+  "crates/source-text",
+  "crates/tui-kit",
+  "crates/line-shared",
+  "crates/ghline-app",
+  "crates/diffline-app",
+]
 resolver = "3"
 
 [package]
-name = "github-tui"
+name = "ghline"
 version = "0.1.0"
 edition = "2024"
-description = "A GitHub TUI: repositories, issues, pull requests and Actions, over the gh CLI"
-repository = "https://github.com/Osmait/github-tui"
+description = "GitHub browsing and diff review in the terminal"
+repository = "https://github.com/Osmait/ghline"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["github", "tui", "terminal", "git", "diff"]
@@ -23,16 +45,11 @@ rust-version = "1.96"
 workspace = true
 
 [dependencies]
-cli-parser = { version = "0.1.0", path = "crates/cli-parser" }
-crossterm = "0.29"
-# Native filesystem events keep diffline current without running git forever
-# in idle repositories. One dependency replaces four platform-specific APIs.
-notify = "8.2.0"
+diffline-app = { version = "0.1.0", path = "crates/diffline-app" }
+ghline-app = { version = "0.1.0", path = "crates/ghline-app" }
+line-shared = { version = "0.1.0", path = "crates/line-shared" }
 ratatui = "0.30"
-ratatui-core = "0.1.2"
-serde_json = "1.0.151"
-tui-markdown = { version = "0.3.9", default-features = false }
-unicode-width = "0.2"
+tui-kit = { version = "0.1.0", path = "crates/tui-kit" }
 
 # Lints kept deliberately narrow: the goal is to catch real defects, not to
 # fight the `as u16` casts that a cell-grid renderer is made of.
@@ -41,7 +58,7 @@ unsafe_code = "forbid"
 rust_2018_idioms = { level = "warn", priority = -1 }
 # `pub` had drifted into meaning two different things: part of the crate's
 # published surface, and reachable from the file next door. The second is a
-# claim a private module cannot back — `pub fn draw` in `github::view::ui`
+# claim a private module cannot back — `pub fn draw` in `ghline_app::view::ui`
 # was never callable from outside the crate, and reading it said otherwise.
 # Twenty-four of them, all inside private trees. Written `pub(crate)` they
 # say the true thing, and what is still `pub` afterwards is the API.
@@ -111,8 +128,8 @@ divan = "0.1.21"
 # compare one string against another, and the rest of it is serde, yaml, ron,
 # toml and a glob walker for snapshotting things that are not strings.
 insta = { version = "1.48.0", default-features = false }
-# Counts what reaches the allocator — see the allocation tests in `tui::atom`
-# and `shared::fuzzy`. Every performance defect this crate has had was a heap
+# Counts what reaches the allocator — see the allocation tests in
+# `tui_kit::atom` and `fuzzy_match`. Every performance defect this crate has had was a heap
 # allocation on a path that did not need one, and a wall clock cannot be
 # asserted on: it varies by more on an idle laptop than the regressions worth
 # catching. A count does not vary at all, so these run in CI with the rest.
@@ -131,6 +148,8 @@ proptest = { version = "1.11.0", default-features = false, features = [
   "std",
   "handle-panics",
 ] }
+unicode-segmentation = "1.12"
+unicode-width = "0.2"
 
 # `harness = false` because divan brings its own; without it, libtest runs
 # first and finds no `#[test]` to run.

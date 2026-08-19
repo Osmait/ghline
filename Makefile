@@ -1,7 +1,7 @@
 # Thin wrapper over cargo. Nothing here does anything cargo cannot, it just
 # saves remembering which flags each task wants.
 
-BIN := github-tui
+BIN := ghline
 
 
 
@@ -10,7 +10,7 @@ BIN := github-tui
 
 
 .DEFAULT_GOAL := help
-.PHONY: help install uninstall hooks build run diff test test-nvim cov bench bench-cmp flame lint audit fmt check clean
+.PHONY: help install uninstall hooks build run diff test cov bench bench-cmp flame lint audit fmt check clean
 
 # Two cargo processes would only queue on the target directory's lock, and the
 # interleaved output would be unreadable. Nothing here is worth parallelising.
@@ -36,8 +36,8 @@ hooks: ## Run `make check` on every push (git config core.hooksPath)
 build: ## Optimised build, left in target/release
 	cargo build --release
 
-run: ## Run github-tui against real GitHub through gh
-	cargo run --release --bin github-tui
+run: ## Run ghline against real GitHub through gh
+	cargo run --release --bin ghline
 
 diff: ## Run diffline on this repository
 	cargo run --release --bin diffline -- .
@@ -105,9 +105,6 @@ flame: ## Where the time inside a benchmark goes (needs perf and inferno)
 		| inferno-flamegraph --title "$(BIN) — $(if $(BENCH),$(BENCH),all benchmarks)" \
 		> target/flame.svg
 	@echo "  target/flame.svg — open it in a browser, the boxes are clickable"
-
-test-nvim: ## The neovim plugin's tests (needs nvim and a running herdr)
-	cd nvim/agent-send.nvim && nvim --headless -u NONE -c "set rtp+=." -c "luafile tests/run.lua"
 
 lint: ## Formatting and lints, exactly as CI runs them
 	cargo fmt --all --check

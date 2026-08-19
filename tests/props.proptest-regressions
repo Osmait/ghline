@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 3cfa0776440acb9f19b4232e9d1a4c0e8925b92a0c9e7267ceb0f6bd9ac17cb5 # shrinks to text = "@@ -4294967291,0 +0,0 @@ fn thing()\n\r\n \r\n \n\r\n\r\n\n-"
+cc f2817e16c9b0d1d8efff302710167b936fd52b1e38ac3b13b13a7876b26ea5ce # shrinks to raw = "👩\u{200d}💻", width = 1

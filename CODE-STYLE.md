@@ -78,13 +78,13 @@ pub fn pct(avail: u16, p: u16) -> u16 {
 
 Two types, and the difference between them is load bearing.
 
-`shared::error::Error` is something we ran saying no: a program that would not
+`line_shared::error::Error` is something we ran saying no: a program that would not
 spawn, a non-zero exit, output that was not the JSON we asked for, a field
 that was not there. Every case names which of `gh`, `git` or `herdr` it was,
 because a type shared by three callers that assumes one of them will tell
 somebody to install the wrong thing.
 
-`shared::error::Failure` is wider: `Ran(Error)` for the above, `Refused(String)`
+`line_shared::error::Failure` is wider: `Ran(Error)` for the above, `Refused(String)`
 for this program declining — a file too large to open, a worker thread that is
 gone. Inventing a `Spawn` error for a dead thread reads as a lie the first
 time somebody prints the cause.
@@ -140,8 +140,8 @@ storing the value; `needless_pass_by_value` is on and will say so.
 return value then ignoring that value is a bug, and it is the one bug class
 still available in a crate where nothing panics. Do not apply it to anything
 that also mutates — `scroll_into_view` writes through `&mut usize` and does
-not get it. `tui::geom`, `shared::fuzzy`, `shared::text` and `shared::ago`
-carry it today; the `is_*` predicates on `Status`, `Error` and `Failure` are
+not get it. `tui_kit::geom`, `fuzzy_match`, `source_text::text` and
+`line_shared::ago` carry it today; the `is_*` predicates on `Status`, `Error` and `Failure` are
 the obvious next ones.
 
 **Two adjacent parameters of the same type are two parameters that can be
@@ -171,9 +171,9 @@ to reach for; it is pinned by five tests and a `debug_assert!` instead.
 
 One arrow, and it points down. `view` reads `state`, `state` asks `source`,
 `source` knows `data`, and `data` knows none of them. The two programs never
-name each other. Nothing in `shared` may name either program — that one is
-enforced by a test in `src/shared/mod.rs`, because it has been broken three
-times.
+name each other. `line-shared` may name neither application — Cargo enforces
+that dependency edge, and its source-boundary test catches paths hidden behind
+conditional compilation.
 
 `pub` means "part of this crate's surface", not "reachable from the file next
 door". Inside a private module, use `pub(crate)` — `pub` there is a claim the
@@ -181,9 +181,9 @@ module cannot back. This is `unreachable_pub` in `Cargo.toml`, so it is the
 compiler's rule and not this document's: the twenty-four items that had
 drifted are `pub(crate)` now, and what is still `pub` is the API.
 
-`tui` and `shared` sit side by side rather than stacked, and `lib.rs` says so.
-The one edge in each direction is drawn in the diagram precisely because it is
-the place the rule does not hold.
+Reusable workspace crates sit below both programs and cannot depend on them.
+`line-shared` composes those crates with application configuration; the two
+application crates depend on it, never on each other.
 
 ## Documentation
 
@@ -216,14 +216,14 @@ documentation and a test at once, which is why CI has a `cargo test --doc`
 step. There are eight, all in the pure layer, and they set the pattern: each
 shows the case that is easy to get wrong rather than the case that is obvious.
 `fuzzy::score` demonstrates that the match is greedy — `"gt"` against
-`"github-tui"` takes the `t` inside "github" — because that is the behaviour
+`"git-host-tui"` takes the `t` inside "git" — because that is the behaviour
 somebody will otherwise assume away. An example asserting `pct(100, 50) == 50`
 would have been worth nothing.
 
-`missing_docs` is on for `shared` and `tui`, as an inner attribute on each of
-those two modules rather than crate-wide. Both are toolkits with two
-consumers, and a toolkit is documented or it is guessed at; `github` and
-`diffline` are read by whoever is changing them, which is a different job.
+`missing_docs` is on for `line-shared` and the reusable toolkit crates rather
+than application-wide. Code with several consumers is documented or it is
+guessed at; `ghline-app` and `diffline-app` are read by whoever is changing
+them, which is a different job.
 
 ## Formatting and imports
 
@@ -262,7 +262,7 @@ There are around 617 of them. The conventions that got there:
   `make bench-cmp` is the before-and-after, with the noise check that says
   whether to believe it.
 - **Allocation tests** (`allocation-counter`, in `tui::atom` and
-  `shared::fuzzy`) are the half of performance that a gate can hold. Every
+  `line_shared::fuzzy`) are the half of performance that a gate can hold. Every
   defect here has been a heap allocation on a path that did not need one, and
   a count of them is the same number on a busy laptop as on a shared CI
   runner — so unlike a benchmark, these run with the rest of the suite.
@@ -271,7 +271,7 @@ There are around 617 of them. The conventions that got there:
   copy more*. `bytes_total` rather than `count_total` is what sees a routine
   copying what it has already built. A new one earns its place by failing
   against the code it was written for — all six here were checked that way.
-- **Architectural rules get a test.** The `shared` boundary is checked by
+- **Architectural rules get a test.** The `line-shared` boundary is checked by
   reading the directory. That is unusual and it is correct: the rule was
   broken three times by people who had read the comment.
 
@@ -302,10 +302,10 @@ them, the commands are in the header of each row.
 | Check | Hits | Position |
 | --- | --- | --- |
 | `unreachable_pub` | **0** | Done. Enabled in `Cargo.toml`; twenty-four items became `pub(crate)`. |
-| `missing_docs`, `shared` and `tui` | **0** | Done. Enabled per-module. Ninety items in `tui`, sixty-seven in `shared`. |
+| `missing_docs`, `line-shared` and reusable crates | **0** | Done. Enabled at each multi-consumer boundary. |
 | doctests | **8** | Done, in the pure layer. The `cargo test --doc` step is no longer running nothing. |
 | `clippy::must_use_candidate` | 264 | Partly done: the pure layer has nine. The rest is a judgement call per item, so the lint stays off — enabling it would mark every getter in the crate. |
-| `missing_docs`, `github` and `diffline` | 637 | Deliberately out of scope. These are read by whoever is changing them, not by callers. Revisit only if either grows a second consumer. |
+| `missing_docs`, application crates | 637 | Deliberately out of scope. These are read by whoever is changing them, not by callers. Revisit only if either grows a second consumer. |
 | `clippy::indexing_slicing` | 260 | Not enabling. The panic policy above is the answer instead, and it is the harder half — it needs reading, not a lint. |
 | `clippy::redundant_clone` | 13 | Not enabling — it is a nursery lint and twelve of the thirteen are it misreading `Display::to_string` on a borrowed error. Checked one by one. The two real ones, in `gh.rs` and `bin/diffline.rs`, are fixed; the survivor at `load.rs:321` is a genuine clone kept on purpose, because it is the last of four identical `insert` lines and breaking the symmetry to save one allocation reads worse than the allocation costs. |
 

@@ -20,7 +20,7 @@
 //! Determinism: `snapshot::seeded` reads nobody's config and runs the test
 //! fixture, so there is no network, no clock and no `$HOME` in any of this.
 
-use github_tui::github::snapshot;
+use ghline_app::snapshot;
 
 /// The size the design was drawn at.
 const WIDE: (u16, u16) = (160, 44);

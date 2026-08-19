@@ -1,0 +1,19 @@
+[package]
+name = "line-shared"
+version = "0.1.0"
+edition = "2024"
+description = "Application glue shared by ghline and diffline"
+license = "MIT OR Apache-2.0"
+rust-version = "1.96"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+agent-mux = { version = "0.1.0", path = "../agent-mux" }
+fuzzy-match = { version = "0.1.0", path = "../fuzzy-match" }
+process-error = { version = "0.1.0", path = "../process-error" }
+source-text = { version = "0.1.0", path = "../source-text" }
+tui-kit = { version = "0.1.0", path = "../tui-kit" }
+unicode-width = "0.2"

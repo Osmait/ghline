@@ -1,0 +1,19 @@
+[package]
+name = "tui-kit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Application-independent terminal drawing components and runtime"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+crossterm = "0.29"
+ratatui = "0.30"
+unicode-width = "0.2"
+
+[dev-dependencies]
+allocation-counter = "0.8.1"

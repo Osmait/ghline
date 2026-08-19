@@ -1,0 +1,447 @@
+//! Worker thread: runs the `gh` calls off the render loop.
+//!
+//! The main loop sends a `Request` and calls `try_recv` each pass, so the
+//! interface never blocks waiting on the network.
+
+use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+
+use crate::shared::worker::{Gone, Worker};
+use std::thread;
+
+use crate::data::Kind;
+use crate::data::MergeMethod;
+use crate::data::Source as FinderSource;
+use crate::data::{Account, Comment, FileChange, Hunk, Item, Job, RawLog, Repo, Review};
+use crate::shared::error::Error;
+
+pub enum Request {
+    Accounts,
+    Repos {
+        login: String,
+    },
+    List {
+        repo: String,
+        tab: usize,
+    },
+    /// Fetch a repository that is not on this disk yet.
+    Clone {
+        repo: String,
+        dest: String,
+    },
+    /// A repository's whole file tree.
+    Tree {
+        repo: String,
+    },
+    /// One file's contents.
+    FileText {
+        repo: String,
+        path: String,
+    },
+    /// Walk the disk for local checkouts.
+    Scan,
+    /// Hand a rendered prompt to the agent in `pane`.
+    Dispatch {
+        pane: String,
+        text: String,
+    },
+    /// Branch a worktree, start an agent in it, and hand it the task.
+    ///
+    /// One request rather than three because the middle of the chain is not a
+    /// state worth surfacing: a worktree with no agent in it is litter, and
+    /// the handler cleans it up rather than leaving it.
+    DispatchFresh {
+        repo_root: String,
+        /// `Some` to branch a worktree, `None` to work in the checkout.
+        branch: Option<String>,
+        label: String,
+        kind: String,
+        text: String,
+    },
+    /// Every coding agent herdr is running. Not about a repository, so it
+    /// carries nothing.
+    Agents,
+    /// Workflow runs gathered from several repositories at once.
+    ///
+    /// Separate from `List` because there is no cross-repository Actions API:
+    /// this really is one call per repository, so the caller passes only the
+    /// ones with any workflows and the answer is filed under `key` as if it
+    /// had been one list all along.
+    AllRuns {
+        key: String,
+        repos: Vec<String>,
+    },
+    IssueDetail {
+        repo: String,
+        num: i64,
+    },
+    PrDetail {
+        repo: String,
+        num: i64,
+    },
+    PrDiff {
+        repo: String,
+        num: i64,
+    },
+    Search {
+        owner: String,
+        query: String,
+        source: FinderSource,
+    },
+    RunJobs {
+        repo: String,
+        run_id: i64,
+    },
+    RunLog {
+        repo: String,
+        run_id: i64,
+        finished: bool,
+    },
+    Merge {
+        repo: String,
+        num: i64,
+        method: MergeMethod,
+        branch: String,
+    },
+    Close {
+        repo: String,
+        num: i64,
+    },
+    Reopen {
+        repo: String,
+        num: i64,
+    },
+    DeleteBranch {
+        repo: String,
+        branch: String,
+    },
+}
+
+pub enum Response {
+    Accounts(Result<Vec<Account>, Error>),
+    Agents {
+        result: Result<Vec<crate::shared::mux::Agent>, Error>,
+    },
+    Dispatched {
+        result: Result<(), Error>,
+    },
+    Scanned {
+        index: crate::shared::clones::Index,
+        /// The branch each checkout is on, gathered here because this thread
+        /// is already walking those directories. It used to be read from the
+        /// reducer, which meant the dispatch picker read `.git/HEAD` off the
+        /// disk once per frame it was open.
+        branches: std::collections::HashMap<String, String>,
+    },
+    Cloned {
+        repo: String,
+        result: Result<String, Error>,
+    },
+    Tree {
+        repo: String,
+        result: Result<Vec<crate::data::TreeEntry>, Error>,
+    },
+    FileText {
+        repo: String,
+        path: String,
+        /// The contents, and the colour spans that go with them.
+        result: Result<(String, Vec<Vec<crate::shared::syntax::Span>>), Error>,
+    },
+    Repos {
+        login: String,
+        result: Result<Vec<Repo>, Error>,
+    },
+    List {
+        repo: String,
+        tab: usize,
+        result: Result<Vec<Item>, Error>,
+    },
+    IssueDetail {
+        repo: String,
+        num: i64,
+        result: Result<(String, Vec<Comment>), Error>,
+    },
+    PrDetail {
+        repo: String,
+        num: i64,
+        result: Result<(String, Vec<FileChange>, Vec<Review>), Error>,
+    },
+    PrDiff {
+        repo: String,
+        num: i64,
+        result: Result<Vec<(String, Vec<Hunk>)>, Error>,
+    },
+    Search {
+        query: String,
+        source: FinderSource,
+        result: Result<Vec<crate::data::SearchHit>, Error>,
+    },
+    RunJobs {
+        repo: String,
+        run_id: i64,
+        result: Result<Vec<Job>, Error>,
+    },
+    RunLog {
+        repo: String,
+        run_id: i64,
+        result: Result<Vec<RawLog>, Error>,
+    },
+    /// An action finished: a status-bar message and which PR it affected.
+    Action {
+        repo: String,
+        num: i64,
+        result: Result<String, Error>,
+        /// Branch to offer for deletion if the action was a successful merge.
+        merged_branch: Option<String>,
+    },
+}
+
+pub struct Service {
+    tx: Sender<Request>,
+    rx: Receiver<Response>,
+}
+
+impl Service {
+    /// Starts the thread. Requests are served in arrival order.
+    pub fn spawn() -> Self {
+        let (tx, req_rx) = channel::<Request>();
+        let (res_tx, rx) = channel::<Response>();
+
+        thread::spawn(move || {
+            while let Ok(req) = req_rx.recv() {
+                let res = handle(req);
+                if res_tx.send(res).is_err() {
+                    break; // the interface is gone
+                }
+            }
+        });
+
+        Self { tx, rx }
+    }
+}
+
+impl Worker<Request, Response> for Service {
+    fn send(&self, req: Request) -> bool {
+        self.tx.send(req).is_ok()
+    }
+
+    /// `Disconnected` is not the same as `Empty` and must not be flattened
+    /// into it: the send side already refuses to leave a request in the air,
+    /// but a worker that dies *after* taking one would otherwise leave that
+    /// one loading for ever — a `None` looks exactly like an answer that has
+    /// not come yet.
+    fn poll(&self) -> Result<Option<Response>, Gone> {
+        match self.rx.try_recv() {
+            Ok(r) => Ok(Some(r)),
+            Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) => Err(Gone),
+        }
+    }
+}
+
+fn handle(req: Request) -> Response {
+    match req {
+        Request::Accounts => Response::Accounts(crate::forge::current().accounts()),
+
+        Request::Repos { login } => {
+            let result = crate::forge::current().repos(&login);
+            Response::Repos { login, result }
+        }
+
+        Request::List { repo, tab } => {
+            // `owner/*` is the pseudo-repository that gathers all of them. It
+            // is answered here rather than by the caller so the whole thing
+            // stays one request on one thread, skeleton and all.
+            let all = repo.strip_suffix('*').and_then(|o| o.strip_suffix('/'));
+            let result = match (all, tab) {
+                (Some(owner), 0) => crate::forge::current().all_issues(owner),
+                (Some(owner), 1) => crate::forge::current().all_prs(owner),
+                // Runs never reach here: there is no cross-repository
+                // Actions API, so they travel as their own request carrying
+                // the repositories worth asking.
+                (Some(_), _) => Ok(Vec::new()),
+                (None, 0) => crate::forge::current().issues(&repo),
+                (None, 1) => crate::forge::current().prs(&repo),
+                (None, _) => crate::forge::current().runs(&repo),
+            };
+            Response::List { repo, tab, result }
+        }
+
+        Request::Dispatch { pane, text } => Response::Dispatched {
+            result: crate::shared::mux::current().prompt(&pane, &text),
+        },
+
+        Request::DispatchFresh {
+            repo_root,
+            branch,
+            label,
+            kind,
+            text,
+        } => Response::Dispatched {
+            result: crate::shared::mux::current().dispatch(
+                &repo_root,
+                branch.as_deref(),
+                &label,
+                &kind,
+                &text,
+            ),
+        },
+
+        Request::Clone { repo, dest } => Response::Cloned {
+            result: crate::forge::current().clone(&repo, &dest),
+            repo,
+        },
+
+        Request::Tree { repo } => Response::Tree {
+            result: crate::forge::current().repo_tree(&repo),
+            repo,
+        },
+
+        Request::FileText { repo, path } => {
+            // Lexed here rather than when the answer lands: half a megabyte
+            // takes long enough to be a dropped frame, and this thread exists
+            // so the interface never has to wait for anything.
+            let result = crate::forge::current()
+                .file_content(&repo, &path)
+                .map(|text| {
+                    let spans = crate::shared::syntax::of_path(&path)
+                        .map(|lang| crate::shared::syntax::highlight(lang, &text))
+                        .unwrap_or_default();
+                    (text, spans)
+                });
+            Response::FileText { result, repo, path }
+        }
+
+        Request::Scan => {
+            let index = crate::shared::clones::current().scan();
+            let branches = index
+                .values()
+                .filter_map(|root| {
+                    let root = root.to_string_lossy().into_owned();
+                    let branch = crate::shared::clones::current().head_branch(&root)?;
+                    Some((root, branch))
+                })
+                .collect();
+            Response::Scanned { index, branches }
+        }
+
+        Request::Agents => Response::Agents {
+            result: crate::shared::mux::current().agents(),
+        },
+
+        Request::AllRuns { key, repos } => Response::List {
+            repo: key,
+            tab: 2,
+            result: crate::forge::current().all_runs(&repos),
+        },
+
+        Request::IssueDetail { repo, num } => {
+            let result = crate::forge::current().issue_detail(&repo, num);
+            Response::IssueDetail { repo, num, result }
+        }
+
+        Request::PrDetail { repo, num } => {
+            let result = crate::forge::current().pr_detail(&repo, num);
+            Response::PrDetail { repo, num, result }
+        }
+
+        Request::PrDiff { repo, num } => {
+            let result = crate::forge::current().pr_diff(&repo, num);
+            Response::PrDiff { repo, num, result }
+        }
+
+        Request::Search {
+            owner,
+            query,
+            source,
+        } => {
+            let result = match source {
+                FinderSource::Commits => crate::forge::current().search_commits(&owner, &query),
+                FinderSource::Prs => {
+                    crate::forge::current().search_issues(&owner, &query, Kind::Pr)
+                }
+                _ => crate::forge::current().search_issues(&owner, &query, Kind::Issue),
+            };
+            Response::Search {
+                query,
+                source,
+                result,
+            }
+        }
+
+        Request::RunJobs { repo, run_id } => {
+            let result = crate::forge::current().run_jobs(&repo, run_id);
+            Response::RunJobs {
+                repo,
+                run_id,
+                result,
+            }
+        }
+
+        Request::RunLog {
+            repo,
+            run_id,
+            finished,
+        } => {
+            let result = crate::forge::current().run_log(&repo, run_id, finished);
+            Response::RunLog {
+                repo,
+                run_id,
+                result,
+            }
+        }
+
+        Request::Merge {
+            repo,
+            num,
+            method,
+            branch,
+        } => {
+            let result = crate::forge::current()
+                .merge(&repo, num, method.short())
+                .map(|_| format!("#{num} merged via {}", method.short()));
+            let merged_branch = result.is_ok().then_some(branch).filter(|b| !b.is_empty());
+            Response::Action {
+                repo,
+                num,
+                result,
+                merged_branch,
+            }
+        }
+
+        Request::Close { repo, num } => {
+            let result = crate::forge::current()
+                .close(&repo, num)
+                .map(|_| format!("#{num} closed"));
+            Response::Action {
+                repo,
+                num,
+                result,
+                merged_branch: None,
+            }
+        }
+
+        Request::Reopen { repo, num } => {
+            let result = crate::forge::current()
+                .reopen(&repo, num)
+                .map(|_| format!("#{num} reopened"));
+            Response::Action {
+                repo,
+                num,
+                result,
+                merged_branch: None,
+            }
+        }
+
+        Request::DeleteBranch { repo, branch } => {
+            let result = crate::forge::current()
+                .delete_branch(&repo, &branch)
+                .map(|_| format!("deleted branch {branch}"));
+            Response::Action {
+                repo,
+                num: 0,
+                result,
+                merged_branch: None,
+            }
+        }
+    }
+}

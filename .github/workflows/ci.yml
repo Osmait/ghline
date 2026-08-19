@@ -157,8 +157,8 @@ jobs:
   # What fraction of the crate the six hundred tests actually execute. Not a
   # target to raise — a floor to notice falling through. The number today is
   # 72.7% of lines, and the interesting part of the report is never the total:
-  # it is that `github/source/gh.rs` has seven hundred uncovered lines in it
-  # while `tui/` sits above 97%.
+  # it is that `crates/ghline-app/src/source/gh.rs` has seven hundred uncovered
+  # lines in it while `crates/tui-kit/` sits above 97%.
   #
   # No upload to a third party. The summary is printed into the job, which is
   # where anybody who wants it is already looking, and it keeps this workflow

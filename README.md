@@ -1,8 +1,8 @@
-# gh-tui and diffline
+# ghline and diffline
 
 Two terminal interfaces over one set of parts.
 
-**`github-tui`** browses GitHub through the `gh` CLI — repositories, issues,
+**`ghline`** browses GitHub through the `gh` CLI — repositories, issues,
 pull requests, Actions, files — and can hand any of it to a coding agent.
 
 **`diffline`** reviews the diff in front of you. Three panes: what changed, the
@@ -34,7 +34,7 @@ answers and no shape.
 
 ---
 
-# gh-tui
+# ghline
 
 A GitHub TUI in Rust (`ratatui` + `crossterm`), ported 1:1 from the
 `GitHub TUI.dc.html` design in the Claude Design project.
@@ -47,7 +47,7 @@ golden frames are written against, and nothing you can start the program on.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Osmait/ghline/main/install.sh | sh
 ```
 
 Downloads the release binary for your machine, checks it against the published
@@ -60,7 +60,7 @@ Piping a script from the internet into a shell is worth being wary of, so read
 it first if you would rather:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Osmait/github-tui/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/Osmait/ghline/main/install.sh -o install.sh
 less install.sh
 sh install.sh
 ```
@@ -68,7 +68,7 @@ sh install.sh
 To choose the location or pin a version:
 
 ```sh
-GITHUB_TUI_INSTALL_DIR=/usr/local/bin GITHUB_TUI_VERSION=v0.1.0 sh install.sh
+GHLINE_INSTALL_DIR=/usr/local/bin GHLINE_VERSION=v0.1.0 sh install.sh
 ```
 
 The checksum the installer verifies says the download arrived intact — it does
@@ -78,7 +78,7 @@ signed with a provenance attestation naming the workflow and the commit that
 produced it. To check one yourself, before or after installing:
 
 ```sh
-gh attestation verify github-tui-aarch64-apple-darwin.tar.gz --repo Osmait/github-tui
+gh attestation verify ghline-aarch64-apple-darwin.tar.gz --repo Osmait/ghline
 ```
 
 Releases published before this was added have no attestation to check.
@@ -106,7 +106,7 @@ CI runs.
 ## Usage
 
 ```sh
-github-tui         # real data via gh
+ghline         # real data via gh
 ```
 
 Or without installing, from a clone:
@@ -130,7 +130,7 @@ Requires a truecolor terminal. The design's font is JetBrains Mono.
 ## Where each panel comes from
 
 | Panel | Source |
-|---|---|
+| --- | --- |
 | Accounts | `gh api user` and `gh api user/orgs` |
 | Repos and counters | one GraphQL query with open issues and PRs |
 | Issues / PRs / Actions | `gh issue list`, `gh pr list`, `gh run list` |
@@ -156,7 +156,7 @@ selection put it on the selected row, and panes that only scroll (the body and
 the log) put it against the left edge.
 
 | View | Panes, left to right |
-|---|---|
+| --- | --- |
 | List | Repositories · Issues/PRs/Actions |
 | Issue | Repositories · Body |
 | PR or run | Repositories · Description · Checks |
@@ -246,13 +246,10 @@ If the repository has not been located yet, `E` remembers the keypress, asks
 for the disk to be walked, and opens the file when the answer arrives. It used
 to say it was looking while nothing had been asked to look.
 
-
-Once you are in the editor, [`nvim/agent-send.nvim`](nvim/agent-send.nvim)
+Once you are in the editor, [`agentline.nvim`](https://github.com/Osmait/agentline.nvim)
 closes the loop: select some lines, ask a question, and it goes to a running
-agent with the file, the range and the text. It is a separate thing that only
-needs herdr — it lives here to keep the flow in one place, and is meant to be
-split out with `git subtree` when it earns its own repository.
-
+agent with the file, the range and the text. It is a separate Neovim plugin
+that only needs herdr, with its own installation instructions and history.
 
 `/` finds a file without walking to it: the filter flattens the tree, matches on
 the whole path rather than the name, and leaves the directories out, since a
@@ -301,7 +298,7 @@ run inside herdr, and says `(this window)` so.
 standing, the same way every other key in this program works:
 
 | Standing in | What travels |
-|---|---|
+| --- | --- |
 | Issues | the issue and its body |
 | Pull Requests | the description and the list of changed files |
 | Actions | the run, with the selected job's log excerpted |
@@ -391,7 +388,7 @@ go.
 
 ### Settings
 
-Nine keys in `~/.config/github-tui/config`, all optional:
+Nine keys in `~/.config/ghline/config`, all optional:
 
 ```
 prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
@@ -462,7 +459,7 @@ thing off if you would rather have it back.
 ## Keys
 
 | Key | Action |
-|---|---|
+| --- | --- |
 | `j` `k` | move within the pane |
 | `h` `l` | pane left / right |
 | `tab` | next pane (cycles) |
@@ -493,7 +490,7 @@ thing off if you would rather have it back.
 On a pull request:
 
 | Key | Action |
-|---|---|
+| --- | --- |
 | `m` | merge (pick the method with `1` `2` `3`) |
 | `c` | close, or reopen if already closed |
 | `D` | delete the branch |
@@ -513,7 +510,7 @@ keeps what you typed, since switching usually means "the same words, somewhere
 else". `↑`/`↓` or `^n`/`^p` move, `enter` goes there, `esc` closes.
 
 | Source | Where it looks |
-|---|---|
+| --- | --- |
 | repos | the repositories already loaded, filtered as you type |
 | issues | `gh search issues` across your repositories |
 | pull requests | `gh search prs` across your repositories |
@@ -563,7 +560,7 @@ is the interface itself rather than a name in a list — `enter` keeps the one y
 land on, `esc` puts back the one that was on when you opened it.
 
 The one you keep is remembered: `enter` writes it to
-`~/.config/github-tui/config` (or `$XDG_CONFIG_HOME`), and the next start reads
+`~/.config/ghline/config` (or `$XDG_CONFIG_HOME`), and the next start reads
 it back. The file is `key = value` lines, safe to edit by hand; keys it does not
 recognise are left alone rather than dropped, so a config written by a newer
 version survives an older one. A theme that cannot be written is still applied,
@@ -577,7 +574,7 @@ undefined, which would otherwise show up as an invisible pane.
 
 ### Writing your own
 
-Anything in `~/.config/github-tui/themes/*.theme` joins the picker, named after
+Anything in `~/.config/ghline/themes/*.theme` joins the picker, named after
 the file. `:write a theme to start from` writes the palette you are looking at
 into `themes/mine.theme` with every role listed and commented, which beats
 guessing at role names:
@@ -654,38 +651,35 @@ The changes are real changes on GitHub.
 
 ## Layout
 
-| File | Contents |
-|---|---|
-| `src/theme.rs` | the design's palette and glyphs (`sc()` / `si()`) |
-| `src/data.rs` | the model: items, statuses, diffs — no dependencies of its own |
-| `src/github/source/fixture.rs` | deterministic data for the tests, apart from the model it fills in |
-| `src/app/` | the state: `mod` what it is, `select` what it answers, `load` what it fetches, `input` how it reacts |
-| `src/gh.rs` | invoking `gh` and translating its JSON into the model |
-| `src/service.rs` | worker thread: requests and responses over channels |
-| `src/actions.rs` | merge / close / reopen / branch deletion, isolated from the UI |
-| `src/error.rs` | the error type shared by the `gh` layer |
-| `src/ui/` | render per region: header, sidebar, list, detail, diff, logs, status, overlay |
-| `src/ui/markdown.rs` | Markdown bodies, folded and mapped onto the design's palette |
-| `src/snapshot.rs` | terminal-free mode for inspecting a render |
+| Path | Contents |
+| --- | --- |
+| `crates/ghline-app/` | GitHub model, `gh` source, state and views |
+| `crates/diffline-app/` | diff model, VCS source, review state and views |
+| `crates/line-shared/` | configuration, clone discovery, logging and worker contracts |
+| `crates/tui-kit/` | terminal runtime, drawing primitives, themes and input |
+| `crates/source-text/` | syntax highlighting, wrapping and terminal-safe text |
+| `crates/agent-mux/` | agent discovery and dispatch through multiplexers |
+| `src/bin/ghline/` | process setup and terminal adapter for `ghline` |
+| `src/bin/diffline/` | process setup and terminal adapter for `diffline` |
 
 ## Layering
 
-Each module only reaches downwards, which the import graph makes easy to
-check:
+Each application follows the same one-way stack:
 
 ```
-data, error        model and failures, no dependencies of their own
-theme, gh          presentation and infrastructure, both read the model
-fixture            deterministic data for the tests
-service            blocking gh calls on a worker thread, over channels
-app                state and reducer
-ui                 render per region; reads the state, mutates nothing
+view → state → source → data/model
+              │
+              └── blocking gh/git work stays on a worker thread
 ```
+
+`ghline-app` and `diffline-app` never depend on each other. Both sit above
+`line-shared` and the reusable workspace crates, so imports name the owner
+clearly: `ghline_app::state`, `diffline_app::model`, `line_shared::config` and
+`tui_kit::theme`.
 
 The model carries no presentation: a label travels as RGB and a review as a
-`ReviewState`, and `theme` is what turns either into a terminal colour. No
-module under `ui/` imports `gh` or `service`, so the render can never reach the
-network.
+`ReviewState`, and the theme turns either into a terminal colour. No view
+imports a process source, so rendering can never reach GitHub or Git.
 
 States — open, draft, merged, success, failure and the rest — are a `Status`
 enum rather than strings. `theme::state_color` and `state_icon` match on it
@@ -718,7 +712,7 @@ with no echo.
 ## Tests
 
 The golden frames and most of the state tests are written against
-`github::source::fixture`: two accounts, seven repositories and rows built from
+`ghline_app::fixture`: two accounts, seven repositories and rows built from
 a table. It used to be nine hundred lines of designed GitHub behind a cargo
 feature, so a released binary would not carry it; at a page it is cheaper to
 compile in than to gate, and `App::new` no longer has to ask which kind of data
@@ -804,7 +798,7 @@ cargo bench -- draw     # one
 ```
 
 | | on one desk, for scale |
-|---|---|
+| --- | --- |
 | `draw` — a whole frame at 160×44 | ~145 µs |
 | `highlight` — the lexer over 600 lines | ~96 µs |
 | `rank` — the finder over 500 repositories | ~57 µs |
@@ -847,7 +841,7 @@ bug report has been whatever the reader remembered doing.
 
 ```sh
 diffline --log run.log .
-github-tui --log run.log
+ghline --log run.log
 ```
 
 Every keystroke, click and error goes into the file, stamped with the

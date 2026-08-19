@@ -1,0 +1,17 @@
+[package]
+name = "source-text"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+description = "Application-independent source highlighting and terminal-safe text"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# A terminal cell belongs to a displayed grapheme, not one Unicode scalar:
+# splitting a joined emoji leaves half a glyph on each row.
+unicode-segmentation = "1.12"
+unicode-width = "0.2"

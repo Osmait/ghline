@@ -2,13 +2,13 @@
 //!
 //! The same bargain as `frames.rs`, and here it is load bearing rather than
 //! nice to have: the finder, the agent picker, the status bar and the header
-//! are about to become components shared with github-tui, and these are the
+//! became components shared with ghline, and these are the
 //! frames that say the move changed nothing anybody can see.
 //!
 //! Accept a change with `cargo insta review` (or `INSTA_UPDATE=always cargo
 //! test --test diffline_frames`) once you have read it.
 
-use github_tui::diffline::view::snapshot;
+use diffline_app::view::snapshot;
 
 /// Wide enough for three panes: the tree, the diff and the queue.
 const WIDE: (u16, u16) = (160, 44);

@@ -1,0 +1,19 @@
+[package]
+name = "diffline-app"
+version = "0.1.0"
+edition = "2024"
+description = "Diff review application behind the diffline terminal interface"
+license = "MIT OR Apache-2.0"
+rust-version = "1.96"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+cli-parser = { version = "0.1.0", path = "../cli-parser" }
+line-shared = { version = "0.1.0", path = "../line-shared" }
+notify = "8.2.0"
+ratatui = "0.30"
+tui-kit = { version = "0.1.0", path = "../tui-kit" }
+unicode-width = "0.2"

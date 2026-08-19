@@ -7,12 +7,12 @@ use std::io;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use github_tui::tui::run::{Terminal_, run as run_tui};
+use tui_kit::run::{Terminal_, run as run_tui};
 
-use github_tui::diffline::app::App;
-use github_tui::diffline::cli::{self, Command, RenderArgs, RunArgs};
-use github_tui::diffline::model::Scope;
-use github_tui::diffline::view as ui;
+use diffline_app::app::App;
+use diffline_app::cli::{self, Command, RenderArgs, RunArgs};
+use diffline_app::model::Scope;
+use diffline_app::view as ui;
 
 use super::program::Diffline;
 
@@ -48,17 +48,17 @@ fn interactive(args: RunArgs) -> io::Result<()> {
     // which one this was — and before the terminal is taken, so a failure to
     // open the file is still something that can be printed.
     if let Some(path) = args.log {
-        if let Err(error) = github_tui::shared::log::to(&path, "diffline", "--svg") {
+        if let Err(error) = line_shared::log::to(&path, "diffline", "--svg") {
             eprintln!("diffline: cannot write to {}: {error}", path.display());
             return Ok(());
         }
-        github_tui::shared::log::say(format_args!("repo {}", app.repo));
+        line_shared::log::say(format_args!("repo {}", app.repo));
     }
 
     // A watcher failure should not make the existing manual refresh unusable.
     // Started before taking the terminal so its concrete backend error has a
     // normal stderr to be printed on.
-    let watch = match github_tui::diffline::watch::Watch::start(Path::new(&app.repo)) {
+    let watch = match diffline_app::watch::Watch::start(Path::new(&app.repo)) {
         Ok(watch) => Some(watch),
         Err(error) => {
             eprintln!("diffline: cannot watch {}: {error}", app.repo);
@@ -72,7 +72,7 @@ fn interactive(args: RunArgs) -> io::Result<()> {
     let mut term = match Terminal_::enter(args.mouse) {
         Ok(term) => term,
         Err(error) => {
-            github_tui::shared::log::say(format_args!("could not take the terminal: {error}"));
+            line_shared::log::say(format_args!("could not take the terminal: {error}"));
             return Err(error);
         }
     };
@@ -81,10 +81,10 @@ fn interactive(args: RunArgs) -> io::Result<()> {
     drop(term);
 
     if let Err(error) = &result {
-        github_tui::shared::log::say(format_args!("ended with: {error}"));
+        line_shared::log::say(format_args!("ended with: {error}"));
         eprintln!("diffline: {error}");
     }
-    github_tui::shared::log::finish();
+    line_shared::log::finish();
     result
 }
 
@@ -103,12 +103,12 @@ fn open_repository(repository: &Path) -> Option<App> {
 
     // Which backend owns this directory, asked once. Nothing below here knows
     // it was git rather than something else.
-    let Some(vcs) = github_tui::diffline::vcs::of(&repository) else {
+    let Some(vcs) = diffline_app::vcs::of(&repository) else {
         eprintln!("diffline: {repository} is not a repository anything here can read");
         return None;
     };
 
-    github_tui::shared::config::apply_theme();
+    line_shared::config::apply_theme();
 
     let base = vcs.base_branch(&repository);
     let head = vcs
@@ -142,7 +142,7 @@ fn open_repository(repository: &Path) -> Option<App> {
         repository,
         opening,
         scopes,
-        Some(Box::new(github_tui::diffline::service::Service::spawn())),
+        Some(Box::new(diffline_app::service::Service::spawn())),
     ))
 }
 
@@ -154,7 +154,7 @@ fn headless(app: &mut App, keys: &str, width: u16, height: u16) {
     use ratatui::backend::TestBackend;
 
     settle(app);
-    for key in github_tui::shared::key::parse_keys(keys) {
+    for key in line_shared::key::parse_keys(keys) {
         app.on_key(key);
         settle(app);
     }
@@ -166,7 +166,7 @@ fn headless(app: &mut App, keys: &str, width: u16, height: u16) {
     let Ok(_) = term.draw(|frame| ui::draw(frame, app));
     print!(
         "{}",
-        github_tui::github::snapshot::to_svg(term.backend().buffer(), width, height)
+        tui_kit::svg::render(term.backend().buffer(), width, height)
     );
 }
 

@@ -8,9 +8,9 @@
 //! change that looks free and is not, and nothing in the repository would have
 //! said so.
 //!
-//! Grouped the way the crate is, so a number can be read against the module it
-//! came from: `shared` is what neither program owns, `tui` is the drawing
-//! toolkit, and `github` and `diffline` are one program each. Within a group
+//! Grouped the way the workspace is, so a number can be read against the
+//! crate it came from: `shared` is what neither program owns, `tui` is the
+//! drawing toolkit, and `ghline` and `diffline` are one program each. Within a group
 //! the order is roughly parse → compute → draw, which is also the order a
 //! keystroke travels.
 //!
@@ -101,7 +101,7 @@ fn repo_names() -> Vec<String> {
 mod shared {
     use super::{Bencher, black_box, repo_names, source_file};
 
-    use github_tui::shared::{ago, clones, fuzzy, icons, key, settings, syntax, text};
+    use line_shared::{ago, clones, fuzzy, icons, key, settings, syntax, text};
 
     /// One candidate, which is what `rank` pays five hundred times over. Split
     /// out from it so a change to the scorer can be seen without the list
@@ -135,7 +135,7 @@ mod shared {
     /// the file tree calls it for every visible row.
     #[divan::bench]
     fn syntax_of_path() -> Option<&'static syntax::Lang> {
-        syntax::of_path(black_box("src/github/state/app/input.rs"))
+        syntax::of_path(black_box("crates/ghline-app/src/state/app/input.rs"))
     }
 
     /// The lexer over a file of a realistic size — whole-file by design, so it
@@ -198,13 +198,13 @@ mod shared {
     /// The glyph a file gets, once per row of the tree and the explorer.
     #[divan::bench]
     fn icons_language() -> &'static str {
-        icons::language(black_box("src/diffline/state/input.rs"))
+        icons::language(black_box("crates/diffline-app/src/state/input.rs"))
     }
 
     /// A remote URL into `owner/repo`, once per checkout found.
     #[divan::bench]
     fn clones_slug_of() -> Option<String> {
-        clones::slug_of(black_box("git@github.com:Osmait/github-tui.git"))
+        clones::slug_of(black_box("git@github.com:Osmait/ghline.git"))
     }
 }
 
@@ -217,7 +217,7 @@ mod tui {
     use ratatui::layout::Rect;
     use ratatui::style::Style;
 
-    use github_tui::tui::{atom, diff, geom, theme};
+    use tui_kit::{atom, diff, geom, theme};
 
     /// The size the design was drawn at.
     const AREA: Rect = Rect {
@@ -246,7 +246,7 @@ mod tui {
                 2,
                 4,
                 158,
-                black_box("src/github/state/app/input.rs"),
+                black_box("crates/ghline-app/src/state/app/input.rs"),
                 style,
             )
         });
@@ -255,7 +255,7 @@ mod tui {
     /// Fitting a name to a column, once per row of every list.
     #[divan::bench]
     fn atom_truncate_pad() -> String {
-        atom::truncate_pad(black_box("src/github/state/app/input.rs"), 24)
+        atom::truncate_pad(black_box("crates/ghline-app/src/state/app/input.rs"), 24)
     }
 
     /// Wrapping a paragraph, which the detail pane pays per body it shows.
@@ -304,14 +304,14 @@ mod tui {
     }
 }
 
-// -------------------------------------------------------------------- github
+// -------------------------------------------------------------------- ghline
 
-mod github {
+mod ghline {
     use super::{Bencher, black_box};
 
-    use github_tui::github::data::{Hunk, LogKind, RawLog};
-    use github_tui::github::{snapshot, ui};
-    use github_tui::shared::key::{Key, Press};
+    use ghline_app::data::{Hunk, LogKind, RawLog};
+    use ghline_app::{snapshot, ui};
+    use line_shared::key::{Key, Press};
 
     /// One frame of the fixture, drawn into an off-screen terminal at the size
     /// the design was drawn at, for each of the screens a key can reach.
@@ -425,9 +425,8 @@ mod github {
                 kind: LogKind::Plain,
             })
             .collect();
-        bencher.bench(|| {
-            github_tui::github::data::filter_log(black_box(&raw), "build (1)", Some("step 4"))
-        });
+        bencher
+            .bench(|| ghline_app::data::filter_log(black_box(&raw), "build (1)", Some("step 4")));
     }
 }
 
@@ -436,10 +435,10 @@ mod github {
 mod diffline {
     use super::{Bencher, black_box, unified_diff};
 
-    use github_tui::diffline::model::{Kind, Row, pair_rows};
-    use github_tui::diffline::view::snapshot;
-    use github_tui::diffline::{git, view};
-    use github_tui::shared::key::{Key, Press};
+    use diffline_app::model::{Kind, Row, pair_rows};
+    use diffline_app::view::snapshot;
+    use diffline_app::{git, view};
+    use line_shared::key::{Key, Press};
 
     fn draw_view(bencher: Bencher<'_, '_>, keys: &str) {
         let mut app = snapshot::seeded(keys);
@@ -468,7 +467,7 @@ mod diffline {
         draw_view(bencher, "/sid");
     }
 
-    /// The same two-keypress shape as github-tui's: down and back up.
+    /// The same two-keypress shape as ghline's: down and back up.
     #[divan::bench]
     fn on_key(bencher: Bencher<'_, '_>) {
         let mut app = snapshot::seeded("");

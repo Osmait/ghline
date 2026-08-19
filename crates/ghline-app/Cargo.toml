@@ -1,0 +1,21 @@
+[package]
+name = "ghline-app"
+version = "0.1.0"
+edition = "2024"
+description = "Browse GitHub repositories, issues, pull requests and Actions"
+license = "MIT OR Apache-2.0"
+rust-version = "1.96"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+cli-parser = { version = "0.1.0", path = "../cli-parser" }
+line-shared = { version = "0.1.0", path = "../line-shared" }
+ratatui = "0.30"
+ratatui-core = "0.1.2"
+serde_json = "1.0.151"
+tui-kit = { version = "0.1.0", path = "../tui-kit" }
+tui-markdown = { version = "0.3.9", default-features = false }
+unicode-width = "0.2"

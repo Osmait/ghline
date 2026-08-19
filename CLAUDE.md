@@ -8,8 +8,9 @@ disagree.
 - **[CODE-STYLE.md](CODE-STYLE.md)** — the rulebook: panics, errors, naming,
   types, visibility, documentation, tests, dependencies, and where the
   standing gaps are.
-- **`src/lib.rs`** — the architecture, as module documentation, with the
-  diagram.
+- **`crates/*/src/lib.rs`** — the architecture, as module documentation, one
+  crate at a time. `ghline-app` and `diffline-app` carry the layer diagrams;
+  `line-shared` carries the rule about which way the arrows point.
 - **[README.md](README.md)** — what the two programs do, for whoever runs
   them rather than changes them.
 

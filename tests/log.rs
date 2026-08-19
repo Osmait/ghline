@@ -6,8 +6,8 @@
 
 use std::io;
 
-use github_tui::shared::key::{Button, Key, Motion, Mouse, Press, parse_keys};
-use github_tui::shared::log;
+use line_shared::key::{Button, Key, Motion, Mouse, Press, parse_keys};
+use line_shared::log;
 
 /// The promise the feature is for: the last line of the file is a command,
 /// and running it replays the session that was recorded.

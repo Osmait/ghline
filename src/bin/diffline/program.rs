@@ -5,11 +5,11 @@
 
 use std::time::{Duration, Instant};
 
-use github_tui::tui::run::Program;
+use tui_kit::run::Program;
 
-use github_tui::diffline::app::App;
-use github_tui::diffline::view as ui;
-use github_tui::diffline::watch::{Notice, Watch};
+use diffline_app::app::App;
+use diffline_app::view as ui;
+use diffline_app::watch::{Notice, Watch};
 
 /// Cursor blink, and the beat the toast fades on.
 const BLINK: Duration = Duration::from_millis(500);
@@ -53,11 +53,13 @@ impl Program for Diffline<'_> {
         ui::draw(frame, self.app);
     }
 
-    fn on_key(&mut self, press: github_tui::shared::key::Press) {
+    fn on_key(&mut self, press: line_shared::key::Press) {
+        line_shared::log::key(press);
         self.app.on_key(press);
     }
 
-    fn on_mouse(&mut self, mouse: github_tui::shared::key::Mouse) {
+    fn on_mouse(&mut self, mouse: line_shared::key::Mouse) {
+        line_shared::log::mouse(mouse);
         self.app.on_mouse(mouse);
     }
 
