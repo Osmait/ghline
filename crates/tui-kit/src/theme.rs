@@ -116,7 +116,7 @@ pub struct Palette {
 
 /// The palette of `GitHub TUI.dc.html`, which everything else was drawn to
 /// match.
-const DESIGN: Palette = Palette {
+const DEFAULT: Palette = Palette {
     bg: rgb(0x000b0e14),
     panel: rgb(0x0010141c),
     panel_alt: rgb(0x000d1017),
@@ -197,8 +197,8 @@ const MOCHA: Palette = Palette {
 /// the palette lives in the `custom()` table for the life of the process.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Theme {
-    /// The palette of `GitHub TUI.dc.html`, and the default.
-    Design,
+    /// The palette the programs ship with.
+    Default,
     /// Catppuccin Mocha.
     Mocha,
     /// One the reader wrote, by index into `custom()`.
@@ -208,7 +208,7 @@ pub enum Theme {
 impl Theme {
     /// The two built in, and whatever is in the themes directory.
     pub fn all() -> Vec<Self> {
-        let mut v = vec![Self::Design, Self::Mocha];
+        let mut v = vec![Self::Default, Self::Mocha];
         v.extend((0..custom().len()).map(Self::Custom));
         v
     }
@@ -216,7 +216,7 @@ impl Theme {
     /// What the picker shows. Free to be reworded; `key` is what is stored.
     pub fn name(self) -> &'static str {
         match self {
-            Self::Design => "design",
+            Self::Default => "default",
             Self::Mocha => "catppuccin mocha",
             Self::Custom(i) => custom().get(i).map_or("?", |c| c.name),
         }
@@ -226,7 +226,7 @@ impl Theme {
     /// rewording the picker cannot invalidate everyone's saved config.
     pub fn key(self) -> &'static str {
         match self {
-            Self::Design => "design",
+            Self::Default => "default",
             Self::Mocha => "mocha",
             Self::Custom(i) => custom().get(i).map_or("?", |c| c.key),
         }
@@ -238,13 +238,16 @@ impl Theme {
     /// config written when a theme file existed that has since been deleted —
     /// the caller falls back rather than treating it as an error.
     pub fn from_key(key: &str) -> Option<Self> {
+        // `design` was this theme's key before it had a name of its own, and a
+        // config on disk outlives the rename. Read, never written.
+        let key = if key == "design" { "default" } else { key };
         Self::all().into_iter().find(|t| t.key() == key)
     }
 
     /// One line about where the palette comes from, for the picker.
     pub fn about(self) -> &'static str {
         match self {
-            Self::Design => "the palette of GitHub TUI.dc.html",
+            Self::Default => "the palette this ships with",
             Self::Mocha => "catppuccin.com · the darkest of the four flavours",
             Self::Custom(_) => "yours, from the themes directory",
         }
@@ -252,7 +255,7 @@ impl Theme {
 
     fn palette(self) -> &'static Palette {
         match self {
-            Self::Design => &DESIGN,
+            Self::Default => &DEFAULT,
             Self::Mocha => &MOCHA,
             Self::Custom(i) => custom().get(i).map_or(&MOCHA, |c| &c.palette),
         }
@@ -537,7 +540,7 @@ static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 pub fn current() -> Theme {
     let i = ACTIVE.load(Ordering::Relaxed);
     match i {
-        0 => Theme::Design,
+        0 => Theme::Default,
         1 => Theme::Mocha,
         n => {
             let k = n - BUILT_IN;
@@ -740,7 +743,18 @@ pub(crate) mod tests {
             ACTIVE.store(i, Ordering::Relaxed);
             assert_eq!(current(), t, "index {i}");
         }
-        set(Theme::Design);
+        set(Theme::Default);
+    }
+
+    #[test]
+    fn the_old_key_for_the_default_theme_still_reads() {
+        // Anyone who pressed enter on this theme before it was renamed has
+        // `theme = design` on disk. Dropping the alias would silently put them
+        // back on the fallback, which reads as the setting not having stuck.
+        assert_eq!(Theme::from_key("design"), Some(Theme::Default));
+        assert_eq!(Theme::from_key("default"), Some(Theme::Default));
+        // and it is not what gets written back
+        assert_eq!(Theme::Default.key(), "default");
     }
 
     #[test]
@@ -749,7 +763,7 @@ pub(crate) mod tests {
         let _g = LOCK.lock();
         ACTIVE.store(999, Ordering::Relaxed);
         assert_eq!(current(), Theme::Mocha);
-        set(Theme::Design);
+        set(Theme::Default);
     }
 
     fn hexof(c: Color) -> String {
@@ -811,12 +825,12 @@ pub(crate) mod tests {
     #[test]
     fn switching_theme_changes_what_the_accessors_return() {
         let _g = LOCK.lock();
-        set(Theme::Design);
+        set(Theme::Default);
         let design_bg = bg();
         set(Theme::Mocha);
         assert_ne!(bg(), design_bg);
         assert_eq!(current(), Theme::Mocha);
-        set(Theme::Design);
+        set(Theme::Default);
         assert_eq!(bg(), design_bg);
     }
 
@@ -825,12 +839,12 @@ pub(crate) mod tests {
         // `lang` is the derived colour still here; the status mapping moved
         // to `ui`, where the vocabulary it maps actually lives.
         let _g = LOCK.lock();
-        set(Theme::Design);
+        set(Theme::Default);
         let design = lang("Rust");
         set(Theme::Mocha);
         assert_ne!(lang("Rust"), design);
         assert_eq!(lang("Rust"), orange());
-        set(Theme::Design);
+        set(Theme::Default);
     }
 
     #[test]
@@ -878,7 +892,7 @@ pub(crate) mod tests {
             // and the text must not be the same colour as the ground it sits on
             assert_ne!(fg(), bg(), "{}", t.name());
         }
-        set(Theme::Design);
+        set(Theme::Default);
     }
 
     #[test]

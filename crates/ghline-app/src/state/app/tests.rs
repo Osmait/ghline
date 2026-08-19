@@ -546,19 +546,19 @@ fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
     let _g = THEME_LOCK.lock();
     use crate::tui::theme::{Theme, current, set};
 
-    set(Theme::Design);
+    set(Theme::Default);
     let mut app = seeded();
     ch(&mut app, 't');
     assert!(app.themes_open);
-    assert_eq!(current(), Theme::Design, "opening changes nothing yet");
+    assert_eq!(current(), Theme::Default, "opening changes nothing yet");
 
     ch(&mut app, 'j');
     assert_eq!(current(), Theme::Mocha, "moving applies it straight away");
 
     press(&mut app, Key::Esc);
     assert!(!app.themes_open);
-    assert_eq!(current(), Theme::Design, "leaving puts back what was on");
-    set(Theme::Design);
+    assert_eq!(current(), Theme::Default, "leaving puts back what was on");
+    set(Theme::Default);
 }
 
 #[test]
@@ -566,14 +566,14 @@ fn enter_keeps_the_previewed_theme() {
     let _g = THEME_LOCK.lock();
     use crate::tui::theme::{Theme, current, set};
 
-    set(Theme::Design);
+    set(Theme::Default);
     let mut app = seeded();
     ch(&mut app, 't');
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
     assert!(!app.themes_open);
     assert_eq!(current(), Theme::Mocha);
-    set(Theme::Design);
+    set(Theme::Default);
 }
 
 #[test]
@@ -581,7 +581,7 @@ fn the_picker_does_not_run_off_either_end() {
     let _g = THEME_LOCK.lock();
     use crate::tui::theme::{Theme, set};
 
-    set(Theme::Design);
+    set(Theme::Default);
     let mut app = seeded();
     ch(&mut app, 't');
     for _ in 0..10 {
@@ -593,7 +593,7 @@ fn the_picker_does_not_run_off_either_end() {
     }
     assert_eq!(app.theme_sel, 0);
     press(&mut app, Key::Esc);
-    set(Theme::Design);
+    set(Theme::Default);
 }
 
 #[test]
@@ -608,14 +608,14 @@ fn the_picker_swallows_the_keys_beneath_it() {
     let _g = THEME_LOCK.lock();
     use crate::tui::theme::{Theme, set};
 
-    set(Theme::Design);
+    set(Theme::Default);
     let mut app = seeded();
     let before = app.item;
     ch(&mut app, 't');
     ch(&mut app, 'j'); // moves the theme, not the list
     assert_eq!(app.item, before);
     press(&mut app, Key::Esc);
-    set(Theme::Design);
+    set(Theme::Default);
 }
 
 // --- sidebar ---
