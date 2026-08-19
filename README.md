@@ -2,8 +2,9 @@
 
 Two terminal interfaces over one set of parts.
 
-**`ghline`** browses GitHub through the `gh` CLI — repositories, issues,
-pull requests, Actions, files — and can hand any of it to a coding agent.
+**`ghline`** browses GitHub through the [`gh` CLI](https://cli.github.com) —
+repositories, issues, pull requests, Actions, files — and can hand any of it to
+a coding agent.
 
 **`diffline`** reviews the diff in front of you. Three panes: what changed, the
 diff itself, and a queue of comments anchored to lines. Select a range with
@@ -17,32 +18,27 @@ a S                 # pick an agent, send the queue
 ?                   # everything else
 ```
 
-They are different programs — one asks a server what exists, the other asks
-the working tree what changed — sharing a library: the palette, the fuzzy
-matcher, the lexer, the agents on this machine, and the drawing primitives a
-cell grid needs.
+They are different programs — one asks a server what exists, the other asks the
+working tree what changed — sharing a library: the palette, the fuzzy matcher,
+the lexer, the agents on this machine, and the drawing primitives a cell grid
+needs.
+
+Written in Rust, on `ratatui` and `crossterm`. No offline mode and no
+telemetry: `ghline` shows what `gh` returns, `diffline` shows what `git` says
+is in front of you.
+
+## Why
+
+Reviewing a change and asking someone to fix it are the same sitting, and they
+usually are not the same tool. `diffline` keeps them together: the note you
+write while reading is the note the agent gets, anchored to the line it was
+about.
 
 A comment is anchored to a *line of a file* rather than to a row on screen,
-because expanding the context or changing scope renumbers every row. So a note
-survives `+`, `r`, and stepping away and back. A deleted line has no new-side
-number and is anchored to the old side; a context line anchors to the new one,
-since a note on unchanged code is about the code as it will stand.
-
-The queue travels as **one message**, grouped by file and in line order — the
-order the agent will work in. Twelve separate prompts would get twelve separate
-answers and no shape.
-
----
-
-# ghline
-
-A GitHub TUI in Rust (`ratatui` + `crossterm`), ported 1:1 from the
-`GitHub TUI.dc.html` design in the Claude Design project.
-
-It works against real GitHub through the `gh` CLI: the repos, issues, pull
-requests, workflow runs and Actions logs are yours. There is no offline mode:
-what remains of the design's fake data is a page of fixture the tests and the
-golden frames are written against, and nothing you can start the program on.
+because expanding the context or changing scope renumbers every row — so a note
+survives `+`, `r`, and stepping away and back. And the queue travels as **one
+message**, grouped by file and in line order, the order the agent will work in.
+Twelve separate prompts would get twelve separate answers and no shape.
 
 ## Install
 
@@ -53,8 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/Osmait/ghline/main/install.sh | sh
 Downloads the release binary for your machine, checks it against the published
 SHA-256, and puts it in `~/.local/bin`. No toolchain, no root, and nothing
 outside the install directory is touched. Apple Silicon Macs and x86_64/aarch64
-Linux are covered; anywhere else builds from source, which is a `make install`
-away.
+Linux are covered; anywhere else builds from source.
 
 Piping a script from the internet into a shell is worth being wary of, so read
 it first if you would rather:
@@ -71,585 +66,128 @@ To choose the location or pin a version:
 GHLINE_INSTALL_DIR=/usr/local/bin GHLINE_VERSION=v0.1.0 sh install.sh
 ```
 
-The checksum the installer verifies says the download arrived intact — it does
-not say who made it, because whoever could swap the tarball could swap the
-checksum beside it. That question has its own answer: every release archive is
-signed with a provenance attestation naming the workflow and the commit that
-produced it. To check one yourself, before or after installing:
+The checksum says the download arrived intact — it does not say who made it,
+because whoever could swap the tarball could swap the checksum beside it. That
+question has its own answer: every release archive carries a provenance
+attestation naming the workflow and the commit that produced it.
 
 ```sh
 gh attestation verify ghline-aarch64-apple-darwin.tar.gz --repo Osmait/ghline
 ```
-
-Releases published before this was added have no attestation to check.
-
-You also need the [`gh` CLI](https://cli.github.com), signed in — that is how
-this reads GitHub. Without it the program says so and stops; there is nothing
-it could show.
 
 ### From source
 
 With a Rust toolchain, from a clone:
 
 ```sh
-make install
+make install        # cargo install --path . --locked
+make uninstall      # takes it off again
 ```
 
-That is `cargo install --path . --locked`: an optimised build put in
-`~/.cargo/bin`, which the Rust installer already adds to your PATH. `make
-uninstall` takes it off again.
+`make` on its own lists the rest — `build`, `run`, `test`, `lint`, `check`.
+They are thin wrappers over cargo, and `make check` runs exactly what CI runs.
 
-`make` on its own lists the rest — `build`, `run`, `test`, `lint`,
-`check`. They are thin wrappers over cargo, and `make check` runs exactly what
-CI runs.
+### Requirements
 
-## Usage
+- A **truecolor terminal**. It is drawn for a monospaced font; JetBrains Mono
+  is what it was tuned against.
+- **`gh`, signed in** — that is how `ghline` reads GitHub. Without it the
+  program says which of the two it was and stops; there is nothing it could
+  show. The scopes it needs are `repo` (read, merge, close and delete branches)
+  and `workflow` (Actions logs).
+
+  ```sh
+  gh auth login
+  ```
+
+- **`git`** for `diffline`, which reads the repository you point it at.
+- [**herdr**](https://herdr.dev) only if you want to send anything to an agent.
+  Both programs work without it; the agent tab is simply empty.
+
+## Getting started
 
 ```sh
-ghline         # real data via gh
+ghline              # opens on all repositories at once
 ```
-
-Or without installing, from a clone:
-
-```sh
-make run           # cargo run --release
-```
-
-It needs a signed-in `gh`, and says so and exits if there is not one:
-
-```sh
-gh auth login
-```
-
-If `gh` is missing or not signed in it says which of the two it was and stops.
-The scopes it needs are `repo` (read, merge, close and delete branches) and
-`workflow` (Actions logs).
-
-Requires a truecolor terminal. The design's font is JetBrains Mono.
-
-## Where each panel comes from
-
-| Panel | Source |
-| --- | --- |
-| Accounts | `gh api user` and `gh api user/orgs` |
-| Repos and counters | one GraphQL query with open issues and PRs |
-| Issues / PRs / Actions | `gh issue list`, `gh pr list`, `gh run list` |
-| Detail | `gh issue view`, `gh pr view` |
-| Checks | `gh run view --json jobs` for the run tied to the PR |
-| Diff | `gh pr diff`, split per file and per hunk |
-| Logs | `gh run view --log`, split per job and step |
-| Actions | `gh pr merge/close/reopen` and `DELETE /git/refs` |
-
-The calls run on a separate thread, so the interface never hangs. While a
-response is on its way each panel draws the outline of what is coming —
-placeholder rows in the proportions the real ones will have, with a highlight
-band travelling down them — rather than a word in an empty box, so nothing
-jumps when the data lands. A failure shows the `gh` error instead. `r` drops
-the active repo's caches and asks for everything again.
-
-## Navigation
 
 The interface is a grid of panes, walked the way you walk windows in vim:
-**`h` and `l` move focus to the neighbouring pane, and `j`/`k` always act on
-whichever one has it**. The focused pane is marked with a cyan bar: panes with a
-selection put it on the selected row, and panes that only scroll (the body and
-the log) put it against the left edge.
-
-| View | Panes, left to right |
-| --- | --- |
-| List | Repositories · Issues/PRs/Actions |
-| Issue | Repositories · Body |
-| PR or run | Repositories · Description · Checks |
-| Diff | Changed files · Diff |
-| Logs | Jobs and steps · Output |
-
-## All repositories
+`h` and `l` move focus to the neighbouring pane, and `j`/`k` always act on
+whichever one has it. `enter` drills in, `esc` walks back out, and `?` lists
+every key.
 
 A session opens on **all repositories** rather than on one of them: with a
 hundred repos, "what is going on" is a better first question than "in which
-one". It is the first row of the repository pane, and `[` steps off it onto a
-single repository whenever you want the narrower view.
+one". `[` steps off it onto a single repository whenever you want the narrower
+view.
 
-Issues and pull requests are one GraphQL search each, so gathering them costs
-no more than opening a single repository would — and the rows lose nothing:
-the diff counts, the file count and the branch are all in the same answer.
-Every row says which repository it came from, and `/` filters on that as well
-as on the title, so `/sbql` narrows a mixed list back down to one project.
+```sh
+diffline            # the repository you are standing in
+```
 
-Actions cannot be gathered the same way, because GitHub has no cross-repository
-Actions API — it really is one call per repository. Two things keep that
-honest: the repository query already asks which repos have a
-`.github/workflows` directory at all, so only those are called (twenty of a
-hundred and forty-three, here), and the calls go out sixteen at a time. It
-lands in about a second and a half.
+`j`/`k` walks the changed files, `l` moves into the diff. `V` takes a range,
+`c` writes a note against it, `a` picks a destination and `S` sends everything
+queued as one message.
 
-What a row belongs to and what pane it is listed in are no longer the same
-thing, so everything downstream of the selection — the body, the diff, the
-checks, the logs, and merging or closing it — follows the item's own
-repository. That matters more than it sounds: a gathered list really does hold
-two different `#14`s, and both the request and the answer have to name the
-repository or one pull request's body ends up on the other.
+### The keys you need first
 
-The repository pane starts hidden: with sixty repositories it is a wall, and
-`[`/`]` step through them without it while the finder reaches any of them by
-name. `b` brings it back and gives its width to the content. It stays
-hidden until you ask for it back, and the logs and diff views never show it —
-the design gives them the full width. Below 90 columns there is not enough room
-for it whatever you asked for, and in every one of those cases `h` will not walk
-to it, because a pane that is not on screen is not a pane.
-
-`enter` drills into the focused pane — repos to the list, list to the detail,
-checks to the logs, the tree to the output — and `esc` walks that same path
-back. `tab` cycles through the panes, wrapping around; `h`/`l` stop at the ends.
-
-## Files
-
-`4` is the repository's file tree, read straight off GitHub — no clone needed.
-A tree on the left, the file on the right, the same two-pane shape as the logs
-and the diff. Directories start closed; `enter` or `o` opens one, `enter` on a
-file moves to its contents, and `x` sends the file to an agent.
-
-The whole tree comes down in one request against `HEAD`, so nothing has to know
-what the default branch is called and opening a directory costs nothing. Only
-the file you actually select is fetched, and only if it is under half a
-megabyte — past that the pane says how big it is rather than stalling on it. A
-file that turns out to be binary says so instead of painting the pane with
-replacement characters, and a tree GitHub truncated says that too, because a
-partial listing that stays quiet reads as a smaller repository.
-
-### Editing one
-
-`E` opens the file under the cursor in your editor, at the line under the
-cursor — `$VISUAL`, then `$EDITOR`, then nvim, then vim. The TUI hands over the
-whole terminal and takes it back afterwards, unconditionally, so an editor that
-dies badly still leaves this program with a terminal it can use.
-
-Two things stand between the key and the editor, and both are worth knowing
-about rather than being surprised by.
-
-**The repository may not be here.** If it is not on disk, `E` offers to clone
-it — `gh repo clone` into the first of your `clone-roots` that exists — and
-opens the file once it lands. Fetching a whole repository takes a while, so it
-asks first, and the interface stays usable while it runs.
-
-**The checkout may be on another branch.** The explorer reads GitHub's `HEAD`;
-an editor reads the disk. Those are two different files whenever the local
-clone is somewhere else, which is the usual case rather than the exception —
-two of the three checkouts on the machine this was built on are on feature
-branches. So `E` says which branch it is about to edit, and if the file is not
-in the checkout at all it says that instead of opening an empty buffer.
-
-It does **not** switch branches for you. Moving someone off their branch to
-satisfy a keypress is a far worse surprise than a warning.
-
-If the repository has not been located yet, `E` remembers the keypress, asks
-for the disk to be walked, and opens the file when the answer arrives. It used
-to say it was looking while nothing had been asked to look.
-
-Once you are in the editor, [`agentline.nvim`](https://github.com/Osmait/agentline.nvim)
-closes the loop: select some lines, ask a question, and it goes to a running
-agent with the file, the range and the text. It is a separate Neovim plugin
-that only needs herdr, with its own installation instructions and history.
-
-`/` finds a file without walking to it: the filter flattens the tree, matches on
-the whole path rather than the name, and leaves the directories out, since a
-directory is not something you can read or send.
-
-Files and folders carry the same Nerd Font glyphs `nvim-web-devicons` uses, so
-a file looks the same here as in the editor this hands it to — that
-familiarity is the point, and an original set would be one nobody recognises.
-`file-icons = plain` falls back to two marks any terminal can draw, and `none`
-turns them off, because a column of replacement boxes is worse than no icons.
-
-### Colour
-
-Source is coloured by a lexer, not a parser, and that is a deliberate trade.
-tree-sitter would mean a C toolchain in a project that has none, plus one
-grammar crate per language — perfect colour for the languages someone
-remembered to bundle and none at all for the rest. syntect is pure Rust with
-`fancy-regex` but brings forty-nine crates and embeds its own syntax
-definitions.
-
-This pane is read-only. Comments, strings, numbers and keywords are what an eye
-uses to find its place, and a lexer finds those in about a dozen languages and
-approximately in the rest. What it does not find is structure: a type is
-coloured when it *looks* like one, and a macro or a regex will occasionally be
-read as something it is not. That is the honest cost of the trade.
-
-Lexing runs on the service thread with the fetch, not between frames — half a
-megabyte takes long enough to be a dropped frame otherwise. Multi-line
-constructs mean a line cannot be read on its own, so a file is lexed whole when
-it lands.
-
-Contents are wrapped rather than cut — a long line in a config file is still
-worth reading, and there is no horizontal scroll here. The wrap is by column
-rather than by word, which keeps indentation meaning something and, not
-incidentally, keeps the byte offsets a colour span is written in.
-
-## Agents
-
-`4` is a fourth tab listing every coding agent [herdr](https://herdr.dev) is
-running: what it is, whether it is working, where, and what its title says it
-is doing. It re-asks on the heartbeat while you are looking at it, so a state
-change shows up without a keypress. This program appears in its own list when
-run inside herdr, and says `(this window)` so.
-
-`x` asks where to send it. **What** gets sent is decided by where you are
-standing, the same way every other key in this program works:
-
-| Standing in | What travels |
+| Key | Action |
 | --- | --- |
-| Issues | the issue and its body |
-| Pull Requests | the description and the list of changed files |
-| Actions | the run, with the selected job's log excerpted |
-| Files | that file, up to 600 lines |
-| a log | that job or step's log, wherever you came from |
-| a diff | that one file's change |
+| `j` `k` | move within the pane |
+| `h` `l` | pane left / right |
+| `enter` | enter the pane / open |
+| `esc` `q` | back one level |
+| `1` `2` `3` | Issues / Pull Requests / Actions |
+| `4` | files, and the agents that are running |
+| `d` | diff of the pull request's files |
+| `p` `^p` | the finder |
+| `/` | filter the list or the log |
+| `x` | send what you are standing on to an agent |
+| `t` | switch theme |
+| `r` | refresh |
+| `?` | help |
+| `ctrl-c` | quit |
 
-The wording differs with it — "work on this issue" and "diagnose this failing
-run" ask for different things, and the first line of a prompt is what an agent
-leans on hardest.
+`q` and `:q` go back or close the overlay; to quit the program use `ctrl-c`.
+The full tables are in [docs/ghline.md](docs/ghline.md#keys) and
+[docs/diffline.md](docs/diffline.md#keys) — and diffline's `?` is generated
+from the live keymap, so it is right the moment you rebind something.
 
-A log is the one that needs care. A failing run is routinely tens of thousands
-of lines, almost all of it packages resolving, so what travels is the flagged
-errors with six lines of lead-in and three of follow-on, merged where they
-overlap, capped, and **labelled with what was left out** — `140 of 244 lines
-shown`. A truncation the agent cannot see is worse than a shorter excerpt,
-because it will reason confidently about a log it thinks it has all of. With
-nothing flagged, the tail travels instead, and says so.
+## Documentation
 
-### Saying something specific
+| | |
+| --- | --- |
+| [docs/ghline.md](docs/ghline.md) | panes and where each one comes from, navigation, the file explorer, the diff, the pull request flow, the finder, the mouse, the full keymap |
+| [docs/diffline.md](docs/diffline.md) | scopes, how a comment is anchored, the queue, rebinding keys |
+| [docs/agents.md](docs/agents.md) | what travels for each kind of subject, the three destinations, prompt templates, how a checkout is found |
+| [docs/config.md](docs/config.md) | `~/.config/ghline/config`, prompt templates, icons, themes and writing your own |
+| [docs/development.md](docs/development.md) | layering, tests and golden frames, benchmarks, terminal-free renders, session recording |
 
-The templates say the standard thing. When the standard thing is not what you
-want said, **type it into the picker**: whatever you write leads the message
-and the template follows as context.
+## Configuration
 
-```
-SEND issue  #87  Investigar implementación de Passkeys…    ↑↓ or ^n/^p · enter
-❯ only the parser, ignore the tests
-```
-
-Typing goes to that line rather than moving the selection, so the arrows and
-`^n`/`^p` do the moving — the same bargain the finder makes, for the same
-reason. `esc` closes; `x` is now just a letter. An instruction is not
-remembered between questions, because a specific thing is specific.
-
-It goes in front by default, since that is what an agent reads first. A
-template that names `{note}` places it wherever you like instead, and one that
-does not mention it — which is every default and every config written before
-this existed — is unchanged when you type nothing.
-
-The confirmation shows the first fourteen lines of what would be sent and the
-total size, so a template that renders badly is caught before an agent reads it.
-
-**Where** it goes is three kinds of destination in one list, because that is one
-question:
-
-- **an agent already running** — one call, `herdr agent prompt <pane>`;
-- **a new worktree** with claude, codex, opencode or pi — branching `issue-<n>`
-  off the checkout and starting the agent in it, isolated from your own work;
-- **a new agent in the checkout itself** — no branch, no new files, working on
-  whatever is currently checked out and alongside whatever you have open.
-
-The last one is offered after the worktrees, because it is the only destination
-that can collide with you, and it is labelled with the branch it would actually
-land on — read from `.git/HEAD` rather than assumed to be `main`, since a
-checkout sitting on someone's feature branch is common and the difference
-matters before you agree to it.
-
-All three go through the confirmation dialog. Merging works this way for the
-same reason: it makes something happen outside this program, so it should take
-a deliberate `y`.
-
-A destination that cannot take the issue is **listed with the reason** rather
-than hidden — knowing every agent is busy beats an empty box. An agent that is
-working is refused because typing into it mid-task loses its context; one
-stopped on a permission prompt is refused because it would read the task as the
-answer; and the window you are reading is refused because sending an issue to
-the program showing you the list is legal, useless and confusing.
-
-### Where the repository lives
-
-An agent needs a checkout, and this browses far more repositories than the
-machine holds — 143 on GitHub against 20 here, which makes "not cloned" the
-normal case rather than an edge one. So the picker has three outcomes, and says
-which one it is in: an agent is already there, the repository is cloned and can
-be branched from, or it is not on this disk and the answer is a `gh repo clone`
-you can copy.
-
-The index is built by walking a few roots and reading each git remote, not by
-matching directory names: a clone of `Osmait/sbql` in a folder called
-`sbql-experiment` is still that repository, and a folder called `sbql` that is
-a fork of someone else's is not. It walks two levels below each root, skips
-hidden directories, does not descend into a checkout it has already found, and
-stops at a budget rather than hanging on a root pointed somewhere enormous. It
-runs once, on the service thread, the first time you ask where something could
-go.
-
-### Settings
-
-Nine keys in `~/.config/ghline/config`, all optional:
+Optional, and all of it plain text. `~/.config/ghline/config` (or
+`$XDG_CONFIG_HOME`) is `key = value` lines:
 
 ```
 prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
-prompt-pr   = Review {repo}#{num}: {title}\n\n{url}\n\n{context}
-prompt-run  = Diagnose this failing run in {repo}.\n\n{title}\n{url}\n\n{context}
-prompt-diff = Explain this change from {repo}#{num}\n\n{url}\n\n{context}
-prompt-file = Here is a file from {repo}.\n\n{url}\n\n---\n\n{context}
 agents      = claude, codex, opencode, pi
 agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
 file-icons  = nerd
 clone-roots = ~/orca, ~/Projects
 ```
 
-One template per kind of subject. The placeholders are `{repo} {num} {title}
-{url} {context}`, where `{context}` is the body, the file list or the log
-excerpt depending on what is being sent; an unknown one is left as itself
-rather than blanked, so a typo looks like a typo. `\n` is two characters in a
-config file and becomes a real newline on the way out. The URL is in every
-default because an agent that can read the thing asks fewer questions.
+`t` opens the theme picker and applies as you move through it, so what you are
+judging is the interface rather than a name in a list; `enter` writes the one
+you keep back to the config. Two themes ship, and anything in
+`~/.config/ghline/themes/*.theme` joins the picker. diffline's keymap is a
+table rather than a `match`, so `<config>/keys` is read at startup and applied
+over the shipped one.
 
-`agent-icons` overrides the mark drawn beside each agent, as
-`claude=✳, codex=⌬`. Only two of the defaults are real marks: `π` is what pi
-puts in its own terminal title and `✳` is what Claude Code prints for itself.
-Codex and opencode have no glyph of their own and get a neutral one, because an
-invented brand icon is decoration pretending to be information.
+All of it is in [docs/config.md](docs/config.md).
 
-They are plain BMP symbols rather than Nerd Font glyphs on purpose. A Nerd Font
-icon lives in the private use area, where `unicode-width` has to guess it is one
-column while the non-Mono font variants draw it across two — which is how a
-column chart quietly goes crooked. If your font can do better, say so here; an
-entry that is not a single character is ignored rather than drawn.
+## Architecture
 
-`agents` is what to offer for a new worktree — herdr decides what it can
-actually start, so an unsupported name comes back as herdr's own refusal
-rather than a guess at one.
-
-If the agent then fails to start, whatever was just made is undone: a worktree
-is removed, a workspace is closed. A half-built one would be worse than the
-failure — the next dispatch would collide with a branch that already exists,
-and you would have a window you never saw appear. Undoing never touches your
-own checkout either way.
-
-## The mouse
-
-It is there if you want it, and it adds nothing the keyboard cannot already do.
-A click is `h`/`l` then `j`/`k`: it focuses the pane it landed on and selects
-the row under the pointer. A double click is `enter`. The wheel is `j`/`k`, on
-whatever the pointer is over — reaching for a pane to read it is not a decision
-to work in it, so scrolling never takes the focus. Tabs are clickable, and so
-are the rows of the finder, the theme picker and the account switcher; clicking
-away from one closes it, on the same terms as `esc`.
-
-A confirmation ignores the mouse entirely. "Merge this?" wants a deliberate
-answer, and a stray click is not one.
-
-Only the renderer knows where anything ended up, so each pane records the
-rectangle it drew and enough to turn a row back into an index (`src/app/hit.rs`).
-They are rebuilt every frame and read newest-first, which is what puts a modal
-in front of the panes it covers without either having to know about the other. A
-pane the renderer forgets to register is a pane the mouse cannot reach and
-nothing else would notice, so a test walks every pane of every view and fails if
-one is missing.
-
-Capturing the mouse takes the terminal's own click-to-select with it. Most
-terminals still select with `shift` held down; `--no-mouse` turns the whole
-thing off if you would rather have it back.
-
-## Keys
-
-| Key | Action |
-| --- | --- |
-| `j` `k` | move within the pane |
-| `h` `l` | pane left / right |
-| `tab` | next pane (cycles) |
-| `d` | diff of the PR's files |
-| `s` | split / unified diff |
-| `w` | ignore whitespace-only changes |
-| `g` `G` | start / end of the pane |
-| `^d` `^u` | half a page |
-| `PgUp` `PgDn` | a whole page |
-| `1` `2` `3` | Issues / Pull Requests / Actions |
-| `enter` | enter the pane / open |
-| `esc` `q` | back one level |
-| `a` | switch account |
-| `t` | switch theme (`␣t` in diffline) |
-| `b` `^b` | hide / show the repository pane |
-| `[` `]` | previous / next repository |
-| `p` `^p` | the finder |
-| `o` | fold / unfold a job (in the logs) |
-| `/` | filter (list or log) |
-| `e` | jump to the first error in the log |
-| `f` | toggle the log's *follow* mode |
-| `r` | refresh |
-| `:` | command line |
-| `?` | help |
-| `^l` | repaint the screen |
-| `ctrl-c` | quit |
-
-On a pull request:
-
-| Key | Action |
-| --- | --- |
-| `m` | merge (pick the method with `1` `2` `3`) |
-| `c` | close, or reopen if already closed |
-| `D` | delete the branch |
-| `y` / `enter` | confirm |
-| `n` / `esc` | cancel |
-
-Commands: `:account`, `:issues`, `:prs`, `:actions`, `:logs`, `:diff`, `:files`,
-`:theme`, `:sidebar`, `:find`, `:help`, `:q`.
-
-As in the design, `q` and `:q` go back or close the overlay; to quit the program
-use `ctrl-c`.
-
-## The finder
-
-`p` — or `^p` — opens it over everything else. `tab` walks the four sources and
-keeps what you typed, since switching usually means "the same words, somewhere
-else". `↑`/`↓` or `^n`/`^p` move, `enter` goes there, `esc` closes.
-
-| Source | Where it looks |
-| --- | --- |
-| repos | the repositories already loaded, filtered as you type |
-| issues | `gh search issues` across your repositories |
-| pull requests | `gh search prs` across your repositories |
-| commits | `gh search commits` across your repositories |
-
-Repositories are already in memory, so they filter with no latency and the
-matched letters are highlighted. The other three go to GitHub once typing
-pauses, and are shown in the order the server ranked them.
-
-Commits are the exception worth knowing about: GitHub rejects a commit search
-made of qualifiers alone, so that source has nothing to show until you type
-something. The other three list without a query.
-
-Matching is a small scorer in `src/fuzzy.rs` rather than a dependency — letters
-that run together beat letters scattered about, the start of a word beats the
-middle, and a shorter name beats a longer one. It matches greedily, which is
-documented where it could otherwise look like a bug.
-
-## Keys
-
-diffline's keymap is a table, not a `match`: `<config>/keys` is read at
-startup and applied over the shipped one.
-
-```
-<C-n> = line-down
-s     = split
-j     = none          # takes a key away
-```
-
-`:write a keymap to start from` writes every default binding with its action
-name and what it does. Keys read as a letter, `<C-d>`, `<leader>x`, `gg`,
-`]c`, `<esc>`, `<cr>`, `<tab>`, `<s-tab>`, `<space>` and the arrows; the
-leader is space.
-
-A line that names an action that does not exist, or a key that cannot be
-read, is skipped and reported at the top of the help — a key that silently
-does nothing is worse than one that says why. `␣?` is generated from the map
-rather than written down, so it is right the moment you rebind something.
-
-`g`, `z`, `[`, `]` and the leader are prefixes only while something is bound
-behind them, so clearing those bindings gives you the key itself back.
-
-## Themes
-
-`t` opens the picker. It applies as you move through it, so what you are judging
-is the interface itself rather than a name in a list — `enter` keeps the one you
-land on, `esc` puts back the one that was on when you opened it.
-
-The one you keep is remembered: `enter` writes it to
-`~/.config/ghline/config` (or `$XDG_CONFIG_HOME`), and the next start reads
-it back. The file is `key = value` lines, safe to edit by hand; keys it does not
-recognise are left alone rather than dropped, so a config written by a newer
-version survives an older one. A theme that cannot be written is still applied,
-and says so — silently forgetting looks like a bug. The headless render modes
-deliberately ignore it, so a snapshot is the same frame on any machine.
-
-Two ship: the design's own palette, and Catppuccin Mocha. A theme is a whole
-`Palette` and switching one in is a single store, so the change lands on the
-very next frame. A test walks every theme and fails if a role is left
-undefined, which would otherwise show up as an invisible pane.
-
-### Writing your own
-
-Anything in `~/.config/ghline/themes/*.theme` joins the picker, named after
-the file. `:write a theme to start from` writes the palette you are looking at
-into `themes/mine.theme` with every role listed and commented, which beats
-guessing at role names:
-
-```
-bg     = #1e1e2e   # the terminal's own background
-green  = #a6e3a1   # added, passing, approved
-red    = #f38ba8   # deleted, failing, refused
-```
-
-`#rrggbb`, `rrggbb` and `#rgb` all read. A `#` starts a comment at the start of
-a line or after a value — not inside one, since every value begins with one.
-Roles you leave out keep what Mocha gives them, so a theme can be three colours
-and a working interface rather than three colours and twenty-six holes; a line
-that is not a colour, or names a role that does not exist, is skipped rather
-than taking the theme down with it.
-
-The files are read once at startup, so a colour you change shows up on the next
-run.
-
-Mocha is mapped by the role each colour plays rather than by name: the design
-keeps its panels a shade *lighter* than the background, so mantle is the ground
-and base is the panel, not the other way round.
-
-## Markdown
-
-Bodies are Markdown, and they are rendered as such: headings lose their hashes
-and gain weight, emphasis becomes emphasis, inline code and links take the
-design's palette, and tables keep their shape. `tui-markdown` does the parsing,
-taken without its default feature so that syntax colouring inside fences — and
-the C dependency it brings — stays out of the build.
-
-## Files and diff
-
-`d` on a pull request opens the diff view: the changed files with their counts
-on the left, the contents on the right. `j`/`k` walks the files, `l` moves to
-the diff and `j`/`k` scrolls it there.
-
-- `s` switches between the unified diff (two numbering columns, original and
-  new) and the split one (deletions left, additions right).
-- `w` ignores whitespace-only changes: `-`/`+` pairs whose contents match once
-  whitespace is removed collapse into a single context line.
-- A file with no textual changes — a binary, a mode change — shows
-  "no textual changes" instead of an empty pane.
-
-From the PR detail, `enter` on the body opens that same view.
-
-## Pull request flow
-
-The action is executed by `gh` and the list is reloaded from what GitHub
-reports, never from a local guess — a merge that failed should not leave a row
-that says it worked. The flow:
-
-1. `m` opens the merge confirmation, which first shows the state of the checks,
-   how many approvals there are and whether anyone requested changes.
-2. You pick the method — merge commit, squash or rebase — and confirm with
-   `enter`.
-3. The branch-deletion confirmation follows immediately, like the button GitHub
-   offers after a merge.
-4. The PR becomes `merged`, the branch is marked with `⊘`, and the repo's
-   open-PR count is adjusted in the tab and in the sidebar.
-
-The branch-deletion prompt only appears **if the merge succeeded**, and it
-carries the branch name with it rather than re-reading the selection: by the
-time the response arrives, the list has already been reloaded. The modal shows
-the `owner/repo` you are about to act on.
-
-The rules are GitHub's: a *draft* PR cannot be merged, an already merged PR
-cannot be closed, and the branch is only deleted once the PR is resolved. When
-an action does not apply, the reason appears in the status bar. Closing a PR can
-be undone by reopening it with `c`.
-
-The changes are real changes on GitHub.
-
-## Layout
+A cargo workspace: the two programs are libraries, and `src/` holds only the
+entry points.
 
 | Path | Contents |
 | --- | --- |
@@ -659,10 +197,10 @@ The changes are real changes on GitHub.
 | `crates/tui-kit/` | terminal runtime, drawing primitives, themes and input |
 | `crates/source-text/` | syntax highlighting, wrapping and terminal-safe text |
 | `crates/agent-mux/` | agent discovery and dispatch through multiplexers |
-| `src/bin/ghline/` | process setup and terminal adapter for `ghline` |
-| `src/bin/diffline/` | process setup and terminal adapter for `diffline` |
-
-## Layering
+| `crates/cli-parser/` | command-line parsing, with no application policy in it |
+| `crates/fuzzy-match/` | greedy fuzzy scoring and stable ranking |
+| `crates/process-error/` | typed failures from subprocess-backed services |
+| `src/bin/` | process setup and terminal adapter for each program |
 
 Each application follows the same one-way stack:
 
@@ -672,231 +210,31 @@ view → state → source → data/model
               └── blocking gh/git work stays on a worker thread
 ```
 
-`ghline-app` and `diffline-app` never depend on each other. Both sit above
-`line-shared` and the reusable workspace crates, so imports name the owner
-clearly: `ghline_app::state`, `diffline_app::model`, `line_shared::config` and
-`tui_kit::theme`.
+`ghline-app` and `diffline-app` never depend on each other, and nothing shared
+is allowed to name either of them — Cargo enforces that rather than a comment.
+No view imports a process source, so rendering can never reach GitHub or Git,
+and nothing on the drawing thread waits for the network: a pending panel draws
+the outline of what is coming and the rows replace it when they arrive.
 
-The model carries no presentation: a label travels as RGB and a review as a
-`ReviewState`, and the theme turns either into a terminal colour. No view
-imports a process source, so rendering can never reach GitHub or Git.
+[docs/development.md](docs/development.md) has the rest, including how the
+golden frames work and how to render a screen without a terminal.
 
-States — open, draft, merged, success, failure and the rest — are a `Status`
-enum rather than strings. `theme::state_color` and `state_icon` match on it
-exhaustively, so a new state makes the compiler ask what it should look like.
+## Contributing
 
-An item's kind-specific fields live in the variant they belong to rather than
-side by side in one struct, so an issue cannot be given check results and a run
-cannot be asked for a branch to delete:
+`make check` is the gate — it runs lints, the rustdoc lints, and the whole
+suite, and it is exactly what CI runs. [AGENTS.md](AGENTS.md) is the map of the
+repository and [CODE-STYLE.md](CODE-STYLE.md) the rulebook: panics, errors,
+naming, visibility, documentation, tests and dependencies.
 
-```
-Item { num, title, state, author, when, body, labels, detail }
-  detail: Issue { comments, comment_list }
-        | Pr    { checks, add, del, files, branch, reviews, file_list, … }
-        | Run   { event, workflow, dur }
-```
-
-## Error handling
-
-The `gh` layer returns a typed `Error` rather than a `String`, so callers can
-tell a missing CLI from a repository they cannot read. It implements `Display`
-and `std::error::Error`, and carries the subcommand that failed so the message
-can name it. At the boundary with the interface each error is reduced to a
-one-line summary; failures that look temporary — timeouts, rate limits — add a
-suggestion to retry with `r`.
-
-The terminal is owned by a guard that restores it on drop, backed by a panic
-hook. A panic therefore leaves the console usable instead of stuck in raw mode
-with no echo.
-
-## Tests
-
-The golden frames and most of the state tests are written against
-`ghline_app::fixture`: two accounts, seven repositories and rows built from
-a table. It used to be nine hundred lines of designed GitHub behind a cargo
-feature, so a released binary would not carry it; at a page it is cheaper to
-compile in than to gate, and `App::new` no longer has to ask which kind of data
-it is holding.
-
-```sh
-cargo test          # 586 unit tests and 18 golden frames
-cargo clippy        # the lint set configured in Cargo.toml
-cargo doc           # the rustdoc lints, which are denied
-make cov            # what fraction of the crate those tests execute
-make audit          # dependencies, advisories, licences, sources, spelling
-```
-
-The lint set in `Cargo.toml` forbids `unsafe`, and warns on `unwrap`, `expect`,
-`panic`, `todo`, `dbg!` and `print!` outside the modules that legitimately need
-them. It is kept deliberately narrow: the full `pedantic` group mostly objects
-to the `as u16` casts a cell-grid renderer is made of.
-
-The suite covers the parsing and layout edge cases that are easy to get wrong
-and hard to see: dates with GitHub's zero timestamp, both ANSI escape forms,
-unified diffs with renames and no-newline markers, hunk line numbering, wrapping
-and truncation at column boundaries (including wide glyphs), scroll clamping,
-pane navigation, and the pull request state machine with an empty or filtered
-list.
-
-Those tests say what a view is *about* — a count in a tab, a line that stops at
-the pane's edge — which is why they survive a redesign of everything around the
-thing they name, and also why the layout can move underneath them. `tests/`
-takes the other half: ten whole frames of the fixture, compared character for
-character, so any change to any of them fails with the screen before and after
-as the diff.
-
-```sh
-cargo test --test frames        # the golden frames
-cargo insta review              # look at what changed, accept or reject
-INSTA_UPDATE=always cargo test --test frames   # accept without cargo-insta
-```
-
-A golden is only worth what the look at it was worth. Accepting a frame you
-have not read turns a failing test into a passing one and nothing else.
-
-Both of those are examples: inputs somebody thought of. `tests/props.rs` is the
-other kind. Three things here parse input nobody in this repository wrote — the
-output of `git diff`, a line of source on its way to being coloured, a line on
-its way into cells — and what it asserts about them is what has to hold for
-every input rather than for a chosen one: that the pieces a line is wrapped
-into still spell the line, that an offset handed back can slice the string it
-came from, that a row's numbers only go forwards.
-
-```sh
-cargo test --test props                  # a few hundred generated cases each
-PROPTEST_CASES=10000 cargo test --test props    # a longer look
-```
-
-It earned its place on the first run, with two bugs the examples had missed.
-Colouring a line hung — forever, inside the draw, with no key that interrupts
-it — on any word starting with a letter that is not ASCII: `año`, `café`,
-`Ünicode`, `漢字`. The loop was entered on `is_alphabetic`, true of every letter
-there is, and left on `is_ascii_alphanumeric`, false of most of them. And a
-hunk header saying `@@ -4294967295 @@` overflowed the line counter two rows
-later, which is a panic in a debug build. Both are fixed, and both now have an
-ordinary named test next to the code as well.
-
-When a property fails, the input is shrunk to the smallest one that still fails
-and the seed is written to `tests/props.proptest-regressions`, which is
-committed — so the case is re-run first, for ever, by everyone.
-
-`make cov` says how much of the crate all of that actually executes — 72.7% of
-lines today, which CI holds a floor under rather than a target over. The total
-is the least useful line of it. The report is per file, and read that way it
-says where the tests are and are not: `tui/` sits above 97% and the drawing
-code for both programs between 70% and 95%, while `github/source/gh.rs` — the
-JSON coming back from `gh`, parsed field by field — has seven hundred lines
-nothing has ever run, and `view/ui/confirm.rs` and `view/ui/dispatch.rs` have
-none at all. The two binaries and `tui/run.rs` are low for a different reason:
-they are the terminal and the event loop, and what tests them is running them.
-
-## What a frame costs
-
-```sh
-cargo bench             # all four
-cargo bench -- draw     # one
-```
-
-| | on one desk, for scale |
-| --- | --- |
-| `draw` — a whole frame at 160×44 | ~145 µs |
-| `highlight` — the lexer over 600 lines | ~96 µs |
-| `rank` — the finder over 500 repositories | ~57 µs |
-| `wrap_ranges` — one long line | ~410 ns |
-
-The loop never waits longer than 16 ms for a keystroke, so a frame has about
-a hundred times its own cost in hand. The numbers are here to be compared
-against themselves after a change, not against another machine — which is also
-why CI does not run them: a shared runner varies by more than the differences
-worth catching.
-
-## Terminal-free renders
-
-Useful for comparing against the design or debugging the layout:
-
-```sh
-# with real data, waiting on gh between keys — in every build
-cargo run -- --svg-live "<enter><enter>" 150 40 > logs.svg
-
-# diffline draws whatever repository you point it at
-cargo run --bin diffline -- . --svg "j" 150 40 > diff.svg
-
-# the three that draw the fixture rather than GitHub
-cargo run -- --snapshot "3<enter><enter>" 150 40 6
-cargo run -- --svg "" 150 40 > list.svg
-cargo run -- --svg-loading "" 150 40 5 > loading.svg
-```
-
-Keys are written literally, with `<enter>`, `<esc>`, `<tab>`, `<bs>`, `<del>`,
-`<home>`, `<end>`, `<pgup>`, `<pgdn>` and the arrows in angle brackets. A
-modifier goes inside them — `<c-c>` is control-c, `<a-x>` is alt-x, `<c-up>` is
-control-up — and `<lt>` and `<gt>` are the two characters the notation is
-otherwise made of.
-
-## Recording a session
-
-Neither program can print anything while it runs: the screen is theirs, and a
-`println!` lands in the middle of a frame and is gone at the next redraw. So a
-bug report has been whatever the reader remembered doing.
-
-```sh
-diffline --log run.log .
-ghline --log run.log
-```
-
-Every keystroke, click and error goes into the file, stamped with the
-milliseconds since it opened — and the last line is the command that plays the
-session back:
-
-```
-+      0ms diffline 0.1.0 — unix 1786839021
-+      0ms repo /home/you/project
-+    412ms key j
-+    588ms key /
-+   1104ms mouse down Left at 12,4
-+   3320ms replay: diffline --svg "j/" 160 44
-```
-
-Which is the point of it. What is recorded is written in the notation the
-headless renders read, so a report is not a description of the bug — paste the
-last line and the frame is in front of you. A round-trip test keeps the two
-honest with each other.
-
-Each program names the flag it actually has, and both of them work in a
-released binary: `--svg` draws the repository diffline was pointed at, and
-`--svg-live` replays the keys against real GitHub. Neither touches the
-fixture, which is why neither went behind the feature with it.
-
-## Differences from the design
-
-- Merge, close and branch deletion are not in the design: they are an addition,
-  with their own confirmation modal. Since the design uses `d` for the diff,
-  branch deletion — which is destructive — lives on `D`.
-- The design leaves `w` (ignore whitespace) as a label with no effect; here it
-  really does filter the pairs that differ only in whitespace.
-- The design is also mouse-driven, and its `h`/`l` only toggled between the
-  sidebar and the content. Here `h`/`l` walks every pane in the view and `j`/`k`
-  acts on the focused one, so a PR description or a log's output is read with
-  the same two keys as everything else. When there is more content than fits, a
-  scrollbar appears at the edge of the pane.
-- 1 px borders are drawn as a row/column of characters, so each panel takes one
-  more line than in the mockup.
-- Issue/PR labels, which are bordered boxes in HTML, are drawn `[like this]`.
-- The visibility column of the repo pane is empty: the design defines its colour
-  (yellow when private) but the glyph was lost when the HTML was saved. The
-  markers live in `theme::PRIVATE_MARK` / `theme::PUBLIC_MARK`.
-- Below 90 columns the repository pane is hidden, and below 40x8 a notice is
-  shown instead of the interface.
-- With real data the checks pane shows the actual workflow and run instead of
-  the `CI #1841` and the billing line the design had hard-coded.
-- The account picker lists your user and your organisations on github.com; the
-  design also included a GHE host, which is not covered here.
+Two things are worth knowing before a first patch. `unsafe` is forbidden
+workspace-wide, and `unwrap`, `expect`, `panic!`, `todo!`, `dbg!` and `print!`
+warn outside the modules that legitimately need them. And a golden frame is
+only worth what the look at it was worth — accepting one you have not read
+turns a failing test into a passing one and nothing else.
 
 ## Licence
 
-MIT or Apache-2.0, at your option — the pair that most of the Rust ecosystem
-uses, so this can be depended on by anything either half of it can. The texts
-are in [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
+MIT. The text is in [LICENSE-MIT](LICENSE-MIT).
 
 Any contribution you deliberately submit for inclusion in this work shall be
-dual-licensed as above, with no additional terms.
+licensed as above, with no additional terms.
