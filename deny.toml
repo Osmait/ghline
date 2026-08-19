@@ -47,8 +47,10 @@ ignore = [
 [licenses]
 # Every licence actually in the tree today, and nothing else. A dependency
 # arriving under a copyleft licence would fail here rather than be noticed by
-# nobody — which matters because this crate is MIT OR Apache-2.0, and it can
-# only promise that if what it links can be given away on those terms.
+# nobody — which matters because this crate is MIT, and it can only promise
+# that if what it links can be given away on those terms. Apache-2.0 stays on
+# the list: it is what half the tree is under, and depending on it is not the
+# same as being it.
 allow = [
   "MIT",
   "Apache-2.0",

@@ -3,7 +3,7 @@ name = "ghline-app"
 version = "0.1.0"
 edition = "2024"
 description = "Browse GitHub repositories, issues, pull requests and Actions"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 rust-version = "1.96"
 publish = false
 

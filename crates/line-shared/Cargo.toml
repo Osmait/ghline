@@ -3,7 +3,7 @@ name = "line-shared"
 version = "0.1.0"
 edition = "2024"
 description = "Application glue shared by ghline and diffline"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 rust-version = "1.96"
 publish = false
 

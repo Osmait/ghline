@@ -3,7 +3,7 @@ name = "diffline-app"
 version = "0.1.0"
 edition = "2024"
 description = "Diff review application behind the diffline terminal interface"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 rust-version = "1.96"
 publish = false
 
