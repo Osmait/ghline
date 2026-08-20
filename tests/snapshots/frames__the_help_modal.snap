@@ -2,34 +2,34 @@
 source: tests/frames.rs
 expression: "frame(\"?\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requests                                                                      gh · live  ?  help 
+ gh  │  ● ada-example (personal) [a]  │  ada-example / tuikit › Pull Requests                                                                gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                  12 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
-▌          fix/sidebar-clamp · marasanz · +12/-3 · 4 files · 26m ago                                                                                            
+▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
   ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]                                                                              open  ✓ checks  
-           feat/fuzzy-rank · kdev · +29/-8 · 2 files · 3h ago                                                                                                   
+           feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago                                                                                            
   ⇅ #212   perf(render): reuse the cell ┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✓ checks  
-           perf/reuse-buffer · sofi · +4│ KEYBINDINGS                                                    esc to close │                                         
+           perf/reuse-buffer · kai-examp│ KEYBINDINGS                                                    esc to close │                                         
   ⑂ #211   wip: split the reducer by vie├─────────────────────────────────────────────────────────────────────────────┤                        draft  ○ checks  
-           wip/split-reducer · tsuki · +│         j / k  move in the pane           :sidebar  hide / show repos       │                                         
+           wip/split-reducer · noa-examp│         j / k  move in the pane           :sidebar  hide / show repos       │                                         
   ⑃ #209   chore: drop the unused ansi c│         h / l  pane left / right             :find  the finder              │                       merged  ✓ checks  
-           chore/deps · tsuki · +80/-23 │         g / G  top / bottom                      ?  this help               │                                         
+           chore/deps · noa-example · +8│         g / G  top / bottom                      ?  this help               │                                         
   ⇅ #207   fix(logs): keep the filter ac│         1 2 3  Issues / PRs / Actions           :q  close overlay           │                         open  ✓ checks  
-           fix/log-filter · lmoreno · +9│         enter  enter the pane              ^d / ^u  half page scroll        │                                         
+           fix/log-filter · eli-example │         enter  enter the pane              ^d / ^u  half page scroll        │                                         
   ⇅ #205   feat(diff): word-level highli│       esc / q  back one level                    d  diff of the PR files    │                         open  ◐ checks  
-           feat/word-diff · kdev · +114/│             a  switch account                    s  split / unified diff    │                                         
+           feat/word-diff · rin-example │             a  switch account                    s  split / unified diff    │                                         
   ⇅ #202   docs: write down the key map │             t  switch theme                      w  ignore whitespace       │                         open  ✓ checks  
-           docs/keymap · marasanz · +131│             b  hide / show repos               tab  next pane               │                                         
+           docs/keymap · ada-example · +│             b  hide / show repos               tab  next pane               │                                         
   ⇅ #199   fix(finder): do not steal the│         [ / ]  previous / next repo              m  merge the pull request  │                         open  ✗ checks  
-           fix/finder-esc · sofi · +148/│             p  find repos, issues, P…            c  close / reopen the PR   │                                         
+           fix/finder-esc · kai-example │             p  find repos, issues, P…            c  close / reopen the PR   │                                         
   ⇅ #196   test: golden frames for the n│             o  expand / collapse job             D  delete the branch       │                         open  ✓ checks  
-           test/narrow · tsuki · +165/-4│             /  filter (list or log)          y / n  confirm / cancel        │                                         
+           test/narrow · noa-example · +│             /  filter (list or log)          y / n  confirm / cancel        │                                         
   ⇅ #193   refactor: move theming out of│             e  jump to first error           click  focus pane, select row  │                         open  ✓ checks  
-           refactor/theme · kdev · +182/│             f  toggle log follow          2x click  open it                 │                                         
+           refactor/theme · rin-example │             f  toggle log follow          2x click  open it                 │                                         
   ⇅ #189   build: pin the toolchain [cho│             r  refresh (fake)                wheel  scroll under pointer    │                       closed  ✓ checks  
-           build/pin · marasanz · +199/-│             :  command line                      4  the repo's files        │                                         
+           build/pin · ada-example · +19│             :  command line                      4  the repo's files        │                                         
                                         │      :account  account picker                    5  agents running here     │                                         
                                         │  :issues :prs  jump to a tab                     E  edit the file in $EDIT… │                                         
                                         │         :logs  open logs of selection           ^l  repaint the screen      │                                         
@@ -45,4 +45,4 @@ expression: "frame(\"?\")"
                                                                                                                                                                 
                                                                                                                                                                 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                                1/12  marasanz/tuikit
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                             1/12  ada-example/tuikit

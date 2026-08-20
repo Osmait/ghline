@@ -1,7 +1,7 @@
 //! The top bar.
 //!
 //! ```text
-//!  gh │ ● marasanz (personal) [a] │ marasanz / tuikit › Pull Requests   synced 3s ago · idle  ? help
+//!  gh │ ● ada-example (personal) [a] │ ada-example / tuikit › Pull Requests   synced 3s ago · idle  ? help
 //!  ─┬─  ─────────────┬───────────   ──────────────┬───────────────────   ──────────┬─────────  ──┬───
 //!   │                │                            │                                │             │
 //!   │                account, clickable           where you are, one crumb per     │             the

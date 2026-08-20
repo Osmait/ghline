@@ -13,12 +13,12 @@
 <text x="9.6" y="15.0" fill="#ffb454" xml:space="preserve">gh</text>
 <text x="28.8" y="15.0" fill="#5c6773" xml:space="preserve">  │  </text>
 <text x="76.8" y="15.0" fill="#7fd962" xml:space="preserve">●</text>
-<text x="86.4" y="15.0" fill="#c5cdd9" xml:space="preserve"> marasanz </text>
-<text x="182.4" y="15.0" fill="#5c6773" xml:space="preserve">(personal) [a]  │  marasanz</text>
-<text x="451.2" y="15.0" fill="#323947" xml:space="preserve">/</text>
-<text x="470.4" y="15.0" fill="#e6e1cf" xml:space="preserve">tuikit</text>
-<text x="537.6" y="15.0" fill="#323947" xml:space="preserve">›</text>
-<text x="556.8" y="15.0" fill="#39bae6" xml:space="preserve">Pull Requests</text>
+<text x="86.4" y="15.0" fill="#c5cdd9" xml:space="preserve"> ada-example </text>
+<text x="211.2" y="15.0" fill="#5c6773" xml:space="preserve">(personal) [a]  │  ada-example</text>
+<text x="508.8" y="15.0" fill="#323947" xml:space="preserve">/</text>
+<text x="528.0" y="15.0" fill="#e6e1cf" xml:space="preserve">tuikit</text>
+<text x="595.2" y="15.0" fill="#323947" xml:space="preserve">›</text>
+<text x="614.4" y="15.0" fill="#39bae6" xml:space="preserve">Pull Requests</text>
 <text x="1257.6" y="15.0" fill="#5c6773" xml:space="preserve">gh · live</text>
 <text x="1363.2" y="15.0" fill="#565b66" xml:space="preserve">?  help</text>
 <text x="0.0" y="35.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
@@ -45,75 +45,75 @@
 <text x="585.6" y="95.0" fill="#f07178" xml:space="preserve">[bug]</text>
 <text x="1286.4" y="95.0" fill="#f07178" xml:space="preserve">open  ✗ checks</text>
 <text x="0.0" y="115.0" fill="#39bae6" xml:space="preserve">▌</text>
-<text x="105.6" y="115.0" fill="#4d5566" xml:space="preserve">fix/sidebar-clamp · marasanz · +12/-3 · 4 files · 26m ago</text>
+<text x="105.6" y="115.0" fill="#4d5566" xml:space="preserve">fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago</text>
 <text x="19.2" y="135.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="135.0" fill="#4d5566" xml:space="preserve">#214</text>
 <text x="76.8" y="135.0" fill="#c5cdd9" xml:space="preserve">   feat(finder): rank by subsequence, not prefix </text>
 <text x="547.2" y="135.0" fill="#7fd962" xml:space="preserve">[feature]</text>
 <text x="1286.4" y="135.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="155.0" fill="#4d5566" xml:space="preserve">feat/fuzzy-rank · kdev · +29/-8 · 2 files · 3h ago</text>
+<text x="105.6" y="155.0" fill="#4d5566" xml:space="preserve">feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago</text>
 <text x="19.2" y="175.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="175.0" fill="#4d5566" xml:space="preserve">#212</text>
 <text x="76.8" y="175.0" fill="#c5cdd9" xml:space="preserve">   perf(render): reuse the cell buffer between frames </text>
 <text x="595.2" y="175.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1286.4" y="175.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="195.0" fill="#4d5566" xml:space="preserve">perf/reuse-buffer · sofi · +46/-13 · 3 files · 5h ago</text>
+<text x="105.6" y="195.0" fill="#4d5566" xml:space="preserve">perf/reuse-buffer · kai-example · +46/-13 · 3 files · 5h ago</text>
 <text x="19.2" y="215.0" fill="#5c6773" xml:space="preserve">⑂</text>
 <text x="38.4" y="215.0" fill="#4d5566" xml:space="preserve">#211</text>
 <text x="76.8" y="215.0" fill="#c5cdd9" xml:space="preserve">   wip: split the reducer by view </text>
 <text x="403.2" y="215.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1276.8" y="215.0" fill="#4d5566" xml:space="preserve">draft  ○ checks</text>
-<text x="105.6" y="235.0" fill="#4d5566" xml:space="preserve">wip/split-reducer · tsuki · +63/-18 · 4 files · 6h ago</text>
+<text x="105.6" y="235.0" fill="#4d5566" xml:space="preserve">wip/split-reducer · noa-example · +63/-18 · 4 files · 6h ago</text>
 <text x="19.2" y="255.0" fill="#d2a6ff" xml:space="preserve">⑃</text>
 <text x="38.4" y="255.0" fill="#4d5566" xml:space="preserve">#209</text>
 <text x="76.8" y="255.0" fill="#c5cdd9" xml:space="preserve">   chore: drop the unused ansi crate </text>
 <text x="432.0" y="255.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1267.2" y="255.0" fill="#7fd962" xml:space="preserve">merged  ✓ checks</text>
-<text x="105.6" y="275.0" fill="#4d5566" xml:space="preserve">chore/deps · tsuki · +80/-23 · 1 files · 2d ago</text>
+<text x="105.6" y="275.0" fill="#4d5566" xml:space="preserve">chore/deps · noa-example · +80/-23 · 1 files · 2d ago</text>
 <text x="19.2" y="295.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="295.0" fill="#4d5566" xml:space="preserve">#207</text>
 <text x="76.8" y="295.0" fill="#c5cdd9" xml:space="preserve">   fix(logs): keep the filter across a job change </text>
 <text x="556.8" y="295.0" fill="#f07178" xml:space="preserve">[bug]</text>
 <text x="1286.4" y="295.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="315.0" fill="#4d5566" xml:space="preserve">fix/log-filter · lmoreno · +97/-28 · 2 files · 2d ago</text>
+<text x="105.6" y="315.0" fill="#4d5566" xml:space="preserve">fix/log-filter · eli-example · +97/-28 · 2 files · 2d ago</text>
 <text x="19.2" y="335.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="335.0" fill="#4d5566" xml:space="preserve">#205</text>
 <text x="76.8" y="335.0" fill="#c5cdd9" xml:space="preserve">   feat(diff): word-level highlighting </text>
 <text x="451.2" y="335.0" fill="#7fd962" xml:space="preserve">[feature]</text>
 <text x="1286.4" y="335.0" fill="#ffb454" xml:space="preserve">open  ◐ checks</text>
-<text x="105.6" y="355.0" fill="#4d5566" xml:space="preserve">feat/word-diff · kdev · +114/-33 · 3 files · 3d ago</text>
+<text x="105.6" y="355.0" fill="#4d5566" xml:space="preserve">feat/word-diff · rin-example · +114/-33 · 3 files · 3d ago</text>
 <text x="19.2" y="375.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="375.0" fill="#4d5566" xml:space="preserve">#202</text>
 <text x="76.8" y="375.0" fill="#c5cdd9" xml:space="preserve">   docs: write down the key map </text>
 <text x="384.0" y="375.0" fill="#ffb454" xml:space="preserve">[docs]</text>
 <text x="1286.4" y="375.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="395.0" fill="#4d5566" xml:space="preserve">docs/keymap · marasanz · +131/-38 · 4 files · 4d ago</text>
+<text x="105.6" y="395.0" fill="#4d5566" xml:space="preserve">docs/keymap · ada-example · +131/-38 · 4 files · 4d ago</text>
 <text x="19.2" y="415.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="415.0" fill="#4d5566" xml:space="preserve">#199</text>
 <text x="76.8" y="415.0" fill="#c5cdd9" xml:space="preserve">   fix(finder): do not steal the escape key </text>
 <text x="499.2" y="415.0" fill="#f07178" xml:space="preserve">[bug]</text>
 <text x="1286.4" y="415.0" fill="#f07178" xml:space="preserve">open  ✗ checks</text>
-<text x="105.6" y="435.0" fill="#4d5566" xml:space="preserve">fix/finder-esc · sofi · +148/-43 · 1 files · 5d ago</text>
+<text x="105.6" y="435.0" fill="#4d5566" xml:space="preserve">fix/finder-esc · kai-example · +148/-43 · 1 files · 5d ago</text>
 <text x="19.2" y="455.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="455.0" fill="#4d5566" xml:space="preserve">#196</text>
 <text x="76.8" y="455.0" fill="#c5cdd9" xml:space="preserve">   test: golden frames for the narrow layout </text>
 <text x="508.8" y="455.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1286.4" y="455.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="475.0" fill="#4d5566" xml:space="preserve">test/narrow · tsuki · +165/-48 · 2 files · 6d ago</text>
+<text x="105.6" y="475.0" fill="#4d5566" xml:space="preserve">test/narrow · noa-example · +165/-48 · 2 files · 6d ago</text>
 <text x="19.2" y="495.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="495.0" fill="#4d5566" xml:space="preserve">#193</text>
 <text x="76.8" y="495.0" fill="#c5cdd9" xml:space="preserve">   refactor: move theming out of the model </text>
 <text x="489.6" y="495.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1286.4" y="495.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="515.0" fill="#4d5566" xml:space="preserve">refactor/theme · kdev · +182/-53 · 3 files · 1w ago</text>
+<text x="105.6" y="515.0" fill="#4d5566" xml:space="preserve">refactor/theme · rin-example · +182/-53 · 3 files · 1w ago</text>
 <text x="19.2" y="535.0" fill="#d2a6ff" xml:space="preserve">⇅</text>
 <text x="38.4" y="535.0" fill="#4d5566" xml:space="preserve">#189</text>
 <text x="76.8" y="535.0" fill="#c5cdd9" xml:space="preserve">   build: pin the toolchain </text>
 <text x="345.6" y="535.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1267.2" y="535.0" fill="#7fd962" xml:space="preserve">closed  ✓ checks</text>
-<text x="105.6" y="555.0" fill="#4d5566" xml:space="preserve">build/pin · marasanz · +199/-58 · 4 files · 2w ago</text>
+<text x="105.6" y="555.0" fill="#4d5566" xml:space="preserve">build/pin · ada-example · +199/-58 · 4 files · 2w ago</text>
 <text x="0.0" y="575.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="9.6" y="595.0" fill="#0b0e14" xml:space="preserve"> NORMAL </text>
 <text x="105.6" y="595.0" fill="#4d5566" xml:space="preserve">j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch</text>
-<text x="1228.8" y="595.0" fill="#5c6773" xml:space="preserve">1/12  marasanz/tuikit</text>
+<text x="1200.0" y="595.0" fill="#5c6773" xml:space="preserve">1/12  ada-example/tuikit</text>
 </g></svg>

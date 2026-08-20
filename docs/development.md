@@ -202,13 +202,14 @@ all after a change:
 cargo build --release
 ./target/release/ghline --svg "" 150 30 > docs/img/ghline-list.svg
 ./target/release/ghline --svg "2<enter>" 150 34 > docs/img/ghline-pr.svg
-./target/release/diffline . --svg "jjjV jj nthis names keys that are not bound any more<enter>" 150 30 > docs/img/diffline.svg
+./target/release/diffline . --svg "V jj n<some note><enter>" 150 30 > docs/img/diffline.svg
 ```
 
 The two ghline frames draw the fixture rather than anybody's GitHub, which is
-what keeps a private repository name out of a public README. diffline's draws
-this repository, so what it shows is whatever the working tree held when it was
-taken.
+what keeps a private repository name out of a public README — and the fixture's
+own handles all end in `-example` so that no frame here can attribute invented
+work to a real account. diffline's frame draws this repository, so what it
+shows is whatever the working tree held when it was taken.
 
 ## Recording a session
 

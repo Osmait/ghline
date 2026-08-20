@@ -31,7 +31,7 @@ pub enum Prompt {
     /// pull request at all, and it carries everything it needs: by the time it
     /// is confirmed the selection may have been asked to move.
     Dispatch {
-        /// Shown in the dialog: `claude in orca/sbql/error-check`.
+        /// Shown in the dialog: `claude in code/parser/error-check`.
         who: String,
         /// The herdr pane to address.
         pane: String,

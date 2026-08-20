@@ -92,7 +92,7 @@ fn unified_diff(hunks: usize) -> String {
 /// A list the size of somebody's repositories.
 fn repo_names() -> Vec<String> {
     (0..500)
-        .map(|i| format!("marasanz/some-repository-name-{i}"))
+        .map(|i| format!("ada-example/some-repository-name-{i}"))
         .collect()
 }
 
@@ -110,7 +110,7 @@ mod shared {
     fn fuzzy_score() -> Option<(i32, Vec<usize>)> {
         fuzzy::score(
             black_box("srn2"),
-            black_box("marasanz/some-repository-name-42"),
+            black_box("ada-example/some-repository-name-42"),
         )
     }
 

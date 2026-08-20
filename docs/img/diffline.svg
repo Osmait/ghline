@@ -12,39 +12,29 @@
 <rect x="316.8" y="80.0" width="1123.2" height="20" fill="#181825"/>
 <rect x="0.0" y="100.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="120.0" width="307.2" height="20" fill="#11111b"/>
+<rect x="316.8" y="120.0" width="1123.2" height="20" fill="#585b70"/>
 <rect x="0.0" y="140.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="160.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="316.8" y="160.0" width="1123.2" height="20" fill="#352334"/>
 <rect x="0.0" y="180.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="180.0" width="1123.2" height="20" fill="#585b70"/>
+<rect x="316.8" y="180.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="200.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="200.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="220.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="220.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="240.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="260.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="280.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="300.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="300.0" width="1123.2" height="20" fill="#352334"/>
 <rect x="0.0" y="320.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="320.0" width="1123.2" height="20" fill="#352334"/>
 <rect x="0.0" y="340.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="340.0" width="1123.2" height="20" fill="#352334"/>
 <rect x="0.0" y="360.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="360.0" width="1123.2" height="20" fill="#352334"/>
 <rect x="0.0" y="380.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="380.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="400.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="400.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="420.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="420.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="440.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="440.0" width="1123.2" height="20" fill="#203230"/>
 <rect x="0.0" y="460.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="480.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="500.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="520.0" width="307.2" height="20" fill="#11111b"/>
-<rect x="316.8" y="520.0" width="1123.2" height="20" fill="#181825"/>
 <rect x="0.0" y="540.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="560.0" width="307.2" height="20" fill="#11111b"/>
 <rect x="0.0" y="580.0" width="76.8" height="20" fill="#f9e2af"/>
@@ -55,14 +45,14 @@
 <text x="124.8" y="15.0" fill="#f5e0dc" xml:space="preserve">working tree</text>
 <text x="259.2" y="15.0" fill="#181825" xml:space="preserve"> working tree </text>
 <text x="403.2" y="15.0" fill="#7f849c" xml:space="preserve"> commit HEAD </text>
-<text x="1113.6" y="15.0" fill="#a6e3a1" xml:space="preserve">+64</text>
-<text x="1161.6" y="15.0" fill="#f38ba8" xml:space="preserve">−22</text>
-<text x="1190.4" y="15.0" fill="#6c7086" xml:space="preserve">  │  4 files  │  1 queued </text>
+<text x="1084.8" y="15.0" fill="#a6e3a1" xml:space="preserve">+150</text>
+<text x="1142.4" y="15.0" fill="#f38ba8" xml:space="preserve">−342</text>
+<text x="1180.8" y="15.0" fill="#6c7086" xml:space="preserve">  │  22 files  │  1 queued </text>
 <text x="0.0" y="35.0" fill="#313244" xml:space="preserve">───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="1257.6" y="35.0" fill="#181825" xml:space="preserve"> ● 1 queued · ␣c </text>
 <text x="1420.8" y="35.0" fill="#313244" xml:space="preserve">──</text>
 <text x="9.6" y="55.0" fill="#7f849c" xml:space="preserve">CHANGES</text>
-<text x="288.0" y="55.0" fill="#6c7086" xml:space="preserve">4</text>
+<text x="278.4" y="55.0" fill="#6c7086" xml:space="preserve">22</text>
 <text x="307.2" y="55.0" fill="#313244" xml:space="preserve">│</text>
 <text x="326.4" y="55.0" fill="#f9e2af" xml:space="preserve">DIFF</text>
 <text x="384.0" y="55.0" fill="#f5e0dc" xml:space="preserve">README.md</text>
@@ -73,120 +63,129 @@
 <text x="0.0" y="95.0" fill="#585b70" xml:space="preserve">▌</text>
 <text x="19.2" y="95.0" fill="#89b4fa" xml:space="preserve">M</text>
 <text x="38.4" y="95.0" fill="#f5e0dc" xml:space="preserve">README.md</text>
-<text x="211.2" y="95.0" fill="#a6e3a1" xml:space="preserve">+13</text>
-<text x="249.6" y="95.0" fill="#f38ba8" xml:space="preserve">−11</text>
+<text x="230.4" y="95.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="259.2" y="95.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="278.4" y="95.0" fill="#f9e2af" xml:space="preserve"> ●</text>
 <text x="307.2" y="95.0" fill="#313244" xml:space="preserve">│</text>
-<text x="451.2" y="95.0" fill="#89dceb" xml:space="preserve">@@ -7,15 +7,15 @@ repositories, issues, pull requests, Actions, files — and can hand any of it t</text>
-<text x="9.6" y="115.0" fill="#6c7086" xml:space="preserve">crates/diffline-app/src/cli/</text>
+<text x="451.2" y="95.0" fill="#89dceb" xml:space="preserve">@@ -185,7 +185,7 @@ prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}</text>
+<text x="9.6" y="115.0" fill="#6c7086" xml:space="preserve">benches/</text>
 <text x="307.2" y="115.0" fill="#313244" xml:space="preserve">│</text>
-<text x="364.8" y="115.0" fill="#6c7086" xml:space="preserve">7</text>
-<text x="422.4" y="115.0" fill="#6c7086" xml:space="preserve">7</text>
-<text x="451.2" y="115.0" fill="#cdd6f4" xml:space="preserve"> a coding agent.                                                                                       </text>
+<text x="345.6" y="115.0" fill="#6c7086" xml:space="preserve">185</text>
+<text x="403.2" y="115.0" fill="#6c7086" xml:space="preserve">185</text>
+<text x="451.2" y="115.0" fill="#cdd6f4" xml:space="preserve"> agents      = claude, codex, opencode, pi                                                        </text>
+<text x="1392.0" y="115.0" fill="#f9e2af" xml:space="preserve"> ● 1 </text>
 <text x="19.2" y="135.0" fill="#89b4fa" xml:space="preserve">M</text>
-<text x="28.8" y="135.0" fill="#cdd6f4" xml:space="preserve"> mod.rs                </text>
-<text x="249.6" y="135.0" fill="#a6e3a1" xml:space="preserve">+4</text>
-<text x="278.4" y="135.0" fill="#f38ba8" xml:space="preserve">−4</text>
+<text x="28.8" y="135.0" fill="#cdd6f4" xml:space="preserve"> cost.rs               </text>
+<text x="249.6" y="135.0" fill="#a6e3a1" xml:space="preserve">+2</text>
+<text x="278.4" y="135.0" fill="#f38ba8" xml:space="preserve">−2</text>
 <text x="307.2" y="135.0" fill="#313244" xml:space="preserve">│</text>
-<text x="364.8" y="135.0" fill="#6c7086" xml:space="preserve">8</text>
-<text x="422.4" y="135.0" fill="#6c7086" xml:space="preserve">8</text>
-<text x="19.2" y="155.0" fill="#89b4fa" xml:space="preserve">M</text>
-<text x="28.8" y="155.0" fill="#cdd6f4" xml:space="preserve"> tests.rs             </text>
-<text x="240.0" y="155.0" fill="#a6e3a1" xml:space="preserve">+34</text>
-<text x="278.4" y="155.0" fill="#f38ba8" xml:space="preserve">−1</text>
+<text x="316.8" y="135.0" fill="#f9e2af" xml:space="preserve">▌</text>
+<text x="345.6" y="135.0" fill="#6c7086" xml:space="preserve">186</text>
+<text x="403.2" y="135.0" fill="#6c7086" xml:space="preserve">186</text>
+<text x="451.2" y="135.0" fill="#cdd6f4" xml:space="preserve"> agent-icons = claude=✳, codex=◆, opencode=◇, pi=π                                                     </text>
+<text x="9.6" y="155.0" fill="#6c7086" xml:space="preserve">crates/fuzzy-match/src/</text>
 <text x="307.2" y="155.0" fill="#313244" xml:space="preserve">│</text>
-<text x="364.8" y="155.0" fill="#6c7086" xml:space="preserve">9</text>
-<text x="422.4" y="155.0" fill="#6c7086" xml:space="preserve">9</text>
-<text x="451.2" y="155.0" fill="#cdd6f4" xml:space="preserve"> **`diffline`** reviews the diff in front of you. Three panes: what changed, the                       </text>
-<text x="9.6" y="175.0" fill="#6c7086" xml:space="preserve">docs/</text>
+<text x="345.6" y="155.0" fill="#6c7086" xml:space="preserve">187</text>
+<text x="403.2" y="155.0" fill="#6c7086" xml:space="preserve">187</text>
+<text x="451.2" y="155.0" fill="#cdd6f4" xml:space="preserve"> file-icons  = nerd                                                                                    </text>
+<text x="19.2" y="175.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="175.0" fill="#cdd6f4" xml:space="preserve"> lib.rs                </text>
+<text x="249.6" y="175.0" fill="#a6e3a1" xml:space="preserve">+4</text>
+<text x="278.4" y="175.0" fill="#f38ba8" xml:space="preserve">−4</text>
 <text x="307.2" y="175.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="175.0" fill="#6c7086" xml:space="preserve">10</text>
+<text x="345.6" y="175.0" fill="#6c7086" xml:space="preserve">188</text>
 <text x="441.6" y="175.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="175.0" fill="#f38ba8" xml:space="preserve">diff itself, and a queue of comments anchored to lines. Select a range with</text>
-<text x="1392.0" y="175.0" fill="#f9e2af" xml:space="preserve"> ● 1 </text>
-<text x="19.2" y="195.0" fill="#89b4fa" xml:space="preserve">M</text>
-<text x="28.8" y="195.0" fill="#cdd6f4" xml:space="preserve"> diffline.md          </text>
-<text x="240.0" y="195.0" fill="#a6e3a1" xml:space="preserve">+13</text>
-<text x="278.4" y="195.0" fill="#f38ba8" xml:space="preserve">−6</text>
+<text x="460.8" y="175.0" fill="#f38ba8" xml:space="preserve">clone-roots = ~/orca, ~/Projects</text>
+<text x="9.6" y="195.0" fill="#6c7086" xml:space="preserve">crates/ghline-app/src/source/</text>
 <text x="307.2" y="195.0" fill="#313244" xml:space="preserve">│</text>
-<text x="316.8" y="195.0" fill="#f9e2af" xml:space="preserve">▌</text>
-<text x="355.2" y="195.0" fill="#6c7086" xml:space="preserve">11</text>
-<text x="441.6" y="195.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="195.0" fill="#f38ba8" xml:space="preserve">`V`, write a note with `c`, pick an agent with `a`, send the lot with `S`.</text>
+<text x="403.2" y="195.0" fill="#6c7086" xml:space="preserve">188</text>
+<text x="441.6" y="195.0" fill="#a6e3a1" xml:space="preserve">+</text>
+<text x="460.8" y="195.0" fill="#a6e3a1" xml:space="preserve">clone-roots = ~/code, ~/work</text>
+<text x="19.2" y="215.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="215.0" fill="#cdd6f4" xml:space="preserve"> fixture.rs          </text>
+<text x="230.4" y="215.0" fill="#a6e3a1" xml:space="preserve">+24</text>
+<text x="268.8" y="215.0" fill="#f38ba8" xml:space="preserve">−24</text>
 <text x="307.2" y="215.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="215.0" fill="#6c7086" xml:space="preserve">10</text>
-<text x="441.6" y="215.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="215.0" fill="#a6e3a1" xml:space="preserve">diff itself, and a queue of notes anchored to lines. Modal and vim-shaped, with</text>
+<text x="345.6" y="215.0" fill="#6c7086" xml:space="preserve">189</text>
+<text x="403.2" y="215.0" fill="#6c7086" xml:space="preserve">189</text>
+<text x="451.2" y="215.0" fill="#cdd6f4" xml:space="preserve"> ```                                                                                                   </text>
+<text x="9.6" y="235.0" fill="#6c7086" xml:space="preserve">crates/ghline-app/src/state/</text>
 <text x="307.2" y="235.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="235.0" fill="#6c7086" xml:space="preserve">11</text>
-<text x="441.6" y="235.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="235.0" fill="#a6e3a1" xml:space="preserve">space as the leader.</text>
+<text x="345.6" y="235.0" fill="#6c7086" xml:space="preserve">190</text>
+<text x="403.2" y="235.0" fill="#6c7086" xml:space="preserve">190</text>
+<text x="19.2" y="255.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="255.0" fill="#cdd6f4" xml:space="preserve"> actions.rs            </text>
+<text x="249.6" y="255.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="278.4" y="255.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="307.2" y="255.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="255.0" fill="#6c7086" xml:space="preserve">12</text>
-<text x="412.8" y="255.0" fill="#6c7086" xml:space="preserve">12</text>
+<text x="345.6" y="255.0" fill="#6c7086" xml:space="preserve">191</text>
+<text x="403.2" y="255.0" fill="#6c7086" xml:space="preserve">191</text>
+<text x="451.2" y="255.0" fill="#cdd6f4" xml:space="preserve"> `t` opens the theme picker and applies as you move through it, so what you are                        </text>
+<text x="9.6" y="275.0" fill="#6c7086" xml:space="preserve">crates/ghline-app/src/state/a…</text>
 <text x="307.2" y="275.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="275.0" fill="#6c7086" xml:space="preserve">13</text>
-<text x="412.8" y="275.0" fill="#6c7086" xml:space="preserve">13</text>
-<text x="451.2" y="275.0" fill="#cdd6f4" xml:space="preserve"> ```sh                                                                                                 </text>
+<text x="19.2" y="295.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="295.0" fill="#cdd6f4" xml:space="preserve"> tests.rs              </text>
+<text x="249.6" y="295.0" fill="#a6e3a1" xml:space="preserve">+8</text>
+<text x="278.4" y="295.0" fill="#f38ba8" xml:space="preserve">−8</text>
 <text x="307.2" y="295.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="295.0" fill="#6c7086" xml:space="preserve">14</text>
-<text x="412.8" y="295.0" fill="#6c7086" xml:space="preserve">14</text>
-<text x="451.2" y="295.0" fill="#cdd6f4" xml:space="preserve"> diffline            # the repository you are standing in                                              </text>
+<text x="9.6" y="315.0" fill="#6c7086" xml:space="preserve">crates/ghline-app/src/view/ui/</text>
 <text x="307.2" y="315.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="315.0" fill="#6c7086" xml:space="preserve">15</text>
-<text x="441.6" y="315.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="315.0" fill="#f38ba8" xml:space="preserve">[ ]                 # working tree · this branch · the last commit</text>
+<text x="19.2" y="335.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="335.0" fill="#cdd6f4" xml:space="preserve"> header.rs             </text>
+<text x="249.6" y="335.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="278.4" y="335.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="307.2" y="335.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="335.0" fill="#6c7086" xml:space="preserve">16</text>
-<text x="441.6" y="335.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="335.0" fill="#f38ba8" xml:space="preserve">V c                 # take a range, comment on it</text>
+<text x="19.2" y="355.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="355.0" fill="#cdd6f4" xml:space="preserve"> list.rs               </text>
+<text x="249.6" y="355.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="278.4" y="355.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="307.2" y="355.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="355.0" fill="#6c7086" xml:space="preserve">17</text>
-<text x="441.6" y="355.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="355.0" fill="#f38ba8" xml:space="preserve">a S                 # pick an agent, send the queue</text>
+<text x="9.6" y="375.0" fill="#6c7086" xml:space="preserve">crates/line-shared/src/</text>
 <text x="307.2" y="375.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="375.0" fill="#6c7086" xml:space="preserve">18</text>
-<text x="441.6" y="375.0" fill="#f38ba8" xml:space="preserve">-</text>
-<text x="460.8" y="375.0" fill="#f38ba8" xml:space="preserve">?                   # everything else</text>
+<text x="19.2" y="395.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="395.0" fill="#cdd6f4" xml:space="preserve"> clones.rs             </text>
+<text x="249.6" y="395.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="278.4" y="395.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="307.2" y="395.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="395.0" fill="#6c7086" xml:space="preserve">15</text>
-<text x="441.6" y="395.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="395.0" fill="#a6e3a1" xml:space="preserve">[s ]s               # working tree · this branch · the last commit</text>
+<text x="9.6" y="415.0" fill="#6c7086" xml:space="preserve">docs/</text>
 <text x="307.2" y="415.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="415.0" fill="#6c7086" xml:space="preserve">16</text>
-<text x="441.6" y="415.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="415.0" fill="#a6e3a1" xml:space="preserve">V ␣n                # take a range, note on it</text>
+<text x="19.2" y="435.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="435.0" fill="#cdd6f4" xml:space="preserve"> config.md             </text>
+<text x="249.6" y="435.0" fill="#a6e3a1" xml:space="preserve">+1</text>
+<text x="278.4" y="435.0" fill="#f38ba8" xml:space="preserve">−1</text>
 <text x="307.2" y="435.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="435.0" fill="#6c7086" xml:space="preserve">17</text>
-<text x="441.6" y="435.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="435.0" fill="#a6e3a1" xml:space="preserve">␣a ␣s               # pick an agent, send the queue</text>
+<text x="9.6" y="455.0" fill="#6c7086" xml:space="preserve">docs/img/</text>
 <text x="307.2" y="455.0" fill="#313244" xml:space="preserve">│</text>
-<text x="412.8" y="455.0" fill="#6c7086" xml:space="preserve">18</text>
-<text x="441.6" y="455.0" fill="#a6e3a1" xml:space="preserve">+</text>
-<text x="460.8" y="455.0" fill="#a6e3a1" xml:space="preserve">␣?                  # everything else</text>
+<text x="19.2" y="475.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="475.0" fill="#cdd6f4" xml:space="preserve"> diffline.svg        </text>
+<text x="230.4" y="475.0" fill="#6c7086" xml:space="preserve">+0</text>
+<text x="259.2" y="475.0" fill="#f38ba8" xml:space="preserve">−192</text>
 <text x="307.2" y="475.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="475.0" fill="#6c7086" xml:space="preserve">19</text>
-<text x="412.8" y="475.0" fill="#6c7086" xml:space="preserve">19</text>
-<text x="451.2" y="475.0" fill="#cdd6f4" xml:space="preserve"> ```                                                                                                   </text>
+<text x="19.2" y="495.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="495.0" fill="#cdd6f4" xml:space="preserve"> ghline-list.svg     </text>
+<text x="230.4" y="495.0" fill="#a6e3a1" xml:space="preserve">+19</text>
+<text x="268.8" y="495.0" fill="#f38ba8" xml:space="preserve">−19</text>
 <text x="307.2" y="495.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="495.0" fill="#6c7086" xml:space="preserve">20</text>
-<text x="412.8" y="495.0" fill="#6c7086" xml:space="preserve">20</text>
+<text x="19.2" y="515.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="515.0" fill="#cdd6f4" xml:space="preserve"> ghline-pr.svg       </text>
+<text x="230.4" y="515.0" fill="#a6e3a1" xml:space="preserve">+15</text>
+<text x="268.8" y="515.0" fill="#f38ba8" xml:space="preserve">−15</text>
 <text x="307.2" y="515.0" fill="#313244" xml:space="preserve">│</text>
-<text x="355.2" y="515.0" fill="#6c7086" xml:space="preserve">21</text>
-<text x="412.8" y="515.0" fill="#6c7086" xml:space="preserve">21</text>
-<text x="451.2" y="515.0" fill="#cdd6f4" xml:space="preserve"> They are different programs — one asks a server what exists, the other asks the                       </text>
+<text x="9.6" y="535.0" fill="#6c7086" xml:space="preserve">tests/snapshots/</text>
 <text x="307.2" y="535.0" fill="#313244" xml:space="preserve">│</text>
-<text x="451.2" y="535.0" fill="#89dceb" xml:space="preserve">@@ -125,8 +125,10 @@ diffline            # the repository you are standing in</text>
+<text x="19.2" y="555.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="555.0" fill="#cdd6f4" xml:space="preserve"> frames__narrow_eno… </text>
+<text x="230.4" y="555.0" fill="#a6e3a1" xml:space="preserve">+11</text>
+<text x="268.8" y="555.0" fill="#f38ba8" xml:space="preserve">−11</text>
 <text x="307.2" y="555.0" fill="#313244" xml:space="preserve">│</text>
-<text x="345.6" y="555.0" fill="#6c7086" xml:space="preserve">125</text>
-<text x="403.2" y="555.0" fill="#6c7086" xml:space="preserve">125</text>
-<text x="451.2" y="555.0" fill="#cdd6f4" xml:space="preserve"> ```                                                                                                   </text>
+<text x="19.2" y="575.0" fill="#89b4fa" xml:space="preserve">M</text>
+<text x="28.8" y="575.0" fill="#cdd6f4" xml:space="preserve"> frames__pull_reque… </text>
+<text x="230.4" y="575.0" fill="#a6e3a1" xml:space="preserve">+14</text>
+<text x="268.8" y="575.0" fill="#f38ba8" xml:space="preserve">−14</text>
 <text x="307.2" y="575.0" fill="#313244" xml:space="preserve">│</text>
-<text x="345.6" y="575.0" fill="#6c7086" xml:space="preserve">126</text>
-<text x="403.2" y="575.0" fill="#6c7086" xml:space="preserve">126</text>
 <text x="0.0" y="595.0" fill="#181825" xml:space="preserve"> NORMAL </text>
 <text x="86.4" y="595.0" fill="#7f849c" xml:space="preserve">README.md</text>
-<text x="192.0" y="595.0" fill="#6c7086" xml:space="preserve">6/48</text>
+<text x="192.0" y="595.0" fill="#6c7086" xml:space="preserve">3/9</text>
 <text x="585.6" y="595.0" fill="#6c7086" xml:space="preserve">j/k move · }/]c hunk/change · ␣ leader · : commands · ␣? help</text>
 <text x="1190.4" y="595.0" fill="#f9e2af" xml:space="preserve"> comment queued · 2 lines </text>
 </g></svg>

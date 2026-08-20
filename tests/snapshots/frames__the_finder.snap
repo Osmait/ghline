@@ -2,34 +2,34 @@
 source: tests/frames.rs
 expression: "frame(\"p\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Pull Requests                                                                      gh · live  ?  help 
+ gh  │  ● ada-example (personal) [a]  │  ada-example / tuikit › Pull Requests                                                                gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                  12 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
-▌          fix/sidebar-clamp · marasanz · +12/-3 · 4 files · 26m ago                                                                                            
+▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
   ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]                                                                              open  ✓ checks  
-           feat/fuzzy-rank · kdev · +29/-8 · 2 files · 3h ago                                                                                                   
+           feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago                                                                                            
   ⇅ #212   perf(render): reuse t┌──────────────────────────────────────────────────────────────────────────────────────────────┐                open  ✓ checks  
-           perf/reuse-buffer · s│ ❯ filter repositories                                                                        │                                
+           perf/reuse-buffer · k│ ❯ filter repositories                                                                        │                                
   ⑂ #211   wip: split the reduce├──────────────────────────────────────────────────────────────────────────────────────────────┤               draft  ○ checks  
-           wip/split-reducer · t│ ▸ repos   issues   pull requests   commits                                               tab │                                
+           wip/split-reducer · n│ ▸ repos   issues   pull requests   commits                                               tab │                                
   ⑃ #209   chore: drop the unuse│                                                                                              │              merged  ✓ checks  
-           chore/deps · tsuki · │▌ ▪ ripgrep-ui                                                                                │                                
+           chore/deps · noa-exam│▌ ▪ ripgrep-ui                                                                                │                                
   ⇅ #207   fix(logs): keep the f│▌   Rust · 7 open issues · 2 open PRs                                                         │                open  ✓ checks  
-           fix/log-filter · lmor│  ▪ dotfiles                                                                                  │                                
+           fix/log-filter · eli-│  ▪ dotfiles                                                                                  │                                
   ⇅ #205   feat(diff): word-leve│    Shell · 1 open issues · 0 open PRs                                                        │                open  ◐ checks  
-           feat/word-diff · kdev│  ▪ tuikit                                                                                    │                                
+           feat/word-diff · rin-│  ▪ tuikit                                                                                    │                                
   ⇅ #202   docs: write down the │    Go · 12 open issues · 4 open PRs                                                          │                open  ✓ checks  
-           docs/keymap · marasan│  ▪ notes.md                                                                                  │                                
+           docs/keymap · ada-exa│  ▪ notes.md                                                                                  │                                
   ⇅ #199   fix(finder): do not s│    Python · 0 open issues · 1 open PRs                                                       │                open  ✗ checks  
-           fix/finder-esc · sofi│  ▪ aoc-2025                                                                                  │                                
+           fix/finder-esc · kai-│  ▪ aoc-2025                                                                                  │                                
   ⇅ #196   test: golden frames f│    Rust · 2 open issues · 0 open PRs                                                         │                open  ✓ checks  
-           test/narrow · tsuki ·│                                                                                              │                                
+           test/narrow · noa-exa│                                                                                              │                                
   ⇅ #193   refactor: move themin│                                                                                              │                open  ✓ checks  
-           refactor/theme · kdev│                                                                                              │                                
+           refactor/theme · rin-│                                                                                              │                                
   ⇅ #189   build: pin the toolch│                                                                                              │              closed  ✓ checks  
-           build/pin · marasanz │                                                                                              │                                
+           build/pin · ada-examp│                                                                                              │                                
                                 │                                                                                              │                                
                                 │                                                                                              │                                
                                 │                                                                                              │                                
@@ -45,4 +45,4 @@ expression: "frame(\"p\")"
                                                                                                                                                                 
                                                                                                                                                                 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                                1/12  marasanz/tuikit
+  NORMAL   j/k move · b repos · enter open · 1/2/3 tabs · / filter · d diff · m merge · c close · D branch                             1/12  ada-example/tuikit

@@ -33,14 +33,14 @@
 <text x="9.6" y="15.0" fill="#ffb454" xml:space="preserve">gh</text>
 <text x="28.8" y="15.0" fill="#5c6773" xml:space="preserve">  │  </text>
 <text x="76.8" y="15.0" fill="#7fd962" xml:space="preserve">●</text>
-<text x="86.4" y="15.0" fill="#c5cdd9" xml:space="preserve"> marasanz </text>
-<text x="182.4" y="15.0" fill="#5c6773" xml:space="preserve">(personal) [a]  │  marasanz</text>
-<text x="451.2" y="15.0" fill="#323947" xml:space="preserve">/</text>
-<text x="470.4" y="15.0" fill="#e6e1cf" xml:space="preserve">tuikit</text>
-<text x="537.6" y="15.0" fill="#323947" xml:space="preserve">›</text>
-<text x="556.8" y="15.0" fill="#5c6773" xml:space="preserve">Pull Requests</text>
-<text x="691.2" y="15.0" fill="#323947" xml:space="preserve">›</text>
-<text x="710.4" y="15.0" fill="#39bae6" xml:space="preserve">#217</text>
+<text x="86.4" y="15.0" fill="#c5cdd9" xml:space="preserve"> ada-example </text>
+<text x="211.2" y="15.0" fill="#5c6773" xml:space="preserve">(personal) [a]  │  ada-example</text>
+<text x="508.8" y="15.0" fill="#323947" xml:space="preserve">/</text>
+<text x="528.0" y="15.0" fill="#e6e1cf" xml:space="preserve">tuikit</text>
+<text x="595.2" y="15.0" fill="#323947" xml:space="preserve">›</text>
+<text x="614.4" y="15.0" fill="#5c6773" xml:space="preserve">Pull Requests</text>
+<text x="748.8" y="15.0" fill="#323947" xml:space="preserve">›</text>
+<text x="768.0" y="15.0" fill="#39bae6" xml:space="preserve">#217</text>
 <text x="1257.6" y="15.0" fill="#5c6773" xml:space="preserve">gh · live</text>
 <text x="1363.2" y="15.0" fill="#565b66" xml:space="preserve">?  help</text>
 <text x="0.0" y="35.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
@@ -62,8 +62,8 @@
 <text x="345.6" y="75.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="19.2" y="115.0" fill="#7fd962" xml:space="preserve">[ OPEN ]</text>
 <text x="115.2" y="115.0" fill="#4d5566" xml:space="preserve">#217</text>
-<text x="172.8" y="115.0" fill="#4d5566" xml:space="preserve">marasanz · 26m ago</text>
-<text x="364.8" y="115.0" fill="#f07178" xml:space="preserve">✗ failure checks</text>
+<text x="172.8" y="115.0" fill="#4d5566" xml:space="preserve">ada-example · 26m ago</text>
+<text x="393.6" y="115.0" fill="#f07178" xml:space="preserve">✗ failure checks</text>
 <text x="19.2" y="135.0" fill="#e6e1cf" xml:space="preserve">fix(layout): clamp the sidebar to a minimum width</text>
 <text x="19.2" y="155.0" fill="#4d5566" xml:space="preserve">merge fix/sidebar-clamp → main · +12 -3 across 4 files</text>
 <text x="0.0" y="175.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
@@ -127,13 +127,13 @@
 <text x="662.4" y="515.0" fill="#232936" xml:space="preserve">│</text>
 <text x="0.0" y="535.0" fill="#39bae6" xml:space="preserve">▌</text>
 <text x="19.2" y="535.0" fill="#f07178" xml:space="preserve">✗ </text>
-<text x="38.4" y="535.0" fill="#a9b2bf" xml:space="preserve">tsuki </text>
-<text x="96.0" y="535.0" fill="#4d5566" xml:space="preserve">changes requested</text>
+<text x="38.4" y="535.0" fill="#a9b2bf" xml:space="preserve">noa-example </text>
+<text x="153.6" y="535.0" fill="#4d5566" xml:space="preserve">changes requested</text>
 <text x="662.4" y="535.0" fill="#232936" xml:space="preserve">│</text>
 <text x="0.0" y="555.0" fill="#39bae6" xml:space="preserve">▌</text>
 <text x="19.2" y="555.0" fill="#7fd962" xml:space="preserve">✓ </text>
-<text x="38.4" y="555.0" fill="#a9b2bf" xml:space="preserve">kdev </text>
-<text x="86.4" y="555.0" fill="#4d5566" xml:space="preserve">approved</text>
+<text x="38.4" y="555.0" fill="#a9b2bf" xml:space="preserve">rin-example </text>
+<text x="153.6" y="555.0" fill="#4d5566" xml:space="preserve">approved</text>
 <text x="662.4" y="555.0" fill="#232936" xml:space="preserve">│</text>
 <text x="0.0" y="575.0" fill="#39bae6" xml:space="preserve">▌</text>
 <text x="662.4" y="575.0" fill="#232936" xml:space="preserve">│</text>
@@ -146,5 +146,5 @@
 <text x="0.0" y="655.0" fill="#232936" xml:space="preserve">──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</text>
 <text x="9.6" y="675.0" fill="#0b0e14" xml:space="preserve"> PULL </text>
 <text x="86.4" y="675.0" fill="#4d5566" xml:space="preserve">j/k scroll · ^d/^u page · h repos · l checks · esc back · d diff · m merge · c close · D branch</text>
-<text x="1248.0" y="675.0" fill="#5c6773" xml:space="preserve">+0  marasanz/tuikit</text>
+<text x="1219.2" y="675.0" fill="#5c6773" xml:space="preserve">+0  ada-example/tuikit</text>
 </g></svg>

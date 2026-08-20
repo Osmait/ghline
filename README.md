@@ -185,7 +185,7 @@ prompt      = Work on {repo}#{num}: {title}\n\n{url}\n\n---\n\n{context}
 agents      = claude, codex, opencode, pi
 agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
 file-icons  = nerd
-clone-roots = ~/orca, ~/Projects
+clone-roots = ~/code, ~/work
 ```
 
 `t` opens the theme picker and applies as you move through it, so what you are

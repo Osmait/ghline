@@ -76,7 +76,7 @@ const MAX_DIRS: usize = 4000;
 /// The conventional places people keep code, plus the home directory itself.
 /// Whichever do not exist cost one failed `read_dir` each.
 const DEFAULT_ROOTS: &[&str] = &[
-    "src", "code", "Code", "projects", "Projects", "repos", "dev", "git", "work", "orca",
+    "src", "code", "Code", "projects", "Projects", "repos", "dev", "git", "work",
 ];
 
 /// The roots to scan, from config or from convention.

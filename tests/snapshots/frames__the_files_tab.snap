@@ -2,7 +2,7 @@
 source: tests/frames.rs
 expression: "frame(\"4\")"
 ---
- gh  │  ● marasanz (personal) [a]  │  marasanz / tuikit › Files                                                                              gh · live  ?  help 
+ gh  │  ● ada-example (personal) [a]  │  ada-example / tuikit › Files                                                                        gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                   0 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -45,4 +45,4 @@ expression: "frame(\"4\")"
                                           │                                                                                                                     
                                           │                                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  NORMAL   j/k move · o/enter fold · l read · / find · E edit · x send                                                                     0/0  marasanz/tuikit
+  NORMAL   j/k move · o/enter fold · l read · / find · E edit · x send                                                                  0/0  ada-example/tuikit

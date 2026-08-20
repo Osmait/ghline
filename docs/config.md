@@ -17,7 +17,7 @@ prompt-file = Here is a file from {repo}.\n\n{url}\n\n---\n\n{context}
 agents      = claude, codex, opencode, pi
 agent-icons = claude=✳, codex=◆, opencode=◇, pi=π
 file-icons  = nerd
-clone-roots = ~/orca, ~/Projects
+clone-roots = ~/code, ~/work
 ```
 
 One template per kind of subject. The placeholders are `{repo} {num} {title}

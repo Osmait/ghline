@@ -1266,7 +1266,11 @@ mod all_repos {
         assert!(app.is_all(), "the gathering row is selected");
         stamp(&mut app, "someone/elsewhere");
 
-        assert_eq!(app.repo_key(), "marasanz/*", "the list is filed under all");
+        assert_eq!(
+            app.repo_key(),
+            "ada-example/*",
+            "the list is filed under all"
+        );
         assert_eq!(
             app.item_repo_key(),
             "someone/elsewhere",
@@ -1292,15 +1296,15 @@ mod all_repos {
     fn the_filter_reaches_the_repository_a_row_came_from() {
         let mut app = gathered();
         let key = (app.repo_key(), app.tab);
-        stamp(&mut app, "marasanz/haystack");
+        stamp(&mut app, "ada-example/haystack");
         let total = app.visible().len();
         assert!(total > 1, "the fixture needs rows");
 
         // a word that is in no title, only in a repository name
         if let Some(items) = app.lists.get_mut(&key) {
-            items[0].repo = "marasanz/needle".into();
+            items[0].repo = "ada-example/needle".into();
             for it in items.iter_mut().skip(1) {
-                it.repo = "marasanz/haystack".into();
+                it.repo = "ada-example/haystack".into();
             }
         }
         app.filter = "needle".into();
@@ -1398,7 +1402,7 @@ mod dispatch {
         Agent {
             kind: kind.into(),
             status,
-            cwd: format!("/home/x/orca/{kind}-work"),
+            cwd: format!("/home/x/code/{kind}-work"),
             pane: "wA:p1".into(),
             title: "doing something".into(),
             focused,
@@ -1514,7 +1518,7 @@ mod dispatch {
         app.clones_state = Load::Ready;
         if let Some(slug) = slug {
             app.clones
-                .insert(slug.into(), std::path::PathBuf::from("/home/x/orca/thing"));
+                .insert(slug.into(), std::path::PathBuf::from("/home/x/code/thing"));
         }
     }
 
@@ -1580,7 +1584,7 @@ mod dispatch {
         app.dispatch_accept();
 
         let plan = app.pending_fresh.expect("a worktree needs a plan");
-        assert_eq!(plan.repo_root, "/home/x/orca/thing");
+        assert_eq!(plan.repo_root, "/home/x/code/thing");
         assert!(
             plan.branch
                 .as_deref()
@@ -2339,7 +2343,7 @@ mod note {
         app.agents = vec![crate::shared::mux::Agent {
             kind: "claude".into(),
             status: AgentStatus::Idle,
-            cwd: "/home/x/orca/thing".into(),
+            cwd: "/home/x/code/thing".into(),
             pane: "wA:p1".into(),
             title: String::new(),
             focused: false,

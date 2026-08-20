@@ -51,7 +51,7 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
     //
     // Leaving it empty so a failure allocates nothing: 18% slower here, 32%
     // over a list. A query whose *first* character misses is the rare one —
-    // "zzqx" against "marasanz/…" matches its `z` inside "marasanz" and only
+    // "zzqx" against "ada-example/…" matches its `z` inside "ada-example" and only
     // fails on the second — so the push happens on nearly every candidate
     // anyway, and all that changed was that the block arrived through `Vec`'s
     // outlined growth path instead of directly.
@@ -266,7 +266,7 @@ mod tests {
         let n = allocations(|| {
             let _ = std::hint::black_box(score(
                 std::hint::black_box("srn2"),
-                std::hint::black_box("marasanz/some-repository-name-42"),
+                std::hint::black_box("ada-example/some-repository-name-42"),
             ));
         });
         assert_eq!(n, 1);
@@ -278,8 +278,11 @@ mod tests {
         // was handed, so looking at a longer name cost more memory as well as
         // more time. What is left is the positions vector, and how big that
         // is, is the query's business rather than the candidate's.
-        let short = "marasanz/repo-1";
-        let long = format!("marasanz/repo-1{}", "-with-a-much-longer-tail".repeat(40));
+        let short = "ada-example/repo-1";
+        let long = format!(
+            "ada-example/repo-1{}",
+            "-with-a-much-longer-tail".repeat(40)
+        );
         let a = bytes(|| {
             let _ = std::hint::black_box(score(std::hint::black_box("mr1"), short));
         });

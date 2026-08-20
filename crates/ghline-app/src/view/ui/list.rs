@@ -233,7 +233,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     // Two lines per entry, and every x below is one of these columns:
     //
     //     ▌ ⇅ #217   fix(layout): clamp the sidebar [bug]     open  ✗ checks
-    //     ▌          fix/sidebar-clamp · marasanz · +128/-34 · 26m ago
+    //     ▌          fix/sidebar-clamp · ada-example · +128/-34 · 26m ago
     //     │ │ │      │                                        │
     //     0 2 4      11 = text_x                              state_x
     //
