@@ -1,0 +1,79 @@
+# What `curl … | sh` actually does on a machine that has nothing.
+#
+# CI builds and tests the source; the release workflow builds and smoke tests
+# the binaries it uploads. Neither runs the thing the readme puts first, which
+# is a shell script talking to the releases page from a bare machine — and
+# that script is the only part of this project that most people will ever
+# execute. It shipped a bug that installed a glibc binary on musl and reported
+# success; nothing here would have failed.
+#
+# It runs against the published script and the published release, not the
+# working tree, because that is what the readme tells people to run.
+name: Install smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - install.sh
+      - .github/workflows/install-smoke.yml
+
+# Nothing here reads the repository or writes anything back.
+permissions: {}
+
+jobs:
+  installs:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # A platform that fails must not hide the others' results.
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS · Apple Silicon
+            runner: macos-14
+          - name: Linux · x86_64 · glibc
+            runner: ubuntu-22.04
+          - name: Linux · aarch64 · glibc
+            runner: ubuntu-22.04-arm
+    steps:
+      - name: Install the way the readme says to
+        env:
+          REPO: ${{ github.repository }}
+        run: curl -fsSL "https://raw.githubusercontent.com/$REPO/main/install.sh" | sh
+
+      - name: Both binaries are there and start
+        run: |
+          set -eu
+          "$HOME/.local/bin/ghline" --version
+          "$HOME/.local/bin/diffline" --version
+
+      - name: Installing again over the top is not an error
+        env:
+          REPO: ${{ github.repository }}
+        run: curl -fsSL "https://raw.githubusercontent.com/$REPO/main/install.sh" | sh
+
+  refuses_musl:
+    name: Linux · musl · refused
+    runs-on: ubuntu-22.04
+    container: alpine:3.21
+    steps:
+      # Nothing published is musl-linked. The failure this guards against is
+      # not a refusal, it is an *acceptance*: the glibc tarball verifies
+      # against its checksum and installs, and the binary then reports
+      # `not found` naming a file that is plainly there.
+      - name: The installer must refuse, and leave nothing behind
+        shell: sh
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          apk add --no-cache curl
+          if curl -fsSL "https://raw.githubusercontent.com/$REPO/main/install.sh" | sh; then
+            echo "::error::the installer succeeded on musl; it must refuse"
+            exit 1
+          fi
+          if [ -e "$HOME/.local/bin/ghline" ] || [ -e "$HOME/.local/bin/diffline" ]; then
+            echo "::error::the installer refused but installed something anyway"
+            exit 1
+          fi
