@@ -9,7 +9,7 @@ expression: "snapshot::frame(\"\", 88, 24, 0)"
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]      open  ✗ checks  
 ▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                 
   ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]      open  ✓ checks  
-           feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago                    
+           feat/fuzzy-rank · iris-example · +29/-8 · 2 files · 3h ago                   
   ⇅ #212   perf(render): reuse the cell buffer between frames [chore]   open  ✓ checks  
            perf/reuse-buffer · kai-example · +46/-13 · 3 files · 5h ago                 
   ⑂ #211   wip: split the reducer by view [chore]                      draft  ○ checks  
@@ -19,7 +19,7 @@ expression: "snapshot::frame(\"\", 88, 24, 0)"
   ⇅ #207   fix(logs): keep the filter across a job change [bug]         open  ✓ checks  
            fix/log-filter · eli-example · +97/-28 · 2 files · 2d ago                    
   ⇅ #205   feat(diff): word-level highlighting [feature]                open  ◐ checks  
-           feat/word-diff · rin-example · +114/-33 · 3 files · 3d ago                   
+           feat/word-diff · iris-example · +114/-33 · 3 files · 3d ago                  
   ⇅ #202   docs: write down the key map [docs]                          open  ✓ checks  
            docs/keymap · ada-example · +131/-38 · 4 files · 4d ago                      
   ⇅ #199   fix(finder): do not steal the escape key [bug]               open  ✗ checks  

@@ -9,7 +9,7 @@ expression: "frame(\"?\")"
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
 ▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
   ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]                                                                              open  ✓ checks  
-           feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago                                                                                            
+           feat/fuzzy-rank · iris-example · +29/-8 · 2 files · 3h ago                                                                                           
   ⇅ #212   perf(render): reuse the cell ┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✓ checks  
            perf/reuse-buffer · kai-examp│ KEYBINDINGS                                                    esc to close │                                         
   ⑂ #211   wip: split the reducer by vie├─────────────────────────────────────────────────────────────────────────────┤                        draft  ○ checks  
@@ -19,7 +19,7 @@ expression: "frame(\"?\")"
   ⇅ #207   fix(logs): keep the filter ac│         1 2 3  Issues / PRs / Actions           :q  close overlay           │                         open  ✓ checks  
            fix/log-filter · eli-example │         enter  enter the pane              ^d / ^u  half page scroll        │                                         
   ⇅ #205   feat(diff): word-level highli│       esc / q  back one level                    d  diff of the PR files    │                         open  ◐ checks  
-           feat/word-diff · rin-example │             a  switch account                    s  split / unified diff    │                                         
+           feat/word-diff · iris-example│             a  switch account                    s  split / unified diff    │                                         
   ⇅ #202   docs: write down the key map │             t  switch theme                      w  ignore whitespace       │                         open  ✓ checks  
            docs/keymap · ada-example · +│             b  hide / show repos               tab  next pane               │                                         
   ⇅ #199   fix(finder): do not steal the│         [ / ]  previous / next repo              m  merge the pull request  │                         open  ✗ checks  
@@ -27,7 +27,7 @@ expression: "frame(\"?\")"
   ⇅ #196   test: golden frames for the n│             o  expand / collapse job             D  delete the branch       │                         open  ✓ checks  
            test/narrow · noa-example · +│             /  filter (list or log)          y / n  confirm / cancel        │                                         
   ⇅ #193   refactor: move theming out of│             e  jump to first error           click  focus pane, select row  │                         open  ✓ checks  
-           refactor/theme · rin-example │             f  toggle log follow          2x click  open it                 │                                         
+           refactor/theme · iris-example│             f  toggle log follow          2x click  open it                 │                                         
   ⇅ #189   build: pin the toolchain [cho│             r  refresh (fake)                wheel  scroll under pointer    │                       closed  ✓ checks  
            build/pin · ada-example · +19│             :  command line                      4  the repo's files        │                                         
                                         │      :account  account picker                    5  agents running here     │                                         

@@ -51,7 +51,7 @@
 <text x="76.8" y="135.0" fill="#c5cdd9" xml:space="preserve">   feat(finder): rank by subsequence, not prefix </text>
 <text x="547.2" y="135.0" fill="#7fd962" xml:space="preserve">[feature]</text>
 <text x="1286.4" y="135.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="155.0" fill="#4d5566" xml:space="preserve">feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago</text>
+<text x="105.6" y="155.0" fill="#4d5566" xml:space="preserve">feat/fuzzy-rank · iris-example · +29/-8 · 2 files · 3h ago</text>
 <text x="19.2" y="175.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="175.0" fill="#4d5566" xml:space="preserve">#212</text>
 <text x="76.8" y="175.0" fill="#c5cdd9" xml:space="preserve">   perf(render): reuse the cell buffer between frames </text>
@@ -81,7 +81,7 @@
 <text x="76.8" y="335.0" fill="#c5cdd9" xml:space="preserve">   feat(diff): word-level highlighting </text>
 <text x="451.2" y="335.0" fill="#7fd962" xml:space="preserve">[feature]</text>
 <text x="1286.4" y="335.0" fill="#ffb454" xml:space="preserve">open  ◐ checks</text>
-<text x="105.6" y="355.0" fill="#4d5566" xml:space="preserve">feat/word-diff · rin-example · +114/-33 · 3 files · 3d ago</text>
+<text x="105.6" y="355.0" fill="#4d5566" xml:space="preserve">feat/word-diff · iris-example · +114/-33 · 3 files · 3d ago</text>
 <text x="19.2" y="375.0" fill="#7fd962" xml:space="preserve">⇅</text>
 <text x="38.4" y="375.0" fill="#4d5566" xml:space="preserve">#202</text>
 <text x="76.8" y="375.0" fill="#c5cdd9" xml:space="preserve">   docs: write down the key map </text>
@@ -105,7 +105,7 @@
 <text x="76.8" y="495.0" fill="#c5cdd9" xml:space="preserve">   refactor: move theming out of the model </text>
 <text x="489.6" y="495.0" fill="#8b949e" xml:space="preserve">[chore]</text>
 <text x="1286.4" y="495.0" fill="#7fd962" xml:space="preserve">open  ✓ checks</text>
-<text x="105.6" y="515.0" fill="#4d5566" xml:space="preserve">refactor/theme · rin-example · +182/-53 · 3 files · 1w ago</text>
+<text x="105.6" y="515.0" fill="#4d5566" xml:space="preserve">refactor/theme · iris-example · +182/-53 · 3 files · 1w ago</text>
 <text x="19.2" y="535.0" fill="#d2a6ff" xml:space="preserve">⇅</text>
 <text x="38.4" y="535.0" fill="#4d5566" xml:space="preserve">#189</text>
 <text x="76.8" y="535.0" fill="#c5cdd9" xml:space="preserve">   build: pin the toolchain </text>

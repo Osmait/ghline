@@ -9,13 +9,13 @@ expression: "frame(\"1\")"
 ▌ ◉ #410   Panic on resize when the sidebar is narrow [bug]                                                                                               open  
 ▌          eli-example · 0 comments · 2h ago                                                                                                                    
   ◉ #406   Add a fuzzy filter to the repository pane [feature]                                                                                            open  
-           rin-example · 0 comments · 9h ago                                                                                                                    
+           iris-example · 0 comments · 9h ago                                                                                                                   
   ◉ #399   Truecolor fallback is wrong on Apple Terminal [bug]                                                                                            open  
            kai-example · 0 comments · 1d ago                                                                                                                    
   ◉ #395   Document the :account command in the README [docs]                                                                                             open  
            ada-example · 0 comments · 2d ago                                                                                                                    
   ◉ #389   Wrap long labels instead of clipping them [feature]                                                                                            open  
-           rin-example · 0 comments · 3d ago                                                                                                                    
+           iris-example · 0 comments · 3d ago                                                                                                                   
   ⊙ #386   Scrollbar thumb disappears on short lists [bug]                                                                                              closed  
            noa-example · 0 comments · 5d ago                                                                                                                    
                                                                                                                                                                 

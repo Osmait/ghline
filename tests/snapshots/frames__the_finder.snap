@@ -9,7 +9,7 @@ expression: "frame(\"p\")"
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
 ▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
   ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]                                                                              open  ✓ checks  
-           feat/fuzzy-rank · rin-example · +29/-8 · 2 files · 3h ago                                                                                            
+           feat/fuzzy-rank · iris-example · +29/-8 · 2 files · 3h ago                                                                                           
   ⇅ #212   perf(render): reuse t┌──────────────────────────────────────────────────────────────────────────────────────────────┐                open  ✓ checks  
            perf/reuse-buffer · k│ ❯ filter repositories                                                                        │                                
   ⑂ #211   wip: split the reduce├──────────────────────────────────────────────────────────────────────────────────────────────┤               draft  ○ checks  
@@ -19,7 +19,7 @@ expression: "frame(\"p\")"
   ⇅ #207   fix(logs): keep the f│▌   Rust · 7 open issues · 2 open PRs                                                         │                open  ✓ checks  
            fix/log-filter · eli-│  ▪ dotfiles                                                                                  │                                
   ⇅ #205   feat(diff): word-leve│    Shell · 1 open issues · 0 open PRs                                                        │                open  ◐ checks  
-           feat/word-diff · rin-│  ▪ tuikit                                                                                    │                                
+           feat/word-diff · iris│  ▪ tuikit                                                                                    │                                
   ⇅ #202   docs: write down the │    Go · 12 open issues · 4 open PRs                                                          │                open  ✓ checks  
            docs/keymap · ada-exa│  ▪ notes.md                                                                                  │                                
   ⇅ #199   fix(finder): do not s│    Python · 0 open issues · 1 open PRs                                                       │                open  ✗ checks  
@@ -27,7 +27,7 @@ expression: "frame(\"p\")"
   ⇅ #196   test: golden frames f│    Rust · 2 open issues · 0 open PRs                                                         │                open  ✓ checks  
            test/narrow · noa-exa│                                                                                              │                                
   ⇅ #193   refactor: move themin│                                                                                              │                open  ✓ checks  
-           refactor/theme · rin-│                                                                                              │                                
+           refactor/theme · iris│                                                                                              │                                
   ⇅ #189   build: pin the toolch│                                                                                              │              closed  ✓ checks  
            build/pin · ada-examp│                                                                                              │                                
                                 │                                                                                              │                                
