@@ -60,7 +60,8 @@ curl -fsSL https://raw.githubusercontent.com/Osmait/ghline/main/install.sh | sh
 Downloads the release binary for your machine, checks it against the published
 SHA-256, and puts it in `~/.local/bin`. No toolchain, no root, and nothing
 outside the install directory is touched. Apple Silicon Macs and x86_64/aarch64
-Linux are covered; anywhere else builds from source.
+Linux on glibc are covered; musl systems and anywhere else build from source,
+which the script says rather than installing something that will not start.
 
 Piping a script from the internet into a shell is worth being wary of, so read
 it first if you would rather:

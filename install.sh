@@ -38,7 +38,22 @@ detect_target() {
     arch="$(uname -m)"
 
     case "$os" in
-        Linux)  os_part="unknown-linux-gnu" ;;
+        # Every Linux build published so far links glibc. On a musl system —
+        # Alpine, and the images built from it — the glibc tarball installs
+        # cleanly and the script says so, and then the binary will not start:
+        # the kernel reports the missing loader as `not found`, naming the
+        # file you just installed rather than the loader it wanted, which
+        # reads as a corrupt download. Saying no is the honest answer, and
+        # `make install` is a real one.
+        #
+        # Two checks because neither is guaranteed: `ldd` is musl's own on
+        # Alpine but need not exist at all, and the loader is where it is.
+        Linux)
+            if ldd /bin/sh 2>&1 | grep -qi musl || ls /lib/ld-musl-* >/dev/null 2>&1; then
+                die "no prebuilt binary for musl — build from source: https://github.com/$REPO"
+            fi
+            os_part="unknown-linux-gnu"
+            ;;
         Darwin) os_part="apple-darwin" ;;
         *) die "no prebuilt binary for $os — build from source: https://github.com/$REPO" ;;
     esac
