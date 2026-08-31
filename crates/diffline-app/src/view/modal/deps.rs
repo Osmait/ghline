@@ -5,12 +5,14 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::app::App;
+use crate::hit::{Region, Target};
 use crate::tui::theme;
 use crate::tui::{centered_over as centered, frame, put_trunc, rule};
 
-pub(crate) fn deps(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn deps(buf: &mut Buffer, area: Rect, app: &mut App) {
     let m = centered(area, Size::new(86, 14));
     frame(buf, m, theme::cyan());
+    app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
     put_trunc(
         buf,

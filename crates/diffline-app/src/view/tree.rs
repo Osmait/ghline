@@ -38,7 +38,18 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
-    scroll_into_view(&mut app.tree_scroll, app.file_idx, rows, app.files.len());
+    // Snap to the selection only when the selection is what moved. Snapping
+    // on every frame meant the wheel could never leave the selection's
+    // window — three notches down, and the next draw pulled the list back.
+    if app.file_idx != app.tree_seen {
+        scroll_into_view(&mut app.tree_scroll, app.file_idx, rows, app.files.len());
+        app.tree_seen = app.file_idx;
+    } else {
+        // A free scroll still stops where the snap would: at the last window.
+        app.tree_scroll = app
+            .tree_scroll
+            .min(app.files.len().saturating_sub(rows.max(1)));
+    }
     // Directory separators take rows of their own, so a row is not an index
     // here: the loop below records where each file actually landed.
     let mut placed: Vec<(u16, usize)> = Vec::new();

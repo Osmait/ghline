@@ -5,13 +5,18 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::app::App;
+use crate::hit::{Region, Target};
 use crate::tui::theme;
 use crate::tui::{centered_over as centered, fill, frame, put, put_right, put_trunc, rule};
 
-pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &mut App) {
     let anchors = app.selected_anchors();
     let m = centered(area, Size::new(72, 9));
     frame(buf, m, theme::yellow());
+    // Registered so that a click inside the box is a click on the box — a
+    // slip while typing must not fall through, close the editor and throw
+    // the draft away.
+    app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
 
     let head = Rect {

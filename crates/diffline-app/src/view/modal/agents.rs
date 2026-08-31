@@ -5,17 +5,19 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::app::App;
+use crate::hit::{Region, Target};
 use crate::tui::theme;
 use crate::tui::{
     AgentRow, agent_row, centered_over as centered, fill, frame, put, put_right, put_trunc, rule,
 };
 
-pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &mut App) {
     let kinds = app.agent_choices().len() - app.agents.len();
     let rows = app.agents.len() as u16 * 2 + kinds as u16 + 1;
     let h = (rows + 6).min(area.height.saturating_sub(4));
     let m = centered(area, Size::new(76, h.max(7)));
     frame(buf, m, theme::cyan());
+    app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
 
     put(
@@ -66,14 +68,19 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
         // is what you read to tell agents apart, and the refusal is what you
         // read to find out why nothing is happening.
         let refusal = app.refusal(a);
+        let slot = Rect {
+            x: m.x + 1,
+            y,
+            width: m.width - 2,
+            height: 2,
+        };
+        // One region per row, because the two halves of this list disagree
+        // on height — an agent is two rows, a kind below the rule is one.
+        app.hits
+            .push(Region::rows(Target::Modal, slot, 2, i, i + 1));
         agent_row(
             buf,
-            Rect {
-                x: m.x + 1,
-                y,
-                width: m.width - 2,
-                height: 2,
-            },
+            slot,
             &AgentRow {
                 kind: &a.kind,
                 icon: &crate::shared::config::agent_icon(&a.kind),
@@ -110,21 +117,20 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &App) {
         if y >= m.bottom() - 1 {
             break;
         }
+        let slot = Rect {
+            x: m.x + 1,
+            y,
+            width: m.width - 2,
+            height: 1,
+        };
+        app.hits
+            .push(Region::rows(Target::Modal, slot, 1, i, i + 1));
         let bg = if i == app.sel {
             theme::sel()
         } else {
             theme::panel()
         };
-        fill(
-            buf,
-            Rect {
-                x: m.x + 1,
-                y,
-                width: m.width - 2,
-                height: 1,
-            },
-            bg,
-        );
+        fill(buf, slot, bg);
         let s = Style::default().bg(bg);
         if app.new_kind.as_deref() == Some(kind.as_str()) {
             put(buf, m.x + 1, y, m.right(), "▌", s.fg(theme::yellow()));

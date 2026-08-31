@@ -187,7 +187,7 @@ pub enum Button {
 
 /// What the mouse did.
 ///
-/// Three of these are acted on — a left press and the two wheel directions.
+/// A left press, a left drag and the four wheel directions are acted on.
 /// The rest arrive, are recorded by `--log`, and are ignored, which is the
 /// same reason `Moved` is spelt out below.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -197,14 +197,20 @@ pub enum Motion {
     Down(Button),
     /// A button came back up.
     Up(Button),
-    /// Moved with a button held. Nothing here supports a drag — no selection,
-    /// no resize handle — so this is `Up`'s neighbour in being reported only.
+    /// Moved with a button held. What a drag means is each program's to
+    /// decide — diffline sweeps a selection with it; ghline ignores it.
     Drag(Button),
     /// One wheel notch away from the reader. Each program decides how many
     /// rows a notch is worth; the event carries no magnitude.
     ScrollUp,
     /// One wheel notch towards the reader.
     ScrollDown,
+    /// One horizontal notch towards the start of the line — a trackpad pan,
+    /// on terminals that report one. Dropped as `Moved` until it was needed,
+    /// which read as "we chose not to" and meant "there was nothing to pan".
+    ScrollLeft,
+    /// The same, towards the end of the line.
+    ScrollRight,
     /// The pointer moved with nothing pressed. Nothing here follows a
     /// pointer, so this exists to be ignored — but it is named rather than
     /// dropped silently, because "we chose not to" and "we forgot" look the
