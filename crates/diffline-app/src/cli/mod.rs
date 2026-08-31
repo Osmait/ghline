@@ -92,6 +92,7 @@ fn definition() -> Cli<Id> {
         )
         .after_help(
             "[s ]s  working tree · this branch · the last commit\n\
+             ␣l     the commit history — review any commit\n\
              V ␣n   select a range, note on it\n\
              ␣a ␣s  pick an agent, send the queue\n\
              ␣?     everything else · ␣ is the leader",

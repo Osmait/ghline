@@ -10,7 +10,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use crate::shared::worker::{Gone, Worker};
 use std::thread;
 
-use crate::model::{ChangedFile, Row, Scope};
+use crate::model::{ChangedFile, LogEntry, Row, Scope};
 use crate::shared::error::{Error, Result as Res};
 use crate::shared::mux::Agent;
 
@@ -39,6 +39,8 @@ pub enum Request {
     },
     /// Who last touched each line.
     Blame { repo: String, path: String },
+    /// The recent commits, for the history picker.
+    Log { repo: String },
     /// The coding agents on this machine.
     Agents,
     /// Hand the queue to one of them.
@@ -82,6 +84,7 @@ pub enum Response {
         path: String,
         result: Res<Vec<String>>,
     },
+    Log(Res<Vec<LogEntry>>),
     Agents(Res<Vec<Agent>>),
     Sent(Res<()>),
     /// What the write did, in words, for the status bar.
@@ -227,6 +230,11 @@ fn handle(req: Request) -> Response {
             },
             path,
         },
+
+        // Two hundred: a picker, not an archaeology tool. Deep history is
+        // what `git log` in a shell is for; this list exists to reach the
+        // commit you can already half-remember.
+        Request::Log { repo } => Response::Log(vcs(&repo).log(&repo, 200)),
 
         Request::Agents => Response::Agents(crate::shared::mux::current().agents()),
 

@@ -7,7 +7,7 @@
 
 use std::process::Command;
 
-use crate::model::{ChangedFile, Kind, Row, Scope, Status};
+use crate::model::{ChangedFile, Kind, LogEntry, Row, Scope, Status};
 use crate::shared::error::{Error, Result as Res};
 
 /// Runs git in `repo` and returns its stdout.
@@ -67,6 +67,10 @@ impl crate::vcs::Vcs for Git {
         file_diff(repo, scope, path, context)
     }
 
+    fn log(&self, repo: &str, limit: usize) -> Res<Vec<LogEntry>> {
+        log(repo, limit)
+    }
+
     // `git blame` is exactly this question, which is why the trait has it at
     // all — a backend that could not answer would say so here instead.
     fn has_blame(&self) -> bool {
@@ -101,6 +105,36 @@ pub fn base_branch(repo: &str) -> String {
     "main".into()
 }
 
+/// What git calls a tree with nothing in it, under the sha1 object format.
+///
+/// The fallback when the repository cannot be asked for its own — see
+/// `selectors`.
+const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/// The `git diff` endpoints for a scope, patched against the repository.
+///
+/// `Scope::args` spells a commit as `sha^ sha` and cannot do better: whether
+/// `sha^` exists is a fact about the repository, and the model has no process
+/// to ask. A root commit has no parent, so its endpoint becomes the empty
+/// tree — asked of the repository rather than hardcoded, because a checkout
+/// on the sha256 object format names it differently.
+fn selectors(repo: &str, scope: &Scope) -> Vec<String> {
+    let mut sel = scope.args();
+    if let Scope::Commit { sha } = scope
+        && run(
+            repo,
+            &["rev-parse", "--verify", "--quiet", &format!("{sha}^")],
+        )
+        .is_err()
+        && let Some(parent) = sel.first_mut()
+    {
+        *parent = run(repo, &["hash-object", "-t", "tree", "/dev/null"])
+            .map(|out| out.trim().to_string())
+            .unwrap_or_else(|_| EMPTY_TREE.into());
+    }
+    sel
+}
+
 /// The files a scope touches, with their counts.
 ///
 /// Two calls rather than one: `--numstat` has the counts and `--name-status`
@@ -108,7 +142,7 @@ pub fn base_branch(repo: &str) -> String {
 /// on the path, which is the only thing they agree on.
 pub fn changed_files(repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
     // bound first: the Vec<String> has to outlive the borrows taken from it
-    let owned = scope.args();
+    let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
 
     let mut args = vec!["diff", "--numstat", "--no-color"];
@@ -159,10 +193,38 @@ fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
         .collect()
 }
 
+/// The last `limit` commits reaching the checkout, newest first.
+///
+/// The fields are separated by `%x1f` — the unit separator — because a
+/// subject is free text and could hold any printable delimiter this might
+/// have chosen instead. A control character cannot be typed into a commit
+/// message by accident.
+pub fn log(repo: &str, limit: usize) -> Res<Vec<LogEntry>> {
+    let cap = format!("--max-count={limit}");
+    let out = run(repo, &["log", &cap, "--format=%H%x1f%s%x1f%an%x1f%at"])?;
+    Ok(parse_log(&out))
+}
+
+/// One `LogEntry` per well-formed line; anything short is dropped rather
+/// than guessed at.
+fn parse_log(text: &str) -> Vec<LogEntry> {
+    text.lines()
+        .filter_map(|line| {
+            let mut parts = line.split('\u{1f}');
+            Some(LogEntry {
+                sha: parts.next()?.to_string(),
+                subject: parts.next()?.to_string(),
+                author: parts.next()?.to_string(),
+                when: parts.next()?.trim().parse().ok()?,
+            })
+        })
+        .collect()
+}
+
 /// One file's diff, at `context` lines either side.
 pub fn file_diff(repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>> {
     let unified = format!("-U{context}");
-    let owned = scope.args();
+    let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
 
     let mut args = vec!["diff", "--no-color", &unified];
@@ -689,6 +751,101 @@ filename src/a.rs
         let files = changed_files(r.path(), &Scope::Commit { sha }).unwrap();
         let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, vec!["b.txt"], "not the commit before it");
+    }
+
+    #[test]
+    fn the_log_lists_commits_newest_first() {
+        let r = Repo::new("log");
+        r.write("a.txt", "one\n");
+        r.commit("first");
+        r.write("b.txt", "two\n");
+        r.commit("second");
+
+        let entries = log(r.path(), 10).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].subject, "second", "newest at the top");
+        assert_eq!(entries[1].subject, "first");
+        assert_eq!(entries[0].author, "Tester");
+        assert!(entries[0].when > 0, "the age has something to count from");
+        assert_eq!(entries[0].sha.len(), 40, "a full sha, shortened on show");
+    }
+
+    #[test]
+    fn the_log_stops_at_its_limit() {
+        let r = Repo::new("log-limit");
+        for i in 0..5 {
+            r.write("a.txt", &format!("{i}\n"));
+            r.commit(&format!("commit {i}"));
+        }
+        assert_eq!(log(r.path(), 3).unwrap().len(), 3);
+    }
+
+    #[test]
+    fn a_picked_older_commit_shows_its_own_changes() {
+        // The history picker turns any entry into `Scope::Commit`, so the
+        // sha^! selection has to hold for commits other than HEAD — including
+        // the root commit, which has no parent to diff against.
+        let r = Repo::new("older");
+        r.write("a.txt", "one\n");
+        r.commit("first");
+        r.write("b.txt", "two\n");
+        r.commit("second");
+
+        let entries = log(r.path(), 10).unwrap();
+        let root = entries.last().unwrap().sha.clone();
+
+        let files = changed_files(r.path(), &Scope::Commit { sha: root }).unwrap();
+        assert_eq!(
+            files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(),
+            vec!["a.txt"],
+            "the root commit diffs against nothing"
+        );
+        assert_eq!(files[0].status, Status::Added);
+    }
+
+    #[test]
+    fn a_merge_commit_shows_what_the_merge_brought_in() {
+        // Against its first parent — the mainline — which is the one answer
+        // `sha^ sha` gives where `sha^!` had none for a merge.
+        let r = Repo::new("merge");
+        r.write("a.txt", "start\n");
+        r.commit("first");
+        r.git(&["checkout", "-q", "-b", "feature"]);
+        r.write("f.txt", "feature work\n");
+        r.commit("feature");
+        r.git(&["checkout", "-q", "main"]);
+        r.write("m.txt", "main work\n");
+        r.commit("mainline");
+        r.git(&["merge", "-q", "--no-ff", "-m", "merge feature", "feature"]);
+
+        let sha = r.git(&["rev-parse", "HEAD"]).trim().to_string();
+        let files = changed_files(r.path(), &Scope::Commit { sha }).unwrap();
+        assert_eq!(
+            files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(),
+            vec!["f.txt"],
+            "what landed on the mainline, not the mainline itself"
+        );
+    }
+
+    #[test]
+    fn a_log_line_missing_a_field_is_dropped_rather_than_guessed() {
+        let sep = '\u{1f}';
+        let text = format!(
+            "aaaa{sep}fix the thing{sep}Maria{sep}1700000000\nbroken line\nbbbb{sep}two fields only\n"
+        );
+        let entries = parse_log(&text);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].subject, "fix the thing");
+        assert_eq!(entries[0].when, 1_700_000_000);
+    }
+
+    #[test]
+    fn a_subject_with_the_field_glyphs_of_other_formats_survives() {
+        // `%x1f` was chosen over any printable separator for exactly this.
+        let sep = '\u{1f}';
+        let text = format!("cccc{sep}fix: a | b\ttab · dot{sep}Luis{sep}1700000000\n");
+        let entries = parse_log(&text);
+        assert_eq!(entries[0].subject, "fix: a | b\ttab · dot");
     }
 
     #[test]

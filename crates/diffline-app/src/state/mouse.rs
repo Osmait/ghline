@@ -728,6 +728,52 @@ mod tests {
     }
 
     #[test]
+    fn a_double_click_in_the_history_reviews_that_commit() {
+        let mut a = app();
+        with_rows(&mut a, 4);
+        a.modal = Some(Modal::History);
+        a.log_state = crate::app::Load::Ready;
+        a.log = vec![
+            crate::model::LogEntry {
+                sha: "b".repeat(40),
+                subject: "newer".into(),
+                author: "Maria".into(),
+                when: 1_700_000_000,
+            },
+            crate::model::LogEntry {
+                sha: "a".repeat(40),
+                subject: "older".into(),
+                author: "Luis".into(),
+                when: 1_600_000_000,
+            },
+        ];
+        draw_wide(&mut a);
+
+        let list = a
+            .hits
+            .iter()
+            .rev()
+            .find(|r| r.target == Target::Modal && r.len > 0)
+            .copied()
+            .expect("the history records its rows");
+        let (x, y) = (list.area.x + 4, list.area.y + 1);
+        let now = Instant::now();
+        a.on_mouse_at(ev(Motion::Down(Button::Left), x, y), now);
+        assert_eq!(a.sel, 1, "one click chooses");
+        assert_eq!(a.modal, Some(Modal::History));
+
+        a.on_mouse_at(ev(Motion::Down(Button::Left), x, y), now);
+        assert_eq!(a.modal, None);
+        assert_eq!(
+            a.scope,
+            crate::model::Scope::Commit {
+                sha: "a".repeat(40)
+            },
+            "the second click reviews it"
+        );
+    }
+
+    #[test]
     fn the_wheel_walks_a_modal_list_and_the_frame_around_it_does_not_reset_it() {
         // The finder rather than the theme picker, deliberately: walking the
         // themes repaints the process-wide palette, and a parallel test that

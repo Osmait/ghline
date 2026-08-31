@@ -109,6 +109,8 @@ pub enum Modal {
     Comment,
     /// Which agent gets the queue.
     Agents,
+    /// The commit history; picking an entry reviews that commit.
+    History,
     /// What else imports the file being read.
     Deps,
     Help,
@@ -159,6 +161,9 @@ pub struct App {
     // --- what is being reviewed ---
     pub scope: Scope,
     pub scopes: Vec<Scope>,
+    /// The recent commits, fetched when the history picker opens.
+    pub log: Vec<crate::model::LogEntry>,
+    pub log_state: Load,
     pub files: Vec<ChangedFile>,
     pub files_state: Load,
     pub file_idx: usize,
@@ -273,6 +278,8 @@ impl App {
             refresh_again: false,
             scope,
             scopes,
+            log: Vec::new(),
+            log_state: Load::Idle,
             files: Vec::new(),
             files_state: Load::Idle,
             file_idx: 0,
@@ -542,6 +549,7 @@ impl App {
             || self.refreshing
             || self.files_state.is_loading()
             || self.agents_state.is_loading()
+            || self.log_state.is_loading()
             || self.rows_state.values().any(Load::is_loading)
             || self.blame_state.values().any(Load::is_loading)
     }
@@ -620,6 +628,19 @@ impl App {
             self.agents_state = Load::Loading;
             if !self.ask(Request::Agents) {
                 self.agents_state = Self::gone();
+            }
+        }
+
+        // The history is asked for only while its picker is up, and afresh on
+        // each opening: a commit made while diffline was running belongs in
+        // the list, and two hundred subjects are not worth fetching for a
+        // session that never asks.
+        if self.modal == Some(Modal::History) && self.log_state == Load::Idle {
+            self.log_state = Load::Loading;
+            if !self.ask(Request::Log {
+                repo: self.repo.clone(),
+            }) {
+                self.log_state = Self::gone();
             }
         }
     }
@@ -750,6 +771,28 @@ impl App {
                 Err(e) => {
                     self.blame_state
                         .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
+                }
+            },
+
+            Response::Log(result) => match result {
+                Ok(entries) => {
+                    self.log = entries;
+                    self.log_state = Load::Ready;
+                    // Land on the commit already under review, when it is one:
+                    // the picker opens as "where am I", not only "where next".
+                    // Only while the picker is still up with nothing typed —
+                    // an answer landing late must not move someone else's
+                    // selection, and a filtered list is in its own order.
+                    if self.modal == Some(Modal::History)
+                        && self.query.is_empty()
+                        && let Scope::Commit { sha } = &self.scope
+                        && let Some(i) = self.log.iter().position(|c| c.sha == *sha)
+                    {
+                        self.sel = i;
+                    }
+                }
+                Err(e) => {
+                    self.log_state = Load::Failed(Arc::new(Failure::Ran(e)));
                 }
             },
 

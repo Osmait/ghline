@@ -19,7 +19,7 @@
 //! whether it can — the same shape as `Multiplexer::detects_status`, and for
 //! the same reason: not knowing is not the same as knowing there is nobody.
 
-use crate::model::{ChangedFile, Row, Scope};
+use crate::model::{ChangedFile, LogEntry, Row, Scope};
 use crate::shared::error::Result as Res;
 
 /// Something that can be asked what changed.
@@ -49,6 +49,13 @@ pub trait Vcs: Sync + 'static {
 
     /// One file's diff, at `context` lines either side, as rows.
     fn file_diff(&self, repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>>;
+
+    /// The last `limit` commits reaching the checkout, newest first.
+    ///
+    /// Required rather than provided: a version control system without
+    /// history is not one, so an empty default would only hide a backend
+    /// that forgot to answer.
+    fn log(&self, repo: &str, limit: usize) -> Res<Vec<LogEntry>>;
 
     // --- provided ---
 
@@ -112,13 +119,16 @@ mod tests {
         fn file_diff(&self, _r: &str, _s: &Scope, _p: &str, _c: u32) -> Res<Vec<Row>> {
             Ok(Vec::new())
         }
+        fn log(&self, _repo: &str, _limit: usize) -> Res<Vec<LogEntry>> {
+            Ok(Vec::new())
+        }
         fn has_blame(&self) -> bool {
             false
         }
     }
 
     #[test]
-    fn a_backend_needs_six_methods_and_no_more() {
+    fn a_backend_needs_seven_methods_and_no_more() {
         // `NoBlame` above is everything a second backend has to write. If
         // adding one ever needs more than this, the file stops compiling.
         let v = NoBlame;
