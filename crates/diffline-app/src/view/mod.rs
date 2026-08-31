@@ -23,6 +23,7 @@ mod modal {
     pub(crate) mod deps;
     pub(crate) mod finder;
     pub(crate) mod help;
+    pub(crate) mod history;
     pub(crate) mod palette;
     pub(crate) mod themes;
 }
@@ -152,6 +153,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         Some(Modal::Palette) => modal::palette::palette(buf, area, app),
         Some(Modal::Comment) => modal::comment::comment(buf, area, app),
         Some(Modal::Agents) => modal::agents::agents(buf, area, app),
+        Some(Modal::History) => modal::history::history(buf, area, app),
         Some(Modal::Themes) => modal::themes::themes(buf, area, app),
         Some(Modal::Deps) => modal::deps::deps(buf, area, app),
         Some(Modal::Help) => modal::help::help(buf, area, app),

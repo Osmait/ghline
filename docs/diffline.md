@@ -10,7 +10,7 @@ diffline ~/project  # or one you point it at
 
 Three panes: what changed, the diff itself, and a queue of notes anchored to
 lines. `[s` and `]s` step the scope through the working tree, this branch, and
-the last commit.
+a commit — the last one to begin with, and any other via `␣l`, the history.
 
 It is modal and vim-shaped: `j`/`k`, `gg`/`G`, `/` to search, `v`/`V` for a
 selection, and the commands behind a leader, which is space.
@@ -52,6 +52,19 @@ Where the message can go, and what happens if the agent will not take it, is
 diffline follows the working tree without being restarted: a file saved in your
 editor shows up in the review. Native filesystem events rather than polling, so
 an idle repository costs nothing.
+
+## The history
+
+`␣l` lists the recent commits — subject, author, age — and typing filters
+them by any of those or by the short sha. Picking one retargets the commit
+tab at it: the tree shows the files that commit touched, the diff pane shows
+its changes against its first parent, and everything else — split view,
+context, notes, sending the queue — works there unchanged. The commit under
+review carries a dot in the list, so the picker also answers "where am I".
+
+A root commit is shown against nothing, which is to say all of it, and a
+merge against its first parent: what landed on the mainline, not the
+mainline itself.
 
 ## The mouse
 

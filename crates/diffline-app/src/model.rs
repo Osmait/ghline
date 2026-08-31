@@ -47,7 +47,12 @@ impl Scope {
             // Three dots: the changes this branch made, not the ones base made
             // while we were away. Two dots would blame us for both.
             Self::Branch { base } => vec![format!("{base}...HEAD")],
-            Self::Commit { sha } => vec![format!("{sha}^!")],
+            // First parent against the commit, spelt as two endpoints. The
+            // shorthand `sha^!` was a trap: on a root commit git does not
+            // fail, it quietly diffs against the working tree instead. A
+            // root's missing parent still needs patching, but that takes
+            // asking the repository — the git backend does it.
+            Self::Commit { sha } => vec![format!("{sha}^"), sha.clone()],
         }
     }
 }
@@ -61,6 +66,28 @@ fn short(sha: &str) -> &str {
     match sha.char_indices().nth(7) {
         Some((i, _)) => &sha[..i],
         None => sha,
+    }
+}
+
+/// One commit of the history: enough to choose it, not the commit itself.
+///
+/// The changes stay behind `Scope::Commit` — picking an entry builds one, and
+/// everything the program already knows about a scope then applies to it.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LogEntry {
+    pub sha: String,
+    /// The first line of the message, which is the line written to be listed.
+    pub subject: String,
+    pub author: String,
+    /// Seconds since the epoch, kept raw so the age is computed when it is
+    /// shown rather than frozen at fetch time.
+    pub when: i64,
+}
+
+impl LogEntry {
+    /// The seven characters a hand types, safe on any string a caller sent.
+    pub fn short(&self) -> &str {
+        short(&self.sha)
     }
 }
 
@@ -329,11 +356,14 @@ mod tests {
     }
 
     #[test]
-    fn a_commit_scope_asks_for_that_commit_alone() {
+    fn a_commit_scope_asks_for_that_commit_against_its_first_parent() {
+        // Two endpoints rather than `^!`: the shorthand quietly diffed a
+        // root commit against the working tree, and on a merge it had no
+        // one answer at all.
         let s = Scope::Commit {
             sha: "c81d4a9f00".into(),
         };
-        assert_eq!(s.args(), vec!["c81d4a9f00^!"]);
+        assert_eq!(s.args(), vec!["c81d4a9f00^", "c81d4a9f00"]);
         assert_eq!(s.to_string(), "commit c81d4a9", "shortened for the header");
     }
 

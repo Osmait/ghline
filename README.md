@@ -171,7 +171,7 @@ tables are in [docs/ghline.md](docs/ghline.md#keys) and
 | | |
 | --- | --- |
 | [docs/ghline.md](docs/ghline.md) | panes and where each one comes from, navigation, the file explorer, the diff, the pull request flow, the finder, the mouse, the full keymap |
-| [docs/diffline.md](docs/diffline.md) | scopes, how a comment is anchored, the queue, the mouse, rebinding keys |
+| [docs/diffline.md](docs/diffline.md) | scopes, how a comment is anchored, the queue, the commit history, the mouse, rebinding keys |
 | [docs/agents.md](docs/agents.md) | what travels for each kind of subject, the three destinations, prompt templates, how a checkout is found |
 | [docs/config.md](docs/config.md) | `~/.config/ghline/config`, prompt templates, icons, themes and writing your own |
 | [docs/development.md](docs/development.md) | layering, tests and golden frames, benchmarks, terminal-free renders, session recording |

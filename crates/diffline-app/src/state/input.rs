@@ -4,7 +4,7 @@ use crate::shared::key::{Key, Press};
 
 use crate::app::{App, FinderTab, Hit, Load, Modal, Pane, Pending, first_code};
 use crate::keys::{self, Action};
-use crate::model::{Comment, Kind, State};
+use crate::model::{Comment, Kind, Scope, State};
 use crate::service::{Request, Write};
 use crate::shared::nav::{Dir, Place};
 
@@ -29,6 +29,7 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("pick agent", "␣a"),
     ("send queue to agent", "␣s"),
     ("clear queue", ""),
+    ("commit history", "␣l"),
     ("next scope", "]s"),
     ("prev scope", "[s"),
     ("split view", "␣v"),
@@ -485,6 +486,55 @@ impl App {
         self.flash(name);
     }
 
+    /// What choosing a commit from the history means: the review becomes a
+    /// review of that commit.
+    ///
+    /// The commit tab is retargeted rather than a fourth tab grown per pick:
+    /// the tabs are the places a review can stand — the tree, the branch, a
+    /// commit — and `[s`/`]s` should keep walking three of them, not a trail
+    /// of everywhere the history has been.
+    pub fn pick_commit(&mut self, sha: String) {
+        let scope = Scope::Commit { sha };
+        if let Some(slot) = self
+            .scopes
+            .iter_mut()
+            .find(|s| matches!(s, Scope::Commit { .. }))
+        {
+            *slot = scope.clone();
+        } else {
+            self.scopes.push(scope.clone());
+        }
+        self.scope = scope;
+        self.refresh();
+    }
+
+    /// `␣l`: the commit history, as a picker over `Scope::Commit`.
+    pub fn open_history(&mut self) {
+        // Asked for afresh on every opening — see `ensure` — because a commit
+        // made while diffline was running belongs in the list.
+        self.log_state = Load::Idle;
+        self.modal = Some(Modal::History);
+        self.query.clear();
+        self.sel = 0;
+    }
+
+    /// The history, ranked against the query — over the subject, the author
+    /// and the short sha at once, because "the fix Maria made" and "a1b2c3d"
+    /// are both how a commit is remembered.
+    ///
+    /// Indices into `log`, so the view and the accept read the same list.
+    pub fn history_hits(&self) -> Vec<usize> {
+        let hay: Vec<String> = self
+            .log
+            .iter()
+            .map(|c| format!("{} {} {}", c.subject, c.author, c.short()))
+            .collect();
+        crate::shared::fuzzy::rank(&self.query, &hay, |s| s.as_str())
+            .into_iter()
+            .map(|(i, _)| i)
+            .collect()
+    }
+
     /// `[` / `]`: working tree, this branch, the last commit.
     pub fn step_scope(&mut self, d: i64) {
         if self.scopes.is_empty() {
@@ -864,6 +914,7 @@ impl App {
                 self.queue_sel = 0;
                 self.flash("queue cleared");
             }
+            "commit history" => self.open_history(),
             "next scope" => self.step_scope(1),
             "prev scope" => self.step_scope(-1),
             "pick a theme" => self.open_themes(),
@@ -1109,6 +1160,7 @@ impl App {
             Action::TreePane => self.toggle_pane(Pane::Tree),
             Action::QueuePane => self.toggle_pane(Pane::Queue),
             Action::CodePane => self.pane = Pane::Diff,
+            Action::History => self.open_history(),
             Action::Note => self.open_comment(),
             Action::DeleteNote => self.delete_comment(),
             Action::Agents => self.open_agents(),
@@ -1169,6 +1221,7 @@ impl App {
             Modal::Agents => self.agent_choices().len(),
             Modal::Themes => crate::tui::theme::Theme::all().len(),
             Modal::Palette => self.palette_hits().len(),
+            Modal::History => self.history_hits().len(),
             _ => self.hits().len(),
         };
         let last = len.saturating_sub(1);
@@ -1251,6 +1304,16 @@ impl App {
     fn accept(&mut self, m: Modal) {
         match m {
             Modal::Finder => self.take_hit(),
+            Modal::History => {
+                let hits = self.history_hits();
+                if let Some(commit) = hits.get(self.sel).and_then(|i| self.log.get(*i)).cloned() {
+                    let said = format!("commit {} · {}", commit.short(), commit.subject);
+                    self.pick_commit(commit.sha);
+                    self.flash(said);
+                }
+                self.modal = None;
+                self.query.clear();
+            }
             Modal::Palette => {
                 let hits = self.palette_hits();
                 if let Some(label) = hits.get(self.sel).cloned() {
@@ -2228,6 +2291,118 @@ mod tests {
         assert!(!a.busy, "nothing was sent");
         assert!(a.toast.contains("working"), "{}", a.toast);
         assert_eq!(a.comments[0].state, State::Queued, "and it stayed queued");
+    }
+
+    // --- the history ---
+
+    fn commit(fill: char, subject: &str, author: &str) -> crate::model::LogEntry {
+        crate::model::LogEntry {
+            sha: fill.to_string().repeat(40),
+            subject: subject.into(),
+            author: author.into(),
+            when: 1_700_000_000,
+        }
+    }
+
+    #[test]
+    fn the_history_opens_filters_and_reviews_a_commit() {
+        use crate::service::{Request, Response};
+        use crate::shared::worker::Immediate;
+
+        let mut a = app();
+        a.service = Some(Box::new(Immediate::new(|req| match req {
+            Request::Log { .. } => Response::Log(Ok(vec![
+                commit('b', "newer thing", "Maria"),
+                commit('a', "fix the parser", "Luis"),
+            ])),
+            _ => Response::Sent(Ok(())),
+        })));
+
+        leader(&mut a, 'l');
+        assert_eq!(a.modal, Some(Modal::History));
+        a.ensure();
+        while let Some(r) = a.poll() {
+            a.apply(r);
+        }
+        assert_eq!(a.log.len(), 2, "opening asked for the log");
+
+        typed(&mut a, "parser");
+        assert_eq!(a.history_hits().len(), 1, "the query narrowed the list");
+        press(&mut a, Key::Enter);
+
+        assert_eq!(a.modal, None);
+        assert_eq!(
+            a.scope,
+            Scope::Commit {
+                sha: "a".repeat(40)
+            },
+            "the review is now of that commit"
+        );
+        assert_eq!(a.files_state, Load::Idle, "and its files were asked for");
+        assert!(a.toast.contains("fix the parser"), "{}", a.toast);
+    }
+
+    #[test]
+    fn the_history_searches_author_and_sha_too() {
+        let mut a = app();
+        a.log = vec![
+            commit('b', "one thing", "Maria Okonkwo"),
+            commit('a', "another", "Luis Serrano"),
+        ];
+        a.query = "maria".into();
+        assert_eq!(a.history_hits(), vec![0]);
+        a.query = "aaaaaaa".into();
+        assert_eq!(a.history_hits(), vec![1], "the short sha is searchable");
+    }
+
+    #[test]
+    fn picking_again_retargets_the_commit_tab_rather_than_growing_one() {
+        // `[s`/`]s` walk the places a review can stand; a trail of every
+        // commit ever visited would make the cycle unbounded.
+        let mut a = app();
+        a.scopes.push(Scope::Commit { sha: "HEAD".into() });
+        a.pick_commit("a".repeat(40));
+        a.pick_commit("b".repeat(40));
+
+        let commits = a
+            .scopes
+            .iter()
+            .filter(|s| matches!(s, Scope::Commit { .. }))
+            .count();
+        assert_eq!(commits, 1, "one commit tab, retargeted");
+        assert_eq!(
+            a.scope,
+            Scope::Commit {
+                sha: "b".repeat(40)
+            }
+        );
+    }
+
+    #[test]
+    fn a_repository_opened_without_a_commit_tab_still_gains_one() {
+        let mut a = app();
+        assert!(!a.scopes.iter().any(|s| matches!(s, Scope::Commit { .. })));
+        a.pick_commit("a".repeat(40));
+        assert!(
+            a.scopes.contains(&a.scope),
+            "the tab exists to come back to"
+        );
+    }
+
+    #[test]
+    fn the_history_lands_on_the_commit_already_under_review() {
+        use crate::service::Response;
+        let mut a = app();
+        a.scope = Scope::Commit {
+            sha: "b".repeat(40),
+        };
+        a.open_history();
+        a.apply(Response::Log(Ok(vec![
+            commit('c', "newest", "x"),
+            commit('b', "current", "x"),
+            commit('a', "oldest", "x"),
+        ])));
+        assert_eq!(a.sel, 1, "the cursor starts where the dot is");
     }
 
     // --- modals ---
