@@ -163,6 +163,10 @@ pub struct App {
     pub files_state: Load,
     pub file_idx: usize,
     pub tree_scroll: usize,
+    /// The selection the tree last drew. The renderer snaps the tree's scroll
+    /// to the selection only when this has changed — that is what lets the
+    /// wheel read the whole list without every frame dragging it back.
+    pub tree_seen: usize,
 
     // --- the diff ---
     /// Rows keyed by path, so stepping between files does not re-fetch.
@@ -182,6 +186,9 @@ pub struct App {
     // --- the queue ---
     pub comments: Vec<Comment>,
     pub queue_sel: usize,
+    /// First card the queue pane shows; the renderer keeps `queue_sel` inside
+    /// the window, the way every other list here scrolls.
+    pub queue_scroll: usize,
     pub replies: Vec<String>,
     pub agents: Vec<Agent>,
     pub agents_state: Load,
@@ -240,6 +247,9 @@ pub struct App {
     /// newest-first, which is what makes a modal shadow the panes under it
     /// without anything having to say so.
     pub hits: Vec<crate::hit::Region>,
+    /// The last click, kept just long enough to recognise the second half of
+    /// a double click.
+    pub last_click: Option<(ratatui::layout::Position, std::time::Instant)>,
 }
 
 impl App {
@@ -267,6 +277,7 @@ impl App {
             files_state: Load::Idle,
             file_idx: 0,
             tree_scroll: 0,
+            tree_seen: 0,
             rows: HashMap::new(),
             spans: HashMap::new(),
             rows_state: HashMap::new(),
@@ -279,6 +290,7 @@ impl App {
             blame_state: HashMap::new(),
             comments: Vec::new(),
             queue_sel: 0,
+            queue_scroll: 0,
             replies: Vec::new(),
             agents: Vec::new(),
             agents_state: Load::Idle,
@@ -308,6 +320,7 @@ impl App {
             last_search: String::new(),
             view_height: 20,
             hits: Vec::new(),
+            last_click: None,
         }
     }
 

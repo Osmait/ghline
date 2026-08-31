@@ -257,8 +257,13 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
     scroll_into_view(&mut app.diff_scroll, at, height, pairs.len());
     let scroll = app.diff_scroll;
 
-    // Shared borrows from here, so nothing is copied.
-    let app = &*app;
+    // Where each drawn half landed, recorded once the shared borrows below
+    // let go. A half, not a line: the left half of a line is the old row and
+    // the right half the new one — the same reading as the gutters — so a
+    // click has to know which side it struck.
+    let mut placed: Vec<(Rect, usize)> = Vec::new();
+    // Everything mutable is done with until the regions go in at the bottom;
+    // from here the borrows are shared and nothing is copied.
     let rows = app.diff_rows();
     let (lo, hi) = app.span();
     let visual = app.visual();
@@ -280,16 +285,14 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
 
         if let Some(i) = pair.header {
             let row = &rows[i];
-            fill(
-                buf,
-                Rect {
-                    x: body.x,
-                    y,
-                    width: body.width,
-                    height: 1,
-                },
-                theme::panel(),
-            );
+            let line = Rect {
+                x: body.x,
+                y,
+                width: body.width,
+                height: 1,
+            };
+            placed.push((line, i));
+            fill(buf, line, theme::panel());
             put_trunc(
                 buf,
                 body.x + 1,
@@ -320,6 +323,15 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
                 );
                 continue;
             };
+            placed.push((
+                Rect {
+                    x: at_x,
+                    y,
+                    width,
+                    height: 1,
+                },
+                i,
+            ));
             let row = &rows[i];
             let on_cursor = i == app.cursor;
             let in_sel = visual && i >= lo && i <= hi;
@@ -393,6 +405,13 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
                 },
             );
         }
+    }
+
+    // One region per half, so a click reads through the pairing the same way
+    // the unified pane's one region reads through its scroll.
+    for (slot, i) in placed {
+        app.hits
+            .push(Region::rows(Target::Pane(Pane::Diff), slot, 1, i, i + 1));
     }
 }
 

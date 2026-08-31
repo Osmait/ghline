@@ -124,6 +124,8 @@ pub fn mouse(m: Mouse) {
         Motion::Drag(b) => format!("drag {b:?}"),
         Motion::ScrollUp => "scroll up".into(),
         Motion::ScrollDown => "scroll down".into(),
+        Motion::ScrollLeft => "scroll left".into(),
+        Motion::ScrollRight => "scroll right".into(),
         Motion::Moved => return,
     };
     say(format_args!("mouse {what} at {},{}", m.col, m.row));

@@ -53,6 +53,27 @@ diffline follows the working tree without being restarted: a file saved in your
 editor shows up in the review. Native filesystem events rather than polling, so
 an idle repository costs nothing.
 
+## The mouse
+
+There if you want it, and it adds nothing the keyboard cannot already do. A
+click focuses the pane it landed on and selects the row under the pointer; a
+double click drills in the way `enter` does — into the diff from the tree,
+back to a note's lines from the queue — and on a diff line it opens the note
+editor, because commenting is what drilling into a line means here. Dragging
+down the diff sweeps a visual selection behind the pointer, so
+press-sweep-`c` writes one note about a range.
+
+The wheel acts on whatever is under the pointer without taking focus, and
+over the diff it is `^e`/`^y` three lines at a time: the window moves at
+once, and the cursor is dragged along only when an edge would push it off
+screen. A horizontal notch — a trackpad pan — walks long lines the way `h`
+and `l` do. Modal rows scroll, select and accept by the same rules, and
+clicking away from a modal closes it on the same terms as `esc`.
+
+Capturing the mouse takes the terminal's own click-to-select with it. Most
+terminals still select with `shift` held down; `--no-mouse` turns the whole
+thing off if you would rather have it back.
+
 ## Keys
 
 diffline's keymap is a table, not a `match`: `<config>/keys` is read at

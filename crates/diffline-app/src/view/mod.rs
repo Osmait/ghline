@@ -102,14 +102,18 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         ..body
     };
 
+    // Each pane's whole rectangle goes in *before* the pane draws, so the
+    // row regions it records land on top — the hit list is read newest-first.
+    // The other order was a bug that made every row click dead: the pane's
+    // rectangle shadowed its own rows, and a click focused without selecting.
     if tree_w > 0 {
         let r = Rect {
             width: tree_w,
             ..body
         };
+        app.hits.push(Region::plain(Target::Pane(Pane::Tree), r));
         tree::tree(buf, r, app);
         vline(buf, tree_w, body.y, body.height, theme::border());
-        app.hits.push(Region::plain(Target::Pane(Pane::Tree), r));
     }
     if queue_w > 0 {
         let x = area.width - queue_w;
@@ -119,8 +123,8 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
             width: queue_w,
             ..body
         };
-        queue::queue(buf, r, app);
         app.hits.push(Region::plain(Target::Pane(Pane::Queue), r));
+        queue::queue(buf, r, app);
     }
     let mid_x = tree_w + u16::from(tree_w > 0);
     let mid_w = area
@@ -132,8 +136,8 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         width: mid_w,
         ..body
     };
-    diff::diff(buf, mid, app);
     app.hits.push(Region::plain(Target::Pane(Pane::Diff), mid));
+    diff::diff(buf, mid, app);
 
     // Drawn last of the body, over the diff's top edge: while the queue is
     // away this is the only thing saying how much is in it.

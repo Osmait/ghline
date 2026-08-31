@@ -89,6 +89,8 @@ fn mouse(ev: crossterm::event::MouseEvent) -> Mouse {
         MouseEventKind::Drag(b) => Motion::Drag(button(b)),
         MouseEventKind::ScrollUp => Motion::ScrollUp,
         MouseEventKind::ScrollDown => Motion::ScrollDown,
+        MouseEventKind::ScrollLeft => Motion::ScrollLeft,
+        MouseEventKind::ScrollRight => Motion::ScrollRight,
         _ => Motion::Moved,
     };
     Mouse {

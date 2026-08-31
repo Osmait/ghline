@@ -282,6 +282,82 @@ impl App {
         };
     }
 
+    /// `^e`/`^y`, and what a wheel notch over the diff is three of: the
+    /// window moves, and the cursor is dragged only when an edge would push
+    /// it off screen — scrolling is for reading, and reading a part of the
+    /// diff is not yet a decision to put the cursor there.
+    ///
+    /// Moving only `diff_scroll` was tried twice and lost twice: the next
+    /// frame's `scroll_into_view` walked it straight back to the stationary
+    /// cursor, so `^e` sprang back and the wheel could never leave the
+    /// cursor's window. Dragging the cursor along the near edge is what keeps
+    /// the two pointing at the same part of the diff.
+    pub(crate) fn scroll_view_by(&mut self, d: i64) {
+        if d == 0 || self.diff_rows().is_empty() {
+            return;
+        }
+        let h = self.view_height.max(1);
+        // The window counts in drawn lines, which in the split view are pairs
+        // of rows while the cursor still counts in rows. `None` marks the
+        // unified view, where the two units are the same thing.
+        let pairs = self
+            .split
+            .then(|| crate::model::pair_rows(self.diff_rows()));
+        let lines = pairs.as_ref().map_or(self.diff_rows().len(), Vec::len);
+        if lines == 0 {
+            return;
+        }
+        let max = lines.saturating_sub(h) as i64;
+        let scroll = (self.diff_scroll as i64 + d).clamp(0, max) as usize;
+        self.diff_scroll = scroll;
+
+        let cursor = self.cursor;
+        let rows = self.diff_rows();
+        // The line the cursor sits on, in window units.
+        let at = match &pairs {
+            Some(ps) => ps
+                .iter()
+                .position(|p| [p.left, p.right, p.header].contains(&Some(cursor)))
+                .unwrap_or(0),
+            None => cursor,
+        };
+        let bottom = (scroll + h - 1).min(lines - 1);
+        let target = at.clamp(scroll, bottom);
+        if target == at {
+            return;
+        }
+
+        // Dragged in from above it lands on the top line, from below on the
+        // bottom one — sliding inward off anything that cannot hold a cursor,
+        // because a hunk header is a coordinate rather than a line.
+        let inward: i64 = if target > at { 1 } else { -1 };
+        let mut line = target as i64;
+        let mut landed = None;
+        while (scroll as i64..=bottom as i64).contains(&line) {
+            landed = match &pairs {
+                Some(ps) => {
+                    let p = &ps[line as usize];
+                    if p.header.is_some() {
+                        None
+                    } else {
+                        p.right.or(p.left)
+                    }
+                }
+                None => ((line as usize) < rows.len() && rows[line as usize].kind.is_code())
+                    .then_some(line as usize),
+            };
+            if landed.is_some() {
+                break;
+            }
+            line += inward;
+        }
+        // A window of nothing but headers leaves the cursor where it was, and
+        // the next frame's `scroll_into_view` pulls the window back to it.
+        if let Some(row) = landed {
+            self.cursor = row;
+        }
+    }
+
     /// The text the cursor is on, which is what the horizontal motions walk.
     fn cursor_text(&self) -> String {
         self.diff_rows()
@@ -365,6 +441,35 @@ impl App {
         self.diff_scroll = 0;
         // A new file starts at the left, the way opening one in an editor does
         self.hscroll = 0;
+    }
+
+    /// `enter` on a queued note, and a double click on one: back to the lines
+    /// it was written about. A note is a decision made somewhere, and the
+    /// place to reconsider it is where it was made.
+    pub fn goto_comment(&mut self, i: usize) {
+        let Some(c) = self.comments.get(i) else {
+            return;
+        };
+        let path = c.path().to_string();
+        let anchor = c.anchors.first().cloned();
+        let Some(file) = self.files.iter().position(|f| f.path == path) else {
+            self.flash(format!("{path} is not in this scope any more"));
+            return;
+        };
+        self.queue_sel = i;
+        self.goto_file(file);
+        // The row, when the diff is already here. When it is not — purged by
+        // a refresh, still loading — the file opens at the top, which is
+        // still the right file.
+        if let Some(a) = anchor
+            && let Some(row) = self
+                .diff_rows()
+                .iter()
+                .position(|r| r.anchor(&path).as_ref() == Some(&a))
+        {
+            self.cursor = row;
+        }
+        self.pane = Pane::Diff;
     }
 
     /// `n` / `p`: round the files, so the last leads back to the first.
@@ -927,8 +1032,8 @@ impl App {
             Action::HalfUp => self.move_by(-h / 2),
             Action::PageDown => self.move_by(h),
             Action::PageUp => self.move_by(-h),
-            Action::ViewDown => self.diff_scroll += 1,
-            Action::ViewUp => self.diff_scroll = self.diff_scroll.saturating_sub(1),
+            Action::ViewDown => self.scroll_view_by(n),
+            Action::ViewUp => self.scroll_view_by(-n),
             Action::HunkPrev => self.hunk(-1),
             Action::HunkNext => self.hunk(1),
             Action::ChangePrev => self.change(-1),
@@ -993,11 +1098,11 @@ impl App {
                 self.query.clear();
                 self.sel = 0;
             }
-            Action::Enter => {
-                if self.pane == Pane::Tree {
-                    self.pane = Pane::Diff;
-                }
-            }
+            Action::Enter => match self.pane {
+                Pane::Tree => self.pane = Pane::Diff,
+                Pane::Queue => self.goto_comment(self.queue_sel),
+                Pane::Diff => {}
+            },
             Action::Redraw => self.wants_redraw = true,
 
             // --- commands ---
@@ -1774,6 +1879,88 @@ mod tests {
         press(&mut a, Key::Char('t'));
         assert_eq!(a.diff_scroll, 4, "the cursor line is now the top one");
         assert_eq!(a.cursor, 4, "and the cursor did not move");
+    }
+
+    #[test]
+    fn ctrl_e_moves_the_window_and_drags_the_cursor_only_at_the_edge() {
+        // It used to move only the scroll, which the next frame's
+        // `scroll_into_view` sprang straight back — `^e` was a key that
+        // flickered and did nothing.
+        let mut a = app();
+        a.view_height = 3;
+        a.cursor = 1;
+        ctrl(&mut a, 'e');
+        assert_eq!(a.diff_scroll, 1, "the window answered at once");
+        assert_eq!(a.cursor, 1, "the cursor still fit, so it stayed put");
+        ctrl(&mut a, 'e');
+        assert_eq!(a.diff_scroll, 2);
+        assert_eq!(a.cursor, 2, "dragged just inside the top edge");
+        ctrl(&mut a, 'e');
+        assert_eq!(a.diff_scroll, 2, "there is no window past the last one");
+    }
+
+    #[test]
+    fn ctrl_y_at_the_top_leaves_everything_alone() {
+        let mut a = app();
+        a.view_height = 3;
+        a.cursor = 1;
+        ctrl(&mut a, 'y');
+        assert_eq!(a.diff_scroll, 0);
+        assert_eq!(a.cursor, 1);
+    }
+
+    #[test]
+    fn a_count_scrolls_the_view_that_many_lines() {
+        // `2<C-e>` used to be a key wasted: the count was read and dropped.
+        let mut a = app();
+        a.view_height = 2;
+        typed(&mut a, "2");
+        ctrl(&mut a, 'e');
+        assert_eq!(a.diff_scroll, 2);
+    }
+
+    #[test]
+    fn the_dragged_cursor_slides_off_a_hunk_header() {
+        let ctx = |n: u32| Row {
+            kind: Kind::Context,
+            old: Some(n),
+            new: Some(n),
+            text: format!("line {n}"),
+        };
+        let hdr = || Row {
+            kind: Kind::Header,
+            old: None,
+            new: None,
+            text: "@@".into(),
+        };
+        let mut a = app();
+        a.rows.insert(
+            "src/a.rs".into(),
+            vec![hdr(), ctx(1), ctx(2), hdr(), ctx(3), ctx(4)],
+        );
+        a.cursor = 1;
+        a.view_height = 2;
+        for _ in 0..3 {
+            ctrl(&mut a, 'e');
+        }
+        assert_eq!(a.diff_scroll, 3, "the window may start on the @@ line");
+        assert_eq!(a.cursor, 4, "the cursor must not");
+    }
+
+    #[test]
+    fn enter_on_a_queued_note_returns_to_its_lines() {
+        let mut a = app();
+        a.cursor = 3;
+        leader(&mut a, 'n');
+        typed(&mut a, "note here");
+        press(&mut a, Key::Enter);
+
+        a.cursor = 1;
+        a.queue_shown = true;
+        a.pane = Pane::Queue;
+        press(&mut a, Key::Enter);
+        assert_eq!(a.pane, Pane::Diff, "a note is read where it was made");
+        assert_eq!(a.cursor, 3, "on the line it is about");
     }
 
     #[test]

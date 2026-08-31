@@ -5,6 +5,7 @@ use ratatui::layout::{Rect, Size};
 use ratatui::style::Style;
 
 use crate::app::{App, FinderTab};
+use crate::hit::{Region, Target};
 use crate::model::Kind;
 use crate::tui::theme;
 use crate::tui::{
@@ -12,12 +13,15 @@ use crate::tui::{
     vline,
 };
 
-pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &mut App) {
     let m = centered(
         area,
         Size::new(area.width.saturating_sub(8).min(120), area.height * 3 / 4),
     );
     frame(buf, m, theme::yellow());
+    // The box itself first, so a click inside it never reaches the panes it
+    // covers; the result rows go in after and win where they overlap.
+    app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
 
     let mut x = m.x + 2;
@@ -83,6 +87,8 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &App) {
         .sel
         .saturating_sub(list.height.saturating_sub(1) as usize);
     scroll_into_view(&mut scroll, app.sel, list.height as usize, hits.len());
+    app.hits
+        .push(Region::rows(Target::Modal, list, 1, scroll, hits.len()));
     for (n, h) in hits.iter().enumerate().skip(scroll) {
         let y = list.y + (n - scroll) as u16;
         if y >= list.bottom() {

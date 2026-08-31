@@ -6,6 +6,7 @@ use ratatui::style::Style;
 
 use super::super::parts::KEY_W;
 use crate::app::App;
+use crate::hit::{Region, Target};
 use crate::tui::theme;
 use crate::tui::{centered_over as centered, frame, put, put_right, put_trunc, rule};
 
@@ -14,10 +15,11 @@ use crate::tui::{centered_over as centered, frame, put, put_right, put_trunc, ru
 /// Generated rather than written down: a help that is a second list of the
 /// bindings is a help that is wrong the first time somebody rebinds a key,
 /// and being wrong about that is worse than not being there.
-pub(crate) fn help(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     let rows = app.keys.listing();
     let m = centered(area, Size::new(86, (rows.len() as u16).div_ceil(2) + 6));
     frame(buf, m, theme::yellow());
+    app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
     put(
         buf,

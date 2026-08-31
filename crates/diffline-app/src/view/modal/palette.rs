@@ -4,10 +4,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
 
 use crate::app::App;
+use crate::hit::{Region, Target};
 use crate::tui::theme;
 use crate::tui::{Dialog, put_right, put_trunc};
 
-pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &App) {
+pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &mut App) {
     let hits = app.palette_hits();
     let body = Dialog::new(":")
         .hint("⏎ run · esc")
@@ -17,6 +18,11 @@ pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &App) {
         .open(buf, area);
 
     let list = body.query(buf, &app.query, ": ", "command…", app.blink);
+    // The box under the rows, so a click inside stays inside and a click on
+    // an entry means that entry.
+    app.hits.push(Region::plain(Target::Modal, body.outer));
+    app.hits
+        .push(Region::rows(Target::Modal, list.inner, 1, 0, hits.len()));
     for slot in list.rows(buf, hits.len(), 1, app.sel, 0) {
         let Some(label) = hits.get(slot.index) else {
             continue;

@@ -5,9 +5,10 @@ use ratatui::layout::Rect;
 use ratatui::style::Style;
 
 use crate::app::{App, Pane};
+use crate::hit::{Region, Target};
 use crate::model::State;
 use crate::tui::theme;
-use crate::tui::{Section, fill, hline, put, put_right, put_trunc};
+use crate::tui::{Section, fill, hline, put, put_right, put_trunc, scroll_into_view};
 
 pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
     Section::new("REVIEW QUEUE")
@@ -97,9 +98,27 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
 
+    // Cards are three rows and a gap. The window scrolls to keep the
+    // selected one inside it, the way every other list here does — a queue
+    // deeper than the pane used to walk its selection straight off screen.
+    let cards = (list.height as usize / 4).max(1);
+    scroll_into_view(
+        &mut app.queue_scroll,
+        app.queue_sel,
+        cards,
+        app.comments.len(),
+    );
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::Queue),
+        list,
+        4,
+        app.queue_scroll,
+        app.comments.len(),
+    ));
+
     let focused = app.pane == Pane::Queue;
     let mut y = list.y;
-    for (i, c) in app.comments.iter().enumerate() {
+    for (i, c) in app.comments.iter().enumerate().skip(app.queue_scroll) {
         if y + 2 >= list.bottom() {
             break;
         }
@@ -179,5 +198,91 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
             y += 1;
         }
         y += 1;
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
+mod tests {
+    use super::*;
+    use crate::model::{ChangedFile, Comment, Scope, Status};
+    use crate::tui::probe;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    fn app_with_notes(n: usize) -> App {
+        let mut a = App::new(
+            "/tmp/r".into(),
+            Scope::WorkingTree,
+            vec![Scope::WorkingTree],
+            None,
+        );
+        a.files = vec![ChangedFile {
+            path: "src/a.rs".into(),
+            status: Status::Modified,
+            add: 1,
+            del: 0,
+        }];
+        a.files_state = crate::app::Load::Ready;
+        a.queue_shown = true;
+        for i in 0..n {
+            a.comments.push(Comment {
+                anchors: Vec::new(),
+                file: "src/a.rs".into(),
+                snippet: "…".into(),
+                body: format!("note {i}"),
+                state: State::Queued,
+            });
+        }
+        a
+    }
+
+    #[test]
+    fn the_queue_scrolls_to_keep_the_selected_note_on_screen() {
+        // A queue deeper than the pane used to walk its selection straight
+        // off the bottom: the cards never scrolled, only the selection moved.
+        let mut a = app_with_notes(12);
+        a.queue_sel = 11;
+        let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
+        term.draw(|f| crate::view::draw(f, &mut a)).unwrap();
+
+        assert!(a.queue_scroll > 0, "the window followed the selection down");
+        let screen = probe::screen(&term);
+        assert!(
+            screen.contains("#12"),
+            "the selected card is drawn:\n{screen}"
+        );
+        assert!(
+            !screen.contains("#2 "),
+            "and the early cards made room:\n{screen}"
+        );
+    }
+
+    #[test]
+    fn a_frame_records_which_card_sits_on_which_rows() {
+        // Without this a click on the queue could say only "the queue",
+        // which is a selection nothing can act on.
+        let mut a = app_with_notes(3);
+        let mut term = Terminal::new(TestBackend::new(160, 30)).unwrap();
+        term.draw(|f| crate::view::draw(f, &mut a)).unwrap();
+
+        let region = a
+            .hits
+            .iter()
+            .rev()
+            .find(|r| r.target == crate::hit::Target::Pane(Pane::Queue) && r.len > 0)
+            .copied()
+            .expect("the cards are a region");
+        assert_eq!(region.len, 3);
+        assert_eq!(region.row_h, 4, "three rows of card and one of gap");
+        // The gap row under a card still reads as that card — a click in the
+        // seam should not fall through to nothing.
+        assert_eq!(region.index_at(region.area.y + 3), Some(0));
+        assert_eq!(region.index_at(region.area.y + 4), Some(1));
     }
 }
