@@ -58,7 +58,7 @@ jobs:
       # failures printed at the end rather than interleaved with the runs
       # that passed. It is the runner jj, atuin and gitui all moved to.
       - name: Install the test runner
-        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-nextest
 
@@ -138,7 +138,7 @@ jobs:
       # Prebuilt binaries. `cargo install` compiled both of these from source
       # on every run, which cost more than everything they check.
       - name: Install the auditors
-        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-machete,cargo-deny
 
@@ -179,7 +179,7 @@ jobs:
       # repository downloads.
       - name: Install the instrumentation
         run: rustup component add llvm-tools-preview
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-llvm-cov,cargo-nextest
 
@@ -215,7 +215,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: minimal-versions
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@b6ff580856c41316412a0b9b60540fbc6f8c82cc # v2.86.7
         with:
           tool: cargo-hack,cargo-minimal-versions
 
