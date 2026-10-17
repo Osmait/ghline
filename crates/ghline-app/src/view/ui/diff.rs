@@ -6,14 +6,15 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use crate::app::diffnav::find;
 use crate::app::files::Entry;
 use crate::app::hit::{Region, Target};
-use crate::app::prepared::{Prepared, SIGN, code};
+use crate::app::prepared::{Prepared, SIGN, code, split_rows};
 use crate::app::{App, Pane};
-use crate::data::{DiffKind, DiffRow};
+use crate::data::DiffKind;
 use crate::shared::icons::{file as icon_file, folder};
 use crate::shared::syntax::Span;
-use crate::tui::diff::{Pair, Side, pair};
+use crate::tui::diff::Pair;
 use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
 
@@ -415,14 +416,15 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     app.diff_scroll = app.diff_scroll.min(len.saturating_sub(h));
     let scroll = app.diff_scroll;
     let focused = app.pane == Pane::DiffBody;
+    let query = app.diff_query.clone();
 
     for row in 0..h.min(len.saturating_sub(scroll)) {
         let y = area.y + row as u16;
         let i = scroll + row;
         if split {
-            draw_split_row(buf, area, y, &pairs[i], prep);
+            draw_split_row(buf, area, y, &pairs[i], prep, &query);
         } else {
-            draw_unified_row(buf, area, y, prep, i);
+            draw_unified_row(buf, area, y, prep, i, &query);
         }
         if focused {
             put(
@@ -437,7 +439,7 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     }
 }
 
-fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: usize) {
+fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: usize, query: &str) {
     let r = &prep.rows[i];
     let bg = row_bg(r.kind);
     fill(
@@ -454,7 +456,13 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: us
     // two numbering columns: original file and new file
     put_right(buf, area.x + 6, y, &r.lo, base.fg(theme::gutter()));
     put_right(buf, area.x + 12, y, &r.ln, base.fg(theme::gutter()));
-    draw_line(buf, (area.x + 14, y), area.right(), prep, i, base);
+    draw_line(
+        buf,
+        (area.x + 14, y),
+        area.right(),
+        Line { prep, i, query },
+        base,
+    );
 }
 
 /// One row's text: its sign, then its code in syntax colour with the words
@@ -471,8 +479,16 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: us
 ///
 /// `tinted` is whether the theme gives added and deleted lines a ground of
 /// their own, passed in rather than read here so a test can draw both ways.
-fn draw_line(buf: &mut Buffer, at: (u16, u16), max: u16, prep: &Prepared, i: usize, base: Style) {
-    draw_line_tinted(buf, at, max, prep, i, base, tints());
+fn draw_line(buf: &mut Buffer, at: (u16, u16), max: u16, line: Line<'_>, base: Style) {
+    draw_line_tinted(buf, at, max, line, base, tints());
+}
+
+/// Which row of which file to draw, and what the search is looking for.
+#[derive(Clone, Copy)]
+struct Line<'a> {
+    prep: &'a Prepared,
+    i: usize,
+    query: &'a str,
 }
 
 /// Whether the theme in force tints added and deleted lines.
@@ -484,8 +500,7 @@ fn draw_line_tinted(
     buf: &mut Buffer,
     (x, y): (u16, u16),
     max: u16,
-    prep: &Prepared,
-    i: usize,
+    Line { prep, i, query }: Line<'_>,
     base: Style,
     tinted: bool,
 ) {
@@ -525,6 +540,19 @@ fn draw_line_tinted(
     if let Some(w) = &word {
         marks.extend([w.start, w.end]);
     }
+    // every place the search matches, so each one is lit and not just the
+    // first — the eye goes down a column of them
+    let mut hits = Vec::new();
+    let mut from = 0;
+    while let Some(m) = text.get(from..).and_then(|t| find(t, query)) {
+        if m.is_empty() {
+            break;
+        }
+        let m = from + m.start..from + m.end;
+        from = m.end;
+        marks.extend([m.start, m.end]);
+        hits.push(m);
+    }
     marks.retain(|m| *m <= end && text.is_char_boundary(*m));
     marks.sort_unstable();
     marks.dedup();
@@ -541,6 +569,10 @@ fn draw_line_tinted(
             .is_some_and(|w| w.start <= from && to <= w.end)
         {
             style = style.add_modifier(Modifier::REVERSED);
+        }
+        // a search hit wins over both: it is what you are looking for now
+        if hits.iter().any(|h| h.start <= from && to <= h.end) {
+            style = base.fg(theme::yellow()).add_modifier(Modifier::REVERSED);
         }
         cx = put(buf, cx, y, max, &text[from..to], style);
     }
@@ -579,7 +611,7 @@ fn syntax_color(kind: crate::shared::syntax::Kind) -> Color {
 /// Reads its cells out of `rows` by index rather than being handed copies of
 /// them: the fold works in indices now, and cloning two strings per row per
 /// frame to hand them here was paying for the convenience twice.
-fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepared) {
+fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepared, query: &str) {
     let rows = &prep.rows;
     let half = area.width / 2;
     let left = Rect {
@@ -618,7 +650,13 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepare
         let base = Style::default().bg(bg);
         let num = if old { &r.lo } else { &r.ln };
         put_right(buf, rect.x + 5, y, num, base.fg(theme::gutter()));
-        draw_line(buf, (rect.x + 6, y), rect.right(), prep, i, base);
+        draw_line(
+            buf,
+            (rect.x + 6, y),
+            rect.right(),
+            Line { prep, i, query },
+            base,
+        );
     };
 
     side(left, p.left, true, buf);
@@ -638,27 +676,10 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepare
     );
 }
 
-/// Folds the rows into side-by-side lines.
-///
-/// The fold itself is `tui::diff`, shared with the other program — it was
-/// written out here and there, the same algorithm twice. This is only the
-/// seam: what our kinds are called on the way in.
-fn split_rows(rows: &[DiffRow]) -> Vec<Pair> {
-    let sides: Vec<Side> = rows
-        .iter()
-        .map(|r| match r.kind {
-            DiffKind::Hdr => Side::Header,
-            DiffKind::Ctx => Side::Context,
-            DiffKind::Del => Side::Deleted,
-            DiffKind::Add => Side::Added,
-        })
-        .collect();
-    pair(&sides)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::DiffRow;
 
     fn rows(spec: &[(DiffKind, &str)]) -> Vec<DiffRow> {
         spec.iter()
@@ -697,9 +718,9 @@ mod tests {
         let pairs = if split { split_rows(rows) } else { Vec::new() };
         for row in 0..h.min(if split { pairs.len() } else { rows.len() } as u16) {
             if split {
-                draw_split_row(&mut buf, area, row, &pairs[row as usize], &prep);
+                draw_split_row(&mut buf, area, row, &pairs[row as usize], &prep, "");
             } else {
-                draw_unified_row(&mut buf, area, row, &prep, row as usize);
+                draw_unified_row(&mut buf, area, row, &prep, row as usize, "");
             }
         }
         (0..h)
@@ -747,7 +768,12 @@ mod tests {
         use ratatui::layout::Rect;
         let area = Rect::new(0, 0, 40, 1);
         let mut buf = Buffer::empty(area);
-        draw_line_tinted(&mut buf, (0, 0), 40, prep, 1, Style::default(), tinted);
+        let line = Line {
+            prep,
+            i: 1,
+            query: "",
+        };
+        draw_line_tinted(&mut buf, (0, 0), 40, line, Style::default(), tinted);
         (0..40)
             .filter_map(|x| buf.cell((x, 0)))
             .map(|c| {
@@ -799,7 +825,12 @@ mod tests {
             rows(&[(DiffKind::Ctx, "  abcdefghijklmnopqrstuvwxyz")]),
         );
         let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
-        draw_line_tinted(&mut buf, (0, 0), 10, &prep, 0, Style::default(), true);
+        let line = Line {
+            prep: &prep,
+            i: 0,
+            query: "",
+        };
+        draw_line_tinted(&mut buf, (0, 0), 10, line, Style::default(), true);
         let line: String = (0..10)
             .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
             .collect();

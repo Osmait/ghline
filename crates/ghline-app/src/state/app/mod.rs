@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod diffnav;
 pub mod files;
 pub mod hit;
 mod input;
@@ -342,6 +343,10 @@ pub struct App {
     pub diff_dir: Option<String>,
     /// The open file's rows, colours and changed words. See `prepared`.
     pub diff_cache: Option<(prepared::Key, std::rc::Rc<prepared::Prepared>)>,
+    /// What `/` looks for in the diff, across every file.
+    pub diff_query: String,
+    /// The line the last search landed on, so `n` moves on from it.
+    pub diff_hit: Option<diffnav::Hit>,
     /// Two-column diff instead of unified (`s`).
     pub split: bool,
     /// Ignore whitespace-only changes (`w`).
@@ -492,6 +497,8 @@ impl App {
             diff_folded: HashSet::new(),
             diff_dir: None,
             diff_cache: None,
+            diff_query: String::new(),
+            diff_hit: None,
             split: false,
             ws: false,
             diff_scroll: 0,

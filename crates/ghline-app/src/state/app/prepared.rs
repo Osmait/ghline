@@ -18,6 +18,7 @@ use super::App;
 use super::input::strip_ws_only;
 use crate::data::{DiffKind, DiffRow, Hunk};
 use crate::shared::syntax::{self, Span};
+use crate::tui::diff::{Pair, Side, pair};
 
 /// A row's text is its sign, a space, then the code; spans and word ranges
 /// are written against the code alone.
@@ -200,6 +201,24 @@ fn widen(s: &str, from: usize, to: usize) -> Range<usize> {
         to
     };
     start..end
+}
+
+/// Folds the rows into side-by-side lines.
+///
+/// The fold itself is `tui::diff`, shared with the other program — it was
+/// written out here and there, the same algorithm twice. This is only the
+/// seam: what our kinds are called on the way in.
+pub fn split_rows(rows: &[DiffRow]) -> Vec<Pair> {
+    let sides: Vec<Side> = rows
+        .iter()
+        .map(|r| match r.kind {
+            DiffKind::Hdr => Side::Header,
+            DiffKind::Ctx => Side::Context,
+            DiffKind::Del => Side::Deleted,
+            DiffKind::Add => Side::Added,
+        })
+        .collect();
+    pair(&sides)
 }
 
 #[cfg(test)]
