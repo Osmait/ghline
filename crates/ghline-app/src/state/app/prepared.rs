@@ -6,17 +6,23 @@
 //! rebuilt — every string formatted again — on every frame. So all three are
 //! prepared together and kept until something they depend on changes.
 //!
-//! What they depend on is in the key: the file, `w`, and how many lines the
-//! file has. The last is what notices the diff arriving, since a file's list
-//! entry exists before its hunks do, without the loader having to know a cache
-//! is here at all.
+//! What they depend on is in the key: the file, `w`, how many lines the file
+//! has, and its review threads and whether and how wide they are shown. The
+//! line count is what notices the diff arriving, since a file's list entry
+//! exists before its hunks do, and the thread count notices the comments, both
+//! without the loader having to know a cache is here at all.
+//!
+//! Review threads are laid in as rows by `notes`, after the colours and the
+//! changed words are worked out on the file's own rows: a comment between a
+//! deleted line and its added one must not stop the two being compared.
 
 use std::ops::Range;
 use std::rc::Rc;
 
 use super::App;
 use super::input::strip_ws_only;
-use crate::data::{DiffKind, DiffRow, Hunk};
+use super::notes::{Notes, annotate};
+use crate::data::{DiffKind, DiffRow, FileChange, Hunk, Thread};
 use crate::shared::syntax::{self, Span};
 use crate::tui::diff::{Pair, Side, pair};
 
@@ -42,6 +48,8 @@ pub struct Key {
     path: String,
     ws: bool,
     lines: usize,
+    threads: usize,
+    notes: Notes,
 }
 
 impl App {
@@ -50,34 +58,84 @@ impl App {
         let Some(f) = self.diff_file() else {
             return Rc::new(prepare("", Vec::new()));
         };
+        let threads = self.threads_on(&f.path);
+        let notes = self.notes();
         let key = Key {
             item: (self.item_repo_key(), self.current().map_or(0, |c| c.num)),
             path: f.path.clone(),
             ws: self.ws,
             lines: f.hunks.iter().map(|h| h.lines.len() + 1).sum(),
+            threads: threads.len(),
+            notes,
         };
         if let Some((k, p)) = &self.diff_cache
             && *k == key
         {
             return Rc::clone(p);
         }
-        let hunks: Vec<Hunk> = if self.ws {
-            f.hunks.iter().map(strip_ws_only).collect()
-        } else {
-            f.hunks.clone()
-        };
-        let p = Rc::new(prepare(&f.path, Hunk::rows(&hunks)));
+        let base = base_rows(f, self.ws);
+        let p = Rc::new(prepare_with(&f.path, base, &threads, notes));
         self.diff_cache = Some((key, Rc::clone(&p)));
         p
     }
+
+    /// The review threads on `path`.
+    pub fn threads_on(&self, path: &str) -> Vec<&Thread> {
+        self.current()
+            .and_then(|c| c.as_pr())
+            .map(|p| p.threads.iter().filter(|t| t.path == path).collect())
+            .unwrap_or_default()
+    }
+
+    /// How threads are shown right now. The text runs to the pane's width
+    /// less the gutter it sits beside.
+    pub fn notes(&self) -> Notes {
+        Notes {
+            shown: self.diff_notes,
+            width: self.diff_width.saturating_sub(18),
+        }
+    }
 }
 
-/// The code part of a row: everything after its sign.
-pub fn code(r: &DiffRow) -> &str {
-    if r.kind == DiffKind::Hdr {
-        ""
+/// A file's own rows, `w` applied.
+pub fn base_rows(f: &FileChange, ws: bool) -> Vec<DiffRow> {
+    if ws {
+        Hunk::rows(&f.hunks.iter().map(strip_ws_only).collect::<Vec<_>>())
     } else {
-        r.text.get(SIGN..).unwrap_or("")
+        Hunk::rows(&f.hunks)
+    }
+}
+
+/// A file's rows as the pane draws them, its threads laid in.
+pub fn file_rows(f: &FileChange, ws: bool, threads: &[&Thread], notes: Notes) -> Vec<DiffRow> {
+    annotate(base_rows(f, ws), threads, notes).0
+}
+
+/// Colours and pairs a file's own rows, then lays its threads in.
+pub fn prepare_with(path: &str, base: Vec<DiffRow>, threads: &[&Thread], notes: Notes) -> Prepared {
+    let plain = prepare(path, base.clone());
+    let (rows, map) = annotate(base, threads, notes);
+    let spans = map
+        .iter()
+        .map(|m| {
+            m.and_then(|i| plain.spans.get(i).cloned())
+                .unwrap_or_default()
+        })
+        .collect();
+    let words = map
+        .iter()
+        .map(|m| m.and_then(|i| plain.words.get(i).cloned().flatten()))
+        .collect();
+    Prepared { rows, spans, words }
+}
+
+/// The code part of a row: everything after its sign. A comment's row is all
+/// text and has no sign, and the search reads it like code.
+pub fn code(r: &DiffRow) -> &str {
+    match r.kind {
+        DiffKind::Hdr => "",
+        DiffKind::NoteHead | DiffKind::Note => &r.text,
+        _ => r.text.get(SIGN..).unwrap_or(""),
     }
 }
 
@@ -212,7 +270,8 @@ pub fn split_rows(rows: &[DiffRow]) -> Vec<Pair> {
     let sides: Vec<Side> = rows
         .iter()
         .map(|r| match r.kind {
-            DiffKind::Hdr => Side::Header,
+            // a comment spans both halves, as a header does
+            DiffKind::Hdr | DiffKind::NoteHead | DiffKind::Note => Side::Header,
             DiffKind::Ctx => Side::Context,
             DiffKind::Del => Side::Deleted,
             DiffKind::Add => Side::Added,

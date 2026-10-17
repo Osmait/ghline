@@ -16,7 +16,9 @@ use crate::shared::icons::{file as icon_file, folder};
 use crate::shared::syntax::Span;
 use crate::tui::diff::Pair;
 use crate::tui::theme;
-use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
+use crate::tui::{
+    bold, fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline,
+};
 
 const FILES_W: u16 = 38;
 
@@ -27,6 +29,8 @@ fn row_bg(kind: DiffKind) -> Color {
         DiffKind::Del => theme::diff_del_bg(),
         DiffKind::Hdr => theme::tab_active_bg(),
         DiffKind::Ctx => theme::bg(),
+        // a comment sits on a panel of its own, apart from the code
+        DiffKind::NoteHead | DiffKind::Note => theme::panel(),
     }
 }
 
@@ -36,6 +40,8 @@ fn row_fg(kind: DiffKind) -> Color {
         DiffKind::Del => theme::red(),
         DiffKind::Hdr => theme::purple(),
         DiffKind::Ctx => theme::step_fg(),
+        DiffKind::NoteHead => theme::cyan(),
+        DiffKind::Note => theme::body(),
     }
 }
 
@@ -208,6 +214,25 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
                 &format!("+{}", r.add),
                 base.fg(theme::green()),
             );
+        }
+        // open threads on a file: what is still being talked about in it
+        if let Entry::File(i) = r.entry
+            && let Some(f) = app.diff_files().get(i)
+        {
+            let open = app
+                .threads_on(&f.path)
+                .iter()
+                .filter(|t| !t.resolved)
+                .count();
+            if open > 0 {
+                right = put_right(
+                    buf,
+                    right - 1,
+                    y,
+                    &format!("●{open}"),
+                    base.fg(theme::yellow()),
+                );
+            }
         }
         if dir && r.folded {
             right = put_right(
@@ -390,6 +415,7 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
     app.detail_height = view.height;
+    app.diff_width = view.width as usize;
 
     if rows.is_empty() {
         empty(buf, view, app);
@@ -559,6 +585,10 @@ fn draw_unified_row(
         bg,
     );
     let base = Style::default().bg(bg);
+    if r.kind.is_note() {
+        draw_note(buf, area.x + 12, y, area.right(), r, base);
+        return;
+    }
     // two numbering columns: original file and new file
     put_right(buf, area.x + 6, y, &r.lo, base.fg(theme::gutter()));
     put_right(buf, area.x + 12, y, &r.ln, base.fg(theme::gutter()));
@@ -727,6 +757,45 @@ fn tail(path: &str, cols: usize) -> String {
     format!("…{}", &path[start..])
 }
 
+/// A review comment's row: a bar down the left in the accent, then who said
+/// it and when, or a line of what they said.
+///
+/// The head is styled by how it starts — a settled thread with its tick, an
+/// outdated one with its warning — so the rows need no kind beyond the two.
+fn draw_note(buf: &mut Buffer, x: u16, y: u16, max: u16, r: &crate::data::DiffRow, base: Style) {
+    use crate::app::notes::{OUTDATED, RESOLVED};
+    let x = put(buf, x, y, max, "┃ ", base.fg(theme::yellow()));
+    if r.kind == DiffKind::Note {
+        put_trunc(buf, x, y, max, &r.text, base.fg(theme::body()));
+        return;
+    }
+    if let Some(rest) = r.text.strip_prefix(RESOLVED) {
+        let x = put(buf, x, y, max, RESOLVED, base.fg(theme::green()));
+        put_trunc(buf, x, y, max, rest, base.fg(theme::dim()));
+        return;
+    }
+    let (x, rest) = match r.text.strip_prefix(OUTDATED) {
+        Some(rest) => (
+            put(buf, x, y, max, OUTDATED, base.fg(theme::orange())),
+            rest,
+        ),
+        None => (x, r.text.as_str()),
+    };
+    // `who · when`: the name lit, the time quiet
+    let (who, when) = rest.split_once(" · ").unwrap_or((rest, ""));
+    let x = put(buf, x, y, max, who, bold(base.fg(theme::cyan())));
+    if !when.is_empty() {
+        put_trunc(
+            buf,
+            x,
+            y,
+            max,
+            &format!(" · {when}"),
+            base.fg(theme::dimmer()),
+        );
+    }
+}
+
 /// The byte where `text` stops fitting in `cols` columns.
 fn fit(text: &str, cols: usize) -> usize {
     let mut used = 0;
@@ -780,6 +849,28 @@ fn draw_split_row(
         height: 1,
     };
 
+    if let Some(r) = p
+        .header
+        .and_then(|i| rows.get(i))
+        .filter(|r| r.kind.is_note())
+    {
+        let full = Rect {
+            x: area.x,
+            y,
+            width: area.width,
+            height: 1,
+        };
+        fill(buf, full, row_bg(r.kind));
+        draw_note(
+            buf,
+            area.x + 6,
+            y,
+            area.right(),
+            r,
+            Style::default().bg(row_bg(r.kind)),
+        );
+        return;
+    }
     if let Some(hdr) = p.header.and_then(|i| rows.get(i)) {
         fill(buf, left, theme::tab_active_bg());
         fill(buf, right, theme::tab_active_bg());

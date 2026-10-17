@@ -13,6 +13,7 @@ pub mod hit;
 mod input;
 mod load;
 mod mouse;
+pub mod notes;
 pub mod prepared;
 mod select;
 
@@ -276,6 +277,8 @@ pub struct App {
     pub logs_state: HashMap<(String, i64), Load>,
     /// Load state of each PR's diff.
     pub diff_state: HashMap<(String, i64), Load>,
+    /// Review threads per PR, fetched with its diff.
+    pub threads_state: HashMap<(String, i64), Load>,
     /// Load state of the body, files and reviews of each item, which arrive
     /// separately from the list that names them.
     pub detail_state: HashMap<(String, i64), Load>,
@@ -349,6 +352,10 @@ pub struct App {
     pub diff_hit: Option<diffnav::Hit>,
     /// Columns of code scrolled off the left of the diff (`H`/`L`).
     pub diff_pan: usize,
+    /// Whether review threads are drawn in the diff (`C`).
+    pub diff_notes: bool,
+    /// The diff pane's width, which only the render knows; comments fold to it.
+    pub diff_width: usize,
     /// Two-column diff instead of unified (`s`).
     pub split: bool,
     /// Ignore whitespace-only changes (`w`).
@@ -450,6 +457,7 @@ impl App {
             raw_logs: HashMap::new(),
             logs_state: HashMap::new(),
             diff_state: HashMap::new(),
+            threads_state: HashMap::new(),
             detail_state: HashMap::new(),
             busy: false,
             anim: 0,
@@ -502,6 +510,8 @@ impl App {
             diff_query: String::new(),
             diff_hit: None,
             diff_pan: 0,
+            diff_notes: true,
+            diff_width: 100,
             split: false,
             ws: false,
             diff_scroll: 0,

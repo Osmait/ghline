@@ -11,7 +11,9 @@ use std::thread;
 use crate::data::Kind;
 use crate::data::MergeMethod;
 use crate::data::Source as FinderSource;
-use crate::data::{Account, Comment, DiffFile, FileChange, Item, Job, RawLog, Repo, Review};
+use crate::data::{
+    Account, Comment, DiffFile, FileChange, Item, Job, RawLog, Repo, Review, Thread,
+};
 use crate::shared::error::Error;
 
 pub enum Request {
@@ -79,6 +81,10 @@ pub enum Request {
         num: i64,
     },
     PrDiff {
+        repo: String,
+        num: i64,
+    },
+    PrThreads {
         repo: String,
         num: i64,
     },
@@ -169,6 +175,11 @@ pub enum Response {
         repo: String,
         num: i64,
         result: Result<Vec<DiffFile>, Error>,
+    },
+    PrThreads {
+        repo: String,
+        num: i64,
+        result: Result<Vec<Thread>, Error>,
     },
     Search {
         query: String,
@@ -347,6 +358,10 @@ fn handle(req: Request) -> Response {
         Request::PrDiff { repo, num } => {
             let result = crate::forge::current().pr_diff(&repo, num);
             Response::PrDiff { repo, num, result }
+        }
+        Request::PrThreads { repo, num } => {
+            let result = crate::forge::current().pr_threads(&repo, num);
+            Response::PrThreads { repo, num, result }
         }
 
         Request::Search {

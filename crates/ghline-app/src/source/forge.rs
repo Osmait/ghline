@@ -12,7 +12,8 @@
 
 use crate::data::SearchHit;
 use crate::data::{
-    Account, Comment, DiffFile, FileChange, Item, Job, Kind, RawLog, Repo, Review, TreeEntry,
+    Account, Comment, DiffFile, FileChange, Item, Job, Kind, RawLog, Repo, Review, Thread,
+    TreeEntry,
 };
 use crate::gh;
 use crate::shared::error::Result as Res;
@@ -41,6 +42,8 @@ pub trait Forge: Send + Sync + 'static {
     fn run_log(&self, repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>>;
 
     fn pr_diff(&self, repo: &str, num: i64) -> Res<Vec<DiffFile>>;
+
+    fn pr_threads(&self, repo: &str, num: i64) -> Res<Vec<Thread>>;
 
     fn search_issues(&self, owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>>;
 
@@ -116,6 +119,10 @@ impl Forge for Cli {
 
     fn pr_diff(&self, repo: &str, num: i64) -> Res<Vec<DiffFile>> {
         gh::pr_diff(repo, num)
+    }
+
+    fn pr_threads(&self, repo: &str, num: i64) -> Res<Vec<Thread>> {
+        gh::pr_threads(repo, num)
     }
 
     fn search_issues(&self, owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>> {

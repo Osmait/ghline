@@ -8,8 +8,9 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::data::{
-    Account, Change, Comment, Detail, DiffFile, FileChange, Hunk, IssueDetail, Item, Job, Label,
-    PrDetail, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, TreeEntry,
+    Account, Change, Comment, Detail, DiffFile, DiffSide, FileChange, Hunk, IssueDetail, Item, Job,
+    Label, PrDetail, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, Thread,
+    ThreadComment, TreeEntry,
 };
 use crate::data::{Kind, LogKind};
 
@@ -654,6 +655,76 @@ pub fn run_log(repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>> {
 pub fn pr_diff(repo: &str, num: i64) -> Res<Vec<DiffFile>> {
     let raw = run(&["pr", "diff", &num.to_string(), "-R", repo])?;
     Ok(parse_unified(&raw))
+}
+
+/// The query for a PR's review threads. A hundred threads of fifty comments
+/// is past any review a person reads in a terminal; past that the rest are
+/// simply not shown, which is better than paging through a cursor for them.
+const THREADS_QUERY: &str = "query($owner:String!,$name:String!,$num:Int!){
+  repository(owner:$owner,name:$name){ pullRequest(number:$num){
+    reviewThreads(first:100){ nodes{
+      isResolved path line diffSide
+      comments(first:50){ nodes{ author{ login } body createdAt } }
+    } }
+  } }
+}";
+
+/// A PR's review threads, the comments anchored to lines of its diff.
+pub fn pr_threads(repo: &str, num: i64) -> Res<Vec<Thread>> {
+    let (owner, name) = repo.split_once('/').unwrap_or((repo, ""));
+    let v = json(&[
+        "api",
+        "graphql",
+        "-F",
+        &format!("owner={owner}"),
+        "-F",
+        &format!("name={name}"),
+        "-F",
+        &format!("num={num}"),
+        "-f",
+        &format!("query={THREADS_QUERY}"),
+    ])?;
+    Ok(threads_of(&v))
+}
+
+fn threads_of(v: &Value) -> Vec<Thread> {
+    let nodes = v
+        .pointer("/data/repository/pullRequest/reviewThreads/nodes")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    nodes
+        .iter()
+        .map(|t| Thread {
+            path: s(t, "path"),
+            line: t
+                .get("line")
+                .and_then(Value::as_u64)
+                .and_then(|l| u32::try_from(l).ok()),
+            side: if s(t, "diffSide") == "LEFT" {
+                DiffSide::Left
+            } else {
+                DiffSide::Right
+            },
+            resolved: t
+                .get("isResolved")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            comments: t
+                .pointer("/comments/nodes")
+                .and_then(Value::as_array)
+                .map(|cs| {
+                    cs.iter()
+                        .map(|c| ThreadComment {
+                            author: gql_author(c),
+                            body: s(c, "body"),
+                            when: ago(&s(c, "createdAt")),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+        })
+        .collect()
 }
 
 fn parse_unified(raw: &str) -> Vec<DiffFile> {
@@ -1356,6 +1427,29 @@ mod tests {
             "gh api graphql"
         );
         assert_eq!(label(&[]), "gh");
+    }
+
+    #[test]
+    fn review_threads_read_their_line_side_and_comments() {
+        let v: Value = serde_json::from_str(
+            r#"{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+              {"isResolved":false,"path":"a.rs","line":12,"diffSide":"LEFT",
+               "comments":{"nodes":[{"author":{"login":"ada"},"body":"why?","createdAt":"2020-01-01T00:00:00Z"}]}},
+              {"isResolved":true,"path":"b.rs","line":null,"diffSide":"RIGHT",
+               "comments":{"nodes":[{"author":null,"body":"ok","createdAt":""}]}}
+            ]}}}}}"#,
+        )
+        .unwrap();
+        let t = threads_of(&v);
+        assert_eq!(t.len(), 2);
+        assert_eq!((t[0].line, t[0].side), (Some(12), DiffSide::Left));
+        assert_eq!(t[0].comments[0].author, "ada");
+        assert!(t[1].resolved);
+        assert_eq!(
+            t[1].line, None,
+            "outdated: GitHub no longer has a line for it"
+        );
+        assert_eq!(t[1].comments[0].author, "ghost", "a deleted account");
     }
 
     #[test]

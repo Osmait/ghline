@@ -21,6 +21,7 @@ settings, themes and colours are in [config.md](config.md).
 | Detail | `gh issue view`, `gh pr view` |
 | Checks | `gh run view --json jobs` for the run tied to the PR |
 | Diff | `gh pr diff`, split per file and per hunk |
+| Review comments | `reviewThreads` through `gh api graphql` |
 | Logs | `gh run view --log`, split per job and step |
 | Actions | `gh pr merge/close/reopen` and `DELETE /git/refs` |
 
@@ -206,6 +207,20 @@ back to the tree:
 - `H` and `L` pan long lines a tab stop at a time, so the end of a lockfile's
   line is in reach; a `…` at either edge says the line goes on.
 
+Review comments are in the diff, under the line each is about, so a comment
+is read beside its code rather than found again after reading it:
+
+- An open thread shows each comment with who wrote it and when, replies marked
+  `↳`; a resolved one shrinks to a single line with a `✓`.
+- A thread whose line is gone — outdated, or outside the hunks shown — moves to
+  the top of its file, marked, rather than being dropped.
+- `)` and `(` jump to the next or previous thread, into the files either side;
+  `C` hides them all and shows them again. The search reads them too.
+- A file with open threads carries their count, `●2`, in the tree.
+
+They arrive with the diff, from `reviewThreads` in GitHub's GraphQL API; when
+that fails the diff is still there, and says the comments are not.
+
 Lines are coloured as the file explorer colours code, and on a line that was
 edited rather than replaced the words that changed are reversed, as git's
 `diff-highlight` does. A theme that cannot tint added and deleted lines — the
@@ -322,6 +337,8 @@ thing off if you would rather have it back.
 | `J` `K` | next / previous file (in the diff) |
 | `H` `L` | pan long lines left / right (in the diff) |
 | `n` `N` | next / previous search match (in the diff) |
+| `(` `)` | previous / next review comment (in the diff) |
+| `C` | show / hide review comments (in the diff) |
 | `g` `G` | start / end of the pane |
 | `^d` `^u` | half a page |
 | `PgUp` `PgDn` | a whole page |
