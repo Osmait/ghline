@@ -15,6 +15,7 @@ mod load;
 mod mouse;
 pub mod notes;
 pub mod prepared;
+pub mod review;
 mod select;
 
 use std::collections::{HashMap, HashSet};
@@ -360,6 +361,11 @@ pub struct App {
     /// Each commit's own files and hunks, by `(repo, sha)`.
     pub commit_files: HashMap<(String, String), Vec<crate::data::FileChange>>,
     pub commit_state: HashMap<(String, String), Load>,
+    /// Notes not yet sent, per pull request, by `(repo, number)`.
+    pub drafts: HashMap<(String, i64), Vec<crate::data::Draft>>,
+    /// The note being written, and where it goes; `None` when no editor is up.
+    pub note_open: Option<review::Anchor>,
+    pub note_text: String,
     /// The commit picker, and the row it is on: 0 is "all changes".
     pub commits_open: bool,
     pub commit_sel: usize,
@@ -527,6 +533,9 @@ impl App {
             diff_commit: None,
             commit_files: HashMap::new(),
             commit_state: HashMap::new(),
+            drafts: HashMap::new(),
+            note_open: None,
+            note_text: String::new(),
             commits_open: false,
             commit_sel: 0,
             diff_width: 100,

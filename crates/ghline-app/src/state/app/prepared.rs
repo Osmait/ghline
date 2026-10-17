@@ -50,6 +50,8 @@ pub struct Key {
     ws: bool,
     lines: usize,
     threads: usize,
+    /// The drafts on the file, by what they say: an edit changes no count.
+    drafts: Vec<(u32, String)>,
     notes: Notes,
 }
 
@@ -59,7 +61,9 @@ impl App {
         let Some(f) = self.diff_file() else {
             return Rc::new(prepare("", Vec::new()));
         };
-        let threads = self.threads_on(&f.path);
+        let drafts = self.drafts_on(&f.path);
+        let mut threads = self.threads_on(&f.path);
+        threads.extend(drafts.iter());
         let notes = self.notes();
         let key = Key {
             item: (self.item_repo_key(), self.current().map_or(0, |c| c.num)),
@@ -68,6 +72,13 @@ impl App {
             ws: self.ws,
             lines: f.hunks.iter().map(|h| h.lines.len() + 1).sum(),
             threads: threads.len(),
+            drafts: drafts
+                .iter()
+                .map(|d| {
+                    let body = d.comments.first().map_or("", |c| c.body.as_str());
+                    (d.line.unwrap_or(0), body.to_string())
+                })
+                .collect(),
             notes,
         };
         if let Some((k, p)) = &self.diff_cache

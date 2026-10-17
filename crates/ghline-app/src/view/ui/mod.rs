@@ -115,6 +115,9 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
     if app.commits_open {
         overlay::commits(buf, area, app);
     }
+    if app.note_open.is_some() {
+        overlay::note(buf, area, app);
+    }
     if app.help_open {
         overlay::help(buf, area);
     }

@@ -263,6 +263,16 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
                     base.fg(theme::yellow()),
                 );
             }
+            let drafts = app.drafts_on(&f.path).len();
+            if drafts > 0 {
+                right = put_right(
+                    buf,
+                    right - 1,
+                    y,
+                    &format!("✎{drafts}"),
+                    base.fg(theme::orange()),
+                );
+            }
         }
         if dir && r.folded {
             right = put_right(
@@ -819,6 +829,12 @@ fn draw_note(buf: &mut Buffer, x: u16, y: u16, max: u16, r: &crate::data::DiffRo
     let x = put(buf, x, y, max, "┃ ", base.fg(theme::yellow()));
     if r.kind == DiffKind::Note {
         put_trunc(buf, x, y, max, &r.text, base.fg(theme::body()));
+        return;
+    }
+    if r.text == crate::app::review::DRAFT {
+        // not yet said: the colour a warning wears, since it is one — it is
+        // lost if it is never sent
+        put_trunc(buf, x, y, max, &r.text, bold(base.fg(theme::orange())));
         return;
     }
     if let Some(rest) = r.text.strip_prefix(RESOLVED) {

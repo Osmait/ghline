@@ -20,6 +20,9 @@ pub enum Target {
     Accounts,
     Dispatch,
     Commits,
+    /// The note editor: clicking inside it keeps it open, and does nothing
+    /// else — the keyboard is how a note is written.
+    Note,
 }
 
 pub type Region = crate::tui::hit::Region<Target>;

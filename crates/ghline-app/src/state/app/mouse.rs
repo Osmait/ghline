@@ -63,6 +63,7 @@ impl App {
             || self.help_open
             || self.dispatch_open
             || self.commits_open
+            || self.note_open.is_some()
     }
 
     fn click(&mut self, at: Position, now: Instant) {
@@ -85,6 +86,7 @@ impl App {
                         | Target::Accounts
                         | Target::Dispatch
                         | Target::Commits
+                        | Target::Note
                 )
             )
         {
@@ -117,6 +119,7 @@ impl App {
                     }
                 }
             }
+            Target::Note => {}
             Target::Commits => {
                 if let Some(i) = index {
                     self.commit_sel = i;
@@ -199,6 +202,7 @@ impl App {
             Target::Commits => {
                 self.commit_sel = step_sel(self.commit_sel, d, self.commits().len() + 1);
             }
+            Target::Note => {}
             Target::Dispatch => {
                 self.dispatch_sel = step_sel(self.dispatch_sel, d, self.dispatch_dests().len());
             }

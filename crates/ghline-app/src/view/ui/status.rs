@@ -102,7 +102,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
                 .to_string()
         }
         Pane::DiffBody => {
-            "j/k scroll · {/} hunk · J/K file · (/) comment · v commits · / search · H/L pan · C notes"
+            "j/k line · i note · {/} hunk · J/K file · (/) comment · v commits · / search · H/L pan"
                 .to_string()
         }
     };

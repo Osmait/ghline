@@ -340,6 +340,7 @@ pub fn prs(repo: usize) -> Vec<Item> {
                         line: Some(19),
                         side: DiffSide::Right,
                         resolved: false,
+                        pending: false,
                         comments: vec![
                             said(
                                 "noa-example",
@@ -354,6 +355,7 @@ pub fn prs(repo: usize) -> Vec<Item> {
                         line: Some(21),
                         side: DiffSide::Right,
                         resolved: true,
+                        pending: false,
                         comments: vec![said("iris-example", "nit: blank line above", "3h ago")],
                     },
                 ];

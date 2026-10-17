@@ -191,9 +191,9 @@ impl App {
             order.iter().take(at).rev().copied().collect()
         };
         let next = others.into_iter().find(|&i| {
-            self.diff_files()
-                .get(i)
-                .is_some_and(|f| !self.threads_on(&f.path).is_empty())
+            self.diff_files().get(i).is_some_and(|f| {
+                !self.threads_on(&f.path).is_empty() || !self.drafts_on(&f.path).is_empty()
+            })
         });
         let Some(i) = next else {
             self.flash_ok(if forward {
@@ -325,7 +325,10 @@ impl App {
         let Some(f) = self.diff_files().get(idx) else {
             return Vec::new();
         };
-        file_rows(f, self.ws, &self.threads_on(&f.path), self.notes())
+        let drafts = self.drafts_on(&f.path);
+        let mut threads = self.threads_on(&f.path);
+        threads.extend(drafts.iter());
+        file_rows(f, self.ws, &threads, self.notes())
     }
 
     /// Puts the cursor on `row` of the open file, a third of the way down

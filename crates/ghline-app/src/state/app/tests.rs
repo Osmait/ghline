@@ -3118,3 +3118,130 @@ mod diff_cursor {
         assert_eq!(app.cursor_row(), row, "and back");
     }
 }
+
+mod drafts {
+    use super::*;
+    use crate::data::{DiffKind, DiffSide};
+
+    /// The fixture's PR diff on `src/layout/mod.rs`, focused, with the cursor
+    /// on its first added line — new line 19, which already has a thread.
+    fn on_added_line() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        ch(&mut app, 'C'); // threads out of the way: rows are the file's own
+        for _ in 0..3 {
+            ch(&mut app, 'j');
+        }
+        assert_eq!(app.prepared().rows[app.diff_cursor].kind, DiffKind::Add);
+        app
+    }
+
+    fn write(app: &mut App, text: &str) {
+        ch(app, 'i');
+        assert!(app.note_open.is_some(), "the editor is up");
+        for c in text.chars() {
+            ch(app, c);
+        }
+        press(app, Key::Enter);
+    }
+
+    #[test]
+    fn i_writes_a_draft_against_the_cursors_line() {
+        let mut app = on_added_line();
+        write(&mut app, "why max?");
+        assert!(app.note_open.is_none());
+        let d = &app.drafts()[0];
+        assert_eq!(
+            (d.path.as_str(), d.line, d.side),
+            ("src/layout/mod.rs", 19, DiffSide::Right)
+        );
+        assert_eq!(d.body, "why max?");
+    }
+
+    #[test]
+    fn a_draft_on_a_deleted_line_is_on_the_old_side() {
+        let mut app = on_added_line();
+        ch(&mut app, 'k');
+        assert_eq!(app.prepared().rows[app.diff_cursor].kind, DiffKind::Del);
+        write(&mut app, "keep this");
+        assert_eq!(app.drafts()[0].side, DiffSide::Left);
+    }
+
+    #[test]
+    fn a_draft_is_drawn_under_its_line_even_with_threads_hidden() {
+        let mut app = on_added_line();
+        write(&mut app, "why max?");
+        let rows = app.prepared().rows.clone();
+        let at = rows
+            .iter()
+            .position(|r| r.text == crate::app::review::DRAFT)
+            .unwrap();
+        assert_eq!(rows[at - 1].ln, "19");
+        assert_eq!(rows[at + 1].text, "why max?");
+    }
+
+    #[test]
+    fn i_again_on_the_same_line_edits_the_draft_and_emptying_it_drops_it() {
+        let mut app = on_added_line();
+        write(&mut app, "first");
+        ch(&mut app, 'i');
+        assert_eq!(
+            app.note_text, "first",
+            "the editor opens on what was written"
+        );
+        for _ in 0.."first".len() {
+            press(&mut app, Key::Backspace);
+        }
+        press(&mut app, Key::Enter);
+        assert!(app.drafts().is_empty());
+    }
+
+    #[test]
+    fn esc_in_the_editor_keeps_nothing() {
+        let mut app = on_added_line();
+        ch(&mut app, 'i');
+        ch(&mut app, 'x');
+        press(&mut app, Key::Esc);
+        assert!(app.note_open.is_none());
+        assert!(app.drafts().is_empty());
+    }
+
+    #[test]
+    fn ctrl_j_is_a_new_line_in_a_note() {
+        let mut app = on_added_line();
+        ch(&mut app, 'i');
+        ch(&mut app, 'a');
+        app.on_key(Press::ctrl(Key::Char('j')));
+        ch(&mut app, 'b');
+        press(&mut app, Key::Enter);
+        assert_eq!(app.drafts()[0].body, "a\nb");
+    }
+
+    #[test]
+    fn capital_x_drops_the_draft_on_the_cursors_line() {
+        let mut app = on_added_line();
+        write(&mut app, "gone soon");
+        ch(&mut app, 'X');
+        assert!(app.drafts().is_empty());
+    }
+
+    #[test]
+    fn a_hunk_header_takes_no_note() {
+        let mut app = on_added_line();
+        ch(&mut app, 'g');
+        ch(&mut app, 'i');
+        assert!(app.note_open.is_none());
+        assert!(app.flash.is_some());
+    }
+
+    #[test]
+    fn a_single_commit_takes_no_note() {
+        let mut app = on_added_line();
+        app.diff_commit = Some("4f1c2a9e0b7d".into());
+        ch(&mut app, 'i');
+        assert!(app.note_open.is_none());
+    }
+}
