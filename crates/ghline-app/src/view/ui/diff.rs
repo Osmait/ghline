@@ -181,8 +181,8 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         return;
     }
     let list_h = foot_y.saturating_sub(area.y + 3) as usize;
-    scroll_into_view(&mut app.repo_scroll, sel, list_h, len);
-    let scroll = app.repo_scroll;
+    scroll_into_view(&mut app.files_scroll, sel, list_h, len);
+    let scroll = app.files_scroll;
     app.hits.push(Region::rows(
         Target::Pane(Pane::Files),
         Rect {
@@ -588,6 +588,17 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     app.diff_scroll = app.diff_scroll.min(len.saturating_sub(h));
     let scroll = app.diff_scroll;
     let cursor = app.diff_cursor;
+    // a row of the region is a line of the diff, so a click is a cursor
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::DiffBody),
+        Rect {
+            height: (h.min(len.saturating_sub(scroll))) as u16,
+            ..area
+        },
+        1,
+        scroll,
+        len,
+    ));
     let focused = app.pane == Pane::DiffBody;
     let query = app.diff_query.clone();
     let pan = app.diff_pan;
