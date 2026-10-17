@@ -727,8 +727,16 @@ impl App {
             return;
         }
 
-        // half a page up/down in the focused pane, vim style
-        if press.ctrl && matches!(self.pane, Pane::Body | Pane::Log) {
+        // half a page up/down in the focused pane, vim style. Every pane whose
+        // footer offers `^d/^u` has to be named here: one that is not falls
+        // through to the quit below, and `^d` in the diff once closed the
+        // program instead of paging it.
+        if press.ctrl
+            && matches!(
+                self.pane,
+                Pane::Body | Pane::Log | Pane::DiffBody | Pane::FileView
+            )
+        {
             let half = (self.detail_height / 2).max(1) as i64;
             match press.key {
                 Key::Char('d') => return self.move_by(half),
