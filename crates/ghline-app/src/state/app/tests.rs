@@ -1366,7 +1366,10 @@ mod all_repos {
         app.apply(Response::PrDetail {
             repo: format!("{}/accounting", app.login()),
             num: 14,
-            result: Ok(("the accounting one".into(), Vec::new(), Vec::new())),
+            result: Ok(crate::data::PrFetched {
+                body: "the accounting one".into(),
+                ..Default::default()
+            }),
         });
 
         let items = &app.lists[&key];
@@ -1386,7 +1389,10 @@ mod all_repos {
         app.apply(Response::PrDetail {
             repo: app.repo_key(),
             num,
-            result: Ok(("straight in".into(), Vec::new(), Vec::new())),
+            result: Ok(crate::data::PrFetched {
+                body: "straight in".into(),
+                ..Default::default()
+            }),
         });
         assert_eq!(app.lists[&key][0].body, "straight in");
     }
@@ -2837,17 +2843,16 @@ mod diff_loading {
         app.apply(Response::PrDetail {
             repo,
             num,
-            result: Ok((
-                String::new(),
-                vec![FileChange {
+            result: Ok(crate::data::PrFetched {
+                files: vec![FileChange {
                     path: "src/a.rs".into(),
                     add: "+1".into(),
                     del: "-0".into(),
                     change: Change::Added,
                     ..FileChange::default()
                 }],
-                Vec::new(),
-            )),
+                ..Default::default()
+            }),
         });
         let f = app
             .current()

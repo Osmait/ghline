@@ -375,15 +375,69 @@ fn description_lines(cur: &crate::data::Item, width: usize, pending: bool) -> Ve
     if pending && reviews_empty {
         out.extend(skeleton_lines(width, &[34, 28], 9));
     }
-    for r in cur.as_pr().into_iter().flat_map(|p| &p.reviews) {
+    // A reply to a review thread is filed by GitHub as a review of its own,
+    // "commented" and empty. What it said is in the diff, under its line; here
+    // it would only be a name repeated with nothing after it.
+    let said = |r: &&crate::data::Review| {
+        r.state != crate::data::ReviewState::Commented || !r.body.trim().is_empty()
+    };
+    for r in cur
+        .as_pr()
+        .into_iter()
+        .flat_map(|p| &p.reviews)
+        .filter(said)
+    {
         let (color, icon) = super::review(r.state);
-        out.push(vec![
+        let mut head = vec![
             (format!("{icon} "), base.fg(color)),
             (format!("{} ", r.author), base.fg(theme::body())),
             (r.state.label().to_string(), base.fg(theme::dimmer())),
+        ];
+        if !r.when.is_empty() {
+            head.push((format!(" · {}", r.when), base.fg(theme::dimmer())));
+        }
+        out.push(head);
+        // what the reviewer said with it, under the verdict it explains
+        if !r.body.trim().is_empty() {
+            out.extend(quoted(&r.body, width, color));
+            out.push(Vec::new());
+        }
+    }
+
+    // The conversation: what was said about the pull request as a whole,
+    // as opposed to about a line of it, which is in the diff.
+    let comments = cur.as_pr().map_or(&[][..], |p| p.comments.as_slice());
+    if !comments.is_empty() {
+        out.push(Vec::new());
+        out.push(vec![
+            ("CONVERSATION".into(), base.fg(theme::dim())),
+            (format!("   {}", comments.len()), base.fg(theme::dimmer())),
         ]);
+        for c in comments {
+            out.push(vec![
+                ("▌ ".into(), base.fg(theme::border())),
+                (c.author.clone(), base.fg(theme::yellow())),
+                (format!(" · {}", c.when), base.fg(theme::dimmer())),
+            ]);
+            out.extend(quoted(&c.body, width, theme::border()));
+            out.push(Vec::new());
+        }
     }
     out
+}
+
+/// A body of Markdown behind a bar, as the issue view draws its comments: the
+/// bar says where one person's words start and stop.
+fn quoted(body: &str, width: usize, bar: ratatui::style::Color) -> Vec<Vec<Seg>> {
+    let base = Style::default().bg(theme::bg());
+    markdown::render(body, width.saturating_sub(2))
+        .into_iter()
+        .map(|line| {
+            let mut out = vec![("▌ ".to_string(), base.fg(bar))];
+            out.extend(line);
+            out
+        })
+        .collect()
 }
 
 fn description(buf: &mut Buffer, area: Rect, app: &mut App) {
@@ -578,4 +632,77 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
         &trigger,
         base.fg(theme::dimmest()),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::{Comment, Detail, Item, PrDetail, Review, ReviewState};
+
+    fn text(lines: &[Vec<Seg>]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|l| l.iter().map(|(t, _)| t.as_str()).collect::<String>())
+            .collect()
+    }
+
+    #[test]
+    fn a_review_shows_what_its_reviewer_said_and_the_conversation_follows() {
+        let it = Item::new(Detail::Pr(Box::new(PrDetail {
+            reviews: vec![Review {
+                author: "noa".into(),
+                state: ReviewState::ChangesRequested,
+                body: "The constant should not be.".into(),
+                when: "2h ago".into(),
+            }],
+            comments: vec![Comment {
+                author: "kai".into(),
+                when: "1h ago".into(),
+                body: "Rebased on main.".into(),
+            }],
+            ..PrDetail::default()
+        })));
+        let out = text(&description_lines(&it, 60, false));
+        let at = |needle: &str| out.iter().position(|l| l.contains(needle));
+        let review = at("noa").expect("the reviewer");
+        assert!(out[review].contains("2h ago"));
+        assert_eq!(
+            at("The constant should not be."),
+            Some(review + 1),
+            "under the verdict"
+        );
+        let talk = at("CONVERSATION").expect("a conversation section");
+        assert!(at("kai").is_some_and(|k| k > talk));
+        assert!(at("Rebased on main.").is_some());
+    }
+
+    #[test]
+    fn an_empty_commented_review_is_a_thread_reply_and_is_not_listed() {
+        let review = |state, body: &str| Review {
+            author: "ada".into(),
+            state,
+            body: body.into(),
+            when: String::new(),
+        };
+        let it = Item::new(Detail::Pr(Box::new(PrDetail {
+            reviews: vec![
+                review(ReviewState::Commented, ""),
+                review(ReviewState::Approved, ""),
+            ],
+            ..PrDetail::default()
+        })));
+        let out = text(&description_lines(&it, 60, false));
+        assert_eq!(
+            out.iter().filter(|l| l.contains("ada")).count(),
+            1,
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn no_conversation_no_section() {
+        let it = Item::new(Detail::Pr(Box::default()));
+        let out = text(&description_lines(&it, 60, false));
+        assert!(!out.iter().any(|l| l.contains("CONVERSATION")));
+    }
 }

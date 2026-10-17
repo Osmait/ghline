@@ -11,9 +11,7 @@ use std::thread;
 use crate::data::Kind;
 use crate::data::MergeMethod;
 use crate::data::Source as FinderSource;
-use crate::data::{
-    Account, Comment, DiffFile, FileChange, Item, Job, RawLog, Repo, Review, Thread,
-};
+use crate::data::{Account, Comment, DiffFile, Item, Job, PrFetched, RawLog, Repo, Thread};
 use crate::shared::error::Error;
 
 pub enum Request {
@@ -169,7 +167,7 @@ pub enum Response {
     PrDetail {
         repo: String,
         num: i64,
-        result: Result<(String, Vec<FileChange>, Vec<Review>), Error>,
+        result: Result<PrFetched, Error>,
     },
     PrDiff {
         repo: String,

@@ -214,6 +214,20 @@ impl ReviewState {
 pub struct Review {
     pub author: String,
     pub state: ReviewState,
+    /// What the reviewer wrote with it, often nothing.
+    pub body: String,
+    /// How long ago, as the list writes it.
+    pub when: String,
+}
+
+/// What the detail of a pull request brings, beyond what its list row had.
+#[derive(Clone, Default)]
+pub struct PrFetched {
+    pub body: String,
+    pub files: Vec<FileChange>,
+    pub reviews: Vec<Review>,
+    /// The conversation: comments on the pull request as a whole.
+    pub comments: Vec<Comment>,
 }
 
 /// What a pull request did to a file.
@@ -433,6 +447,8 @@ pub struct PrDetail {
     pub file_list: Vec<FileChange>,
     /// Review threads on the diff, fetched with it.
     pub threads: Vec<Thread>,
+    /// The conversation, from the detail.
+    pub comments: Vec<Comment>,
     /// Name of the workflow the checks belong to.
     pub workflow: String,
     /// How it was merged, once it has been.
@@ -900,6 +916,8 @@ mod tests {
         Review {
             author: "someone".into(),
             state,
+            body: String::new(),
+            when: String::new(),
         }
     }
 

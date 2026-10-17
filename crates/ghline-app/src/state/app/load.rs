@@ -3,7 +3,7 @@
 //! into state.
 
 use super::{App, Load, Prompt, View};
-use crate::data::{Item, Kind};
+use crate::data::{Item, Kind, PrFetched};
 use crate::service::{Request, Response};
 
 impl App {
@@ -494,7 +494,12 @@ impl App {
                 };
                 self.detail_state.insert((repo.clone(), num), state);
                 let was_empty = self.diff_files().is_empty();
-                if let Some((body, files, reviews)) = got
+                if let Some(PrFetched {
+                    body,
+                    files,
+                    reviews,
+                    comments,
+                }) = got
                     && let Some(it) = self.item_mut(&repo, 1, num)
                 {
                     it.body = body;
@@ -510,6 +515,7 @@ impl App {
                         }
                         pr.file_list = files;
                         pr.reviews = reviews;
+                        pr.comments = comments;
                     }
                 }
                 self.land_on_first_file(was_empty);

@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use crate::data::{
     Account, Change, Comment, Detail, DiffFile, DiffSide, FileChange, Hunk, IssueDetail, Item, Job,
-    Label, PrDetail, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, Thread,
-    ThreadComment, TreeEntry,
+    Label, PrDetail, PrFetched, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status,
+    Step, Thread, ThreadComment, TreeEntry,
 };
 use crate::data::{Kind, LogKind};
 
@@ -445,7 +445,7 @@ pub fn runs(repo: &str) -> Res<Vec<Item>> {
 // --------------------------------------------------------------------- detail
 
 /// A PR's body, files and reviews; requested when the detail is opened.
-pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Review>)> {
+pub fn pr_detail(repo: &str, num: i64) -> Res<PrFetched> {
     let v = json(&[
         "pr",
         "view",
@@ -453,7 +453,7 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Revi
         "-R",
         repo,
         "--json",
-        "body,files,reviews",
+        "body,files,reviews,comments",
     ])?;
 
     let files = arr(&v, "files")
@@ -468,19 +468,36 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Revi
         })
         .collect();
 
+    let author = |r: &Value| {
+        r.pointer("/author/login")
+            .and_then(|x| x.as_str())
+            .unwrap_or("ghost")
+            .to_string()
+    };
     let reviews = arr(&v, "reviews")
         .iter()
         .map(|r| Review {
-            author: r
-                .pointer("/author/login")
-                .and_then(|x| x.as_str())
-                .unwrap_or("ghost")
-                .to_string(),
+            author: author(r),
             state: ReviewState::parse(&s(r, "state")),
+            body: s(r, "body"),
+            when: ago(&s(r, "submittedAt")),
+        })
+        .collect();
+    let comments = arr(&v, "comments")
+        .iter()
+        .map(|c| Comment {
+            author: author(c),
+            when: ago(&s(c, "createdAt")),
+            body: s(c, "body"),
         })
         .collect();
 
-    Ok((s(&v, "body"), files, reviews))
+    Ok(PrFetched {
+        body: s(&v, "body"),
+        files,
+        reviews,
+        comments,
+    })
 }
 
 /// An issue's body and comments.
