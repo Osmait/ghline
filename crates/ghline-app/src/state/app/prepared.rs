@@ -88,11 +88,11 @@ impl App {
     }
 
     /// How threads are shown right now. The text runs to the pane's width
-    /// less the gutter it sits beside.
+    /// less the bar it sits beside and a column of margin either side.
     pub fn notes(&self) -> Notes {
         Notes {
             shown: self.diff_notes,
-            width: self.diff_width.saturating_sub(18),
+            width: self.diff_width.saturating_sub(6),
         }
     }
 }
