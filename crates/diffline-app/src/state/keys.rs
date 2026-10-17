@@ -604,6 +604,16 @@ impl Map {
         self.binds.keys().any(|c| c.prefix == want)
     }
 
+    /// The key `action` is on — the shortest, if it is on several — as the
+    /// help spells it. `None` for one the reader has unbound.
+    pub fn key_for(&self, action: Action) -> Option<String> {
+        self.binds
+            .iter()
+            .filter(|(_, a)| **a == action)
+            .map(|(c, _)| c.spec())
+            .min_by_key(|s| (s.chars().count(), s.clone()))
+    }
+
     /// Every binding, sorted for the help.
     pub fn listing(&self) -> Vec<(String, Action)> {
         let mut v: Vec<(String, Action)> = self.binds.iter().map(|(c, a)| (c.spec(), *a)).collect();
@@ -706,6 +716,18 @@ mod tests {
             let c = parse_chord(spec).unwrap_or_else(|| panic!("{spec} did not parse"));
             assert_eq!(c.spec(), spec, "{spec} did not survive");
         }
+    }
+
+    #[test]
+    fn the_key_an_action_is_on_follows_the_readers_keymap() {
+        let shipped = Map::with("");
+        assert_eq!(shipped.key_for(Action::Quit).as_deref(), Some("<leader>q"));
+        let mine = Map::with("<leader>q = none\nQ = quit\n");
+        assert_eq!(
+            mine.key_for(Action::Quit).as_deref(),
+            Some("Q"),
+            "the palette shows Q"
+        );
     }
 
     #[test]
