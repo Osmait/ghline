@@ -7,7 +7,7 @@ use ratatui::style::Style;
 use crate::app::App;
 use crate::hit::{Region, Target};
 use crate::tui::theme;
-use crate::tui::{centered_over as centered, fill, frame, put, put_right, put_trunc, rule};
+use crate::tui::{centered_over as centered, fill, frame, pill, put, put_right, put_trunc, rule};
 
 pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &mut App) {
     let anchors = app.selected_anchors();
@@ -26,7 +26,7 @@ pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: 1,
     };
     fill(buf, head, theme::yellow());
-    let hs = Style::default().bg(theme::yellow()).fg(theme::panel());
+    let hs = pill(theme::yellow(), theme::panel());
     put(buf, head.x + 1, head.y, head.right(), "COMMENT", hs);
     let where_ = match (anchors.first(), anchors.last()) {
         (Some(a), Some(b)) if a.line == b.line => format!("{}:{}", short_path(&a.path), a.line),

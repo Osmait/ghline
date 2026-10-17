@@ -7,7 +7,7 @@
 use ratatui::buffer::Buffer;
 use ratatui::style::Color;
 
-use crate::theme;
+use crate::{seen, theme};
 
 fn hex(color: Color, fallback: Color) -> String {
     match color {
@@ -43,10 +43,10 @@ pub fn render(buffer: &Buffer, width: u16, height: u16) -> String {
     for y in 0..height {
         let mut x = 0;
         while x < width {
-            let background = hex(buffer[(x, y)].style().bg.unwrap_or(ground), ground);
+            let background = hex(seen(buffer[(x, y)].style()).1.unwrap_or(ground), ground);
             let start = x;
             while x < width
-                && hex(buffer[(x, y)].style().bg.unwrap_or(ground), ground) == background
+                && hex(seen(buffer[(x, y)].style()).1.unwrap_or(ground), ground) == background
             {
                 x += 1;
             }
@@ -64,10 +64,11 @@ pub fn render(buffer: &Buffer, width: u16, height: u16) -> String {
     for y in 0..height {
         let mut x = 0;
         while x < width {
-            let foreground = hex(buffer[(x, y)].style().fg.unwrap_or(ink), ink);
+            let foreground = hex(seen(buffer[(x, y)].style()).0.unwrap_or(ink), ink);
             let start = x;
             let mut run = String::new();
-            while x < width && hex(buffer[(x, y)].style().fg.unwrap_or(ink), ink) == foreground {
+            while x < width && hex(seen(buffer[(x, y)].style()).0.unwrap_or(ink), ink) == foreground
+            {
                 run.push_str(buffer[(x, y)].symbol());
                 x += 1;
             }

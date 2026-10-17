@@ -7,7 +7,7 @@ use ratatui::style::{Modifier, Style};
 
 use crate::app::{App, Modal};
 use crate::tui::theme;
-use crate::tui::{fill, put, put_right, put_trunc};
+use crate::tui::{fill, pill, put, put_right, put_trunc};
 
 pub(super) fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
     fill(buf, area, theme::panel());
@@ -40,10 +40,7 @@ pub(super) fn status_bar(buf: &mut Buffer, area: Rect, app: &App) {
         area.y,
         area.right(),
         &format!(" {mode} "),
-        Style::default()
-            .bg(mode_bg)
-            .fg(theme::panel())
-            .add_modifier(Modifier::BOLD),
+        pill(mode_bg, theme::panel()).add_modifier(Modifier::BOLD),
     );
 
     x = put_trunc(

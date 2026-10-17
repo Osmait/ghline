@@ -191,7 +191,8 @@ clone-roots = ~/code, ~/work
 
 `t` opens the theme picker and applies as you move through it, so what you are
 judging is the interface rather than a name in a list; `enter` writes the one
-you keep back to the config. Two themes ship, and anything in
+you keep back to the config. Three themes ship — one of them, `terminal`,
+follows the terminal's own colours — and anything in
 `~/.config/ghline/themes/*.theme` joins the picker. diffline's keymap is a
 table rather than a `match`, so `<config>/keys` is read at startup and applied
 over the shipped one.

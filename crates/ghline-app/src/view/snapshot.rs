@@ -154,9 +154,9 @@ pub fn run(keys: &str, width: u16, height: u16, ticks: usize) {
     for y in 0..height {
         for x in 0..width {
             let cell = &buf[(x, y)];
-            let s = cell.style();
-            out.push_str(&ansi(s.fg.unwrap_or(Color::Reset), true));
-            out.push_str(&ansi(s.bg.unwrap_or(Color::Reset), false));
+            let (fg, bg) = crate::tui::seen(cell.style());
+            out.push_str(&ansi(fg.unwrap_or(Color::Reset), true));
+            out.push_str(&ansi(bg.unwrap_or(Color::Reset), false));
             out.push_str(cell.symbol());
         }
         out.push_str("\x1b[0m\n");
