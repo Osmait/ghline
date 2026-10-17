@@ -6,8 +6,9 @@
 //! second copy of that arithmetic would drift the first time a pane changed.
 //!
 //! Nothing here is a new capability, which is the same bargain ghline makes:
-//! a click is `h`/`l` then `j`/`k`, a double click is `enter` — or `c`, on a
-//! diff line, because commenting is what drilling into a line means here — a
+//! a click is `h`/`l` then `j`/`k`, a double click is `enter` — which on a
+//! diff line is a note, because commenting is what drilling into a line means
+//! here — a
 //! drag is `V` plus the motion it sweeps, and the wheel is `^e`/`^y` over the
 //! diff and `j`/`k` over the lists. What the mouse adds is aim: it acts on
 //! what is under the pointer, which is the one thing a keystroke cannot say.
@@ -88,9 +89,7 @@ impl App {
         // on a pane it covers would move things under a box the reader is
         // still looking at.
         if self.modal.is_some() && !matches!(hit.map(|r| r.target), Some(Target::Modal)) {
-            self.modal = None;
-            self.query.clear();
-            self.draft.clear();
+            self.close_modal();
             return;
         }
 
@@ -105,6 +104,9 @@ impl App {
                 if let Some(s) = self.scopes.get(i).cloned() {
                     self.scope = s;
                     self.refresh();
+                    // said, as `]s` says it: the whole screen just changed
+                    let label = self.scope.to_string();
+                    self.flash(format!("scope → {label}"));
                 }
             }
             Target::QueueTab => self.toggle_queue_pane(),
@@ -194,6 +196,10 @@ impl App {
         let Some(hit) = self.region_at(at) else {
             return;
         };
+        // with a modal up, what lies outside its box is not what is being read
+        if self.modal.is_some() && hit.target != Target::Modal {
+            return;
+        }
         match hit.target {
             // The window moves and the cursor is dragged only at its edge —
             // the same motion as `^e`/`^y`, which is what makes it feel like
@@ -211,9 +217,15 @@ impl App {
             // the list is for. The guard skips the frame around it, whose
             // region has no rows — stepping against its zero length would
             // yank the selection to the top.
+            //
+            // Stepped against the whole list, not the region: the agent
+            // picker gives each row a region of its own, and stepping against
+            // one of those pinned the selection to the row under the pointer.
             Target::Modal if hit.len > 0 => {
-                self.sel = step(self.sel, d, hit.len);
-                self.preview_theme();
+                if let Some(m) = self.modal {
+                    self.sel = step(self.sel, d, self.modal_len(m));
+                    self.preview_theme();
+                }
             }
             _ => {}
         }
@@ -619,6 +631,40 @@ mod tests {
             a.on_mouse(ev(Motion::ScrollLeft, x, y));
         }
         assert_eq!(a.hscroll, 0);
+    }
+
+    #[test]
+    fn the_wheel_walks_the_whole_agent_picker_not_the_row_under_it() {
+        // Each row of the picker is a region of its own, and the wheel used to
+        // step against that region's length — over row 0, it never moved.
+        let mut a = app();
+        a.modal = Some(crate::app::Modal::Agents);
+        a.sel = 0;
+        draw_wide(&mut a);
+        assert!(
+            a.modal_len(crate::app::Modal::Agents) > 1,
+            "kinds to pick from"
+        );
+        let first = a
+            .hits
+            .iter()
+            .find(|r| r.target == Target::Modal && r.len == 1)
+            .copied()
+            .expect("a row of the picker");
+        a.on_mouse(ev(Motion::ScrollDown, first.area.x + 1, first.area.y));
+        assert!(a.sel > 0, "the wheel moved past the row it was over");
+    }
+
+    #[test]
+    fn the_wheel_does_not_scroll_the_panes_behind_a_modal() {
+        let mut a = app();
+        with_rows(&mut a, 40);
+        draw_wide(&mut a);
+        let (x, y) = cell_of(&a, Pane::Diff, 2);
+        a.modal = Some(crate::app::Modal::Help);
+        let before = a.diff_scroll;
+        a.on_mouse(ev(Motion::ScrollDown, x, y));
+        assert_eq!(a.diff_scroll, before);
     }
 
     #[test]
