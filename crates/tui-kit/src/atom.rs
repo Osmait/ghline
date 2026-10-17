@@ -166,6 +166,28 @@ pub fn vline(buf: &mut Buffer, x: u16, y: u16, h: u16, color: ratatui::style::Co
     }
 }
 
+/// The end of `text` that fits in `cols` columns, behind a `…` when some of
+/// it had to go.
+///
+/// For a path, where the end is what names it: cut from the right, two files
+/// in the same folder read the same.
+pub fn tail(text: &str, cols: usize) -> String {
+    if text.width() <= cols || cols == 0 {
+        return text.to_string();
+    }
+    let mut used = 1; // the `…`
+    let mut start = text.len();
+    for (i, c) in text.char_indices().rev() {
+        let w = c.width().unwrap_or(0);
+        if used + w > cols {
+            break;
+        }
+        used += w;
+        start = i;
+    }
+    format!("…{}", &text[start..])
+}
+
 /// Cuts to `w` columns and pads with spaces to fill them all.
 pub fn truncate_pad(s: &str, w: usize) -> String {
     if w == 0 {
@@ -364,6 +386,20 @@ pub fn scrim(buf: &mut Buffer, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_path_too_long_for_its_room_keeps_its_end() {
+        assert_eq!(
+            tail(".github/workflows/backend.yaml", 16),
+            "…ws/backend.yaml"
+        );
+        assert_eq!(tail("short.rs", 16), "short.rs");
+        assert_eq!(
+            tail("漢字/x.rs", 5),
+            "…x.rs",
+            "wide characters count double"
+        );
+    }
     use crate::probe::{buffer, row};
 
     #[test]
