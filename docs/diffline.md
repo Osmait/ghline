@@ -35,6 +35,20 @@ the way once it has been read:
 While the cursor is on a folder the diff keeps the file it was showing, and
 `]f`/`[f` step through the files in the tree's order.
 
+## Searching every file
+
+`/` opens the finder, and `n`/`N` repeat its last search through the diff:
+from the cursor to the end of the open file, then through every other file in
+the tree's order, and round the end back to the start. Its grep, hunk and
+symbol tabs read every file too, not only the ones opened so far.
+
+The files nobody has opened are read from one `git diff` of the whole scope,
+asked for the first time a search needs it and asked with the same context and
+whitespace rule as the diff on screen, so a line found there is the line the
+pane shows once its file is opened. A search that needs it before it has come
+waits for it rather than reporting no match about files it has not read, and
+an edit on disk, a new scope, or a new rule lets it go.
+
 `␣w` leaves changes of whitespace alone out of the diff, by asking git for
 `git diff -w` rather than filtering here: git knows a re-indented block from
 an edited one. The header says `ws ignored` while it is on, so a diff with
