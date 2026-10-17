@@ -335,6 +335,12 @@ pub struct App {
     pub should_quit: bool,
     // scroll offsets of the scrollable panes
     pub repo_scroll: usize,
+    /// The diff's file tree's own scroll: it shared `repo_scroll` with the
+    /// sidebar, which came back scrolled to wherever the tree had been.
+    pub files_scroll: usize,
+    /// For each row the file view drew, the source line it is part of —
+    /// a long line wraps over several — so a click can pick a line.
+    pub file_view_lines: Vec<usize>,
     pub item_scroll: usize,
     pub tree_scroll: usize,
     pub log_scroll: usize,
@@ -521,6 +527,8 @@ impl App {
             blink: true,
             should_quit: false,
             repo_scroll: 0,
+            files_scroll: 0,
+            file_view_lines: Vec::new(),
             item_scroll: 0,
             tree_scroll: 0,
             log_scroll: 0,

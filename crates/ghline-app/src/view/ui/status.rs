@@ -197,7 +197,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     }
 
     let cmd_hint = if mode == Cmd::Colon {
-        ":account :issues :prs :actions :logs :help :q"
+        ":issues :prs :files :agents :diff :review :commits :theme :find :help :q"
     } else {
         "enter to keep · esc to clear"
     };

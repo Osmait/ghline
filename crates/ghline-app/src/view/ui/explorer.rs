@@ -325,6 +325,28 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
         .unwrap_or(0);
     scroll_into_view(&mut app.file_scroll, sel_row, height, rendered.len());
     let scroll = app.file_scroll;
+    // Which source line each drawn row is part of, for a click to pick one:
+    // a continuation row belongs to the last numbered row above it.
+    let mut owner = 0;
+    app.file_view_lines = rendered
+        .iter()
+        .map(|(n, _, _)| {
+            if *n > 0 {
+                owner = n - 1;
+            }
+            owner
+        })
+        .collect();
+    app.hits.push(Region::rows(
+        Target::Pane(Pane::FileView),
+        Rect {
+            height: (height.min(rendered.len().saturating_sub(scroll))) as u16,
+            ..body
+        },
+        1,
+        scroll,
+        rendered.len(),
+    ));
 
     let app = &*app;
     let empty = Vec::new();

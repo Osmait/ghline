@@ -16,7 +16,7 @@ use ratatui::layout::Position;
 use crate::shared::key::{Button, Motion, Mouse};
 
 use super::hit::{Region, Target};
-use super::{App, Pane};
+use super::{App, NodeKind, Pane};
 
 /// Lines the wheel moves per notch. Three is the common terminal default and
 /// reads as a nudge rather than a jump.
@@ -43,6 +43,16 @@ impl App {
             Motion::Down(Button::Left) => self.click(at, now),
             Motion::ScrollUp => self.wheel(at, -WHEEL),
             Motion::ScrollDown => self.wheel(at, WHEEL),
+            // a trackpad's sideways pan, over the diff, is `H`/`L`
+            Motion::ScrollLeft | Motion::ScrollRight
+                if !self.modal_open()
+                    && self.prompt.is_none()
+                    && self
+                        .region_at(at)
+                        .is_some_and(|r| r.target == Target::Pane(Pane::DiffBody)) =>
+            {
+                self.pan(if ev.what == Motion::ScrollLeft { -1 } else { 1 });
+            }
             _ => {}
         }
     }
@@ -56,7 +66,7 @@ impl App {
     }
 
     /// Is something up that owns the input while it is there?
-    fn modal_open(&self) -> bool {
+    pub(super) fn modal_open(&self) -> bool {
         self.finder_open
             || self.themes_open
             || self.accounts_open
@@ -88,6 +98,8 @@ impl App {
                         | Target::Dispatch
                         | Target::Commits
                         | Target::Note
+                        | Target::Review
+                        | Target::Help
                 )
             )
         {
@@ -120,7 +132,14 @@ impl App {
                     }
                 }
             }
-            Target::Note => {}
+            Target::Note | Target::Help => {}
+            Target::Review => {
+                if let Some(i) = index
+                    && let Some(v) = crate::data::Verdict::ALL.get(i)
+                {
+                    self.review_verdict = *v;
+                }
+            }
             Target::Commits => {
                 if let Some(i) = index {
                     self.commit_sel = i;
@@ -154,7 +173,17 @@ impl App {
                 // A double click drills in, the way `enter` does. On a pane of
                 // flowing text there is nothing to drill into, so the click
                 // just leaves the focus there.
-                if repeat && (index.is_some() || is_text(pane)) {
+                // A job of the logs' tree is a folder of steps, and folders
+                // fold on a double click everywhere else.
+                let job = pane == Pane::Tree
+                    && index.is_some_and(|i| {
+                        self.flat_tree()
+                            .get(i)
+                            .is_some_and(|n| n.kind == NodeKind::Job)
+                    });
+                if repeat && job {
+                    self.fold_job();
+                } else if repeat && (index.is_some() || is_text(pane)) {
                     self.enter();
                 }
             }
@@ -179,9 +208,17 @@ impl App {
     /// The wheel turns whatever is under the pointer, focused or not: reaching
     /// for it to read a pane is not a decision to work in that pane.
     fn wheel(&mut self, at: Position, d: i64) {
+        // A question wants an answer, not a scroll behind it; and with a modal
+        // up, what lies outside its box is not what the reader is in.
+        if self.prompt.is_some() {
+            return;
+        }
         let Some(region) = self.region_at(at) else {
             return;
         };
+        if self.modal_open() && matches!(region.target, Target::Pane(_) | Target::Tab(_)) {
+            return;
+        }
         match region.target {
             // the wheel moves the view, and the cursor rides along with it
             // rather than having to reach the edge before anything scrolls
@@ -203,7 +240,16 @@ impl App {
             Target::Commits => {
                 self.commit_sel = step_sel(self.commit_sel, d, self.commits().len() + 1);
             }
-            Target::Note => {}
+            Target::Note | Target::Help => {}
+            Target::Review => {
+                let n = crate::data::Verdict::ALL.len() as i64;
+                let at = crate::data::Verdict::ALL
+                    .iter()
+                    .position(|v| *v == self.review_verdict)
+                    .unwrap_or(0) as i64;
+                self.review_verdict =
+                    crate::data::Verdict::ALL[(at + d.signum()).rem_euclid(n) as usize];
+            }
             Target::Dispatch => {
                 self.dispatch_sel = step_sel(self.dispatch_sel, d, self.dispatch_dests().len());
             }
