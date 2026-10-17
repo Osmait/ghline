@@ -167,6 +167,8 @@ pub struct App {
     pub files: Vec<ChangedFile>,
     pub files_state: Load,
     pub file_idx: usize,
+    /// The file tree's folds, and whether its cursor is on a folder.
+    pub tree_folds: crate::shared::tree::Folds,
     pub tree_scroll: usize,
     /// The selection the tree last drew. The renderer snaps the tree's scroll
     /// to the selection only when this has changed — that is what lets the
@@ -286,6 +288,7 @@ impl App {
             files: Vec::new(),
             files_state: Load::Idle,
             file_idx: 0,
+            tree_folds: crate::shared::tree::Folds::default(),
             tree_scroll: 0,
             tree_seen: 0,
             rows: HashMap::new(),
@@ -660,7 +663,9 @@ impl App {
                     Ok(files) => {
                         self.files = files;
                         self.files_state = Load::Ready;
-                        self.file_idx = 0;
+                        // a new scope is a new tree, open, on its first file
+                        self.tree_folds.clear();
+                        self.file_idx = self.first_file();
                         self.cursor = 0;
                     }
                     Err(e) => {

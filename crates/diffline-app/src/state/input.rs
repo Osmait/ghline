@@ -115,10 +115,7 @@ impl App {
     /// `j`/`k` on whichever pane has focus.
     pub fn move_by(&mut self, d: i64) {
         match self.pane {
-            Pane::Tree => {
-                let n = self.files.len();
-                self.goto_file(step(self.file_idx, d, n));
-            }
+            Pane::Tree => self.tree_step(d),
             Pane::Diff => self.move_diff_by(d),
             Pane::Queue => {
                 self.queue_sel = step(self.queue_sel, d, self.comments.len());
@@ -478,8 +475,9 @@ impl App {
         if self.files.is_empty() {
             return;
         }
-        let n = self.files.len() as i64;
-        let next = (self.file_idx as i64 + d).rem_euclid(n) as usize;
+        let Some(next) = self.file_after(d) else {
+            return;
+        };
         self.goto_file(next);
         self.pane = Pane::Diff;
         let name = self.path().to_string();
@@ -1106,6 +1104,10 @@ impl App {
             }
             // Off the diff, or already at the start, these are the only way
             // left to walk between panes.
+            // On the tree they fold and open first, as in any tree, and only
+            // walk between panes when there is nothing to fold.
+            Action::ScrollLeft if self.pane == Pane::Tree && self.fold_left() => {}
+            Action::ScrollRight if self.pane == Pane::Tree && self.unfold_right() => {}
             Action::ScrollLeft => self.focus_by(-1),
             Action::ScrollRight => self.focus_by(1),
             Action::WordForward => self.word(Word::Forward),
@@ -1134,6 +1136,8 @@ impl App {
                     None
                 };
             }
+            Action::OtherEnd if self.pane == Pane::Tree => self.fold_here(),
+            Action::FoldAll => self.fold_all(),
             Action::OtherEnd => {
                 if let Some(a) = self.anchor {
                     self.anchor = Some(self.cursor);
@@ -1150,7 +1154,7 @@ impl App {
                 self.sel = 0;
             }
             Action::Enter => match self.pane {
-                Pane::Tree => self.pane = Pane::Diff,
+                Pane::Tree => self.tree_enter(),
                 Pane::Queue => self.goto_comment(self.queue_sel),
                 Pane::Diff => {}
             },
@@ -1698,6 +1702,74 @@ mod tests {
             a.new_kind.is_none(),
             "two targets at once would send the queue twice or nowhere"
         );
+    }
+
+    /// `src/` (a.rs, b.rs) and `README.md`, with the tree focused on a.rs.
+    fn in_the_tree() -> App {
+        let mut a = app();
+        a.files.push(ChangedFile {
+            path: "README.md".into(),
+            status: Status::Modified,
+            add: 1,
+            del: 1,
+        });
+        a.pane = Pane::Tree;
+        a
+    }
+
+    fn labels(a: &App) -> Vec<String> {
+        a.tree_rows().into_iter().map(|r| r.label).collect()
+    }
+
+    #[test]
+    fn the_changed_files_are_a_tree_with_folders_first() {
+        let a = in_the_tree();
+        assert_eq!(labels(&a), ["src", "a.rs", "b.rs", "README.md"]);
+    }
+
+    #[test]
+    fn h_folds_the_folder_a_file_is_in_and_l_opens_it_again() {
+        let mut a = in_the_tree();
+        press(&mut a, Key::Char('h'));
+        assert_eq!(labels(&a), ["src", "README.md"]);
+        assert_eq!(a.pane, Pane::Tree, "folding is not leaving the tree");
+        assert_eq!(a.file_idx, 0, "the diff keeps the file it was showing");
+        press(&mut a, Key::Char('l'));
+        assert_eq!(labels(&a).len(), 4);
+        assert_eq!(a.pane, Pane::Tree);
+    }
+
+    #[test]
+    fn capital_o_folds_every_folder_then_opens_every_one() {
+        let mut a = in_the_tree();
+        press(&mut a, Key::Char('O'));
+        assert_eq!(labels(&a), ["src", "README.md"]);
+        press(&mut a, Key::Char('O'));
+        assert_eq!(labels(&a).len(), 4);
+    }
+
+    #[test]
+    fn enter_on_a_folder_folds_it_and_on_a_file_opens_the_diff() {
+        let mut a = in_the_tree();
+        press(&mut a, Key::Char('k'));
+        press(&mut a, Key::Enter);
+        assert_eq!(labels(&a), ["src", "README.md"]);
+        assert_eq!(a.pane, Pane::Tree);
+        press(&mut a, Key::Enter);
+        press(&mut a, Key::Char('j'));
+        press(&mut a, Key::Enter);
+        assert_eq!(a.pane, Pane::Diff);
+        assert_eq!(a.file_idx, 0);
+    }
+
+    #[test]
+    fn the_next_file_is_the_next_in_the_tree() {
+        let mut a = in_the_tree();
+        a.file_idx = 1; // b.rs, whose next in the tree is README.md
+        a.step_file(1);
+        assert_eq!(a.path(), "README.md");
+        a.step_file(1);
+        assert_eq!(a.path(), "src/a.rs", "round the end to the start");
     }
 
     #[test]
