@@ -340,11 +340,9 @@ pub struct App {
     pub log_scroll: usize,
     /// Selected file in the diff view.
     pub file_idx: usize,
-    /// Folders folded in the diff's file tree, by full path.
-    pub diff_folded: HashSet<String>,
-    /// The folder the file tree's cursor is on; `None` when it is on
-    /// `file_idx`. See `files` for why the two are kept apart.
-    pub diff_dir: Option<String>,
+    /// The diff's file tree: which folders are folded, and whether the
+    /// cursor is on one rather than on `file_idx`.
+    pub diff_folds: crate::shared::tree::Folds,
     /// The open file's rows, colours and changed words. See `prepared`.
     pub diff_cache: Option<(prepared::Key, std::rc::Rc<prepared::Prepared>)>,
     /// What `/` looks for in the diff, across every file.
@@ -527,8 +525,7 @@ impl App {
             tree_scroll: 0,
             log_scroll: 0,
             file_idx: 0,
-            diff_folded: HashSet::new(),
-            diff_dir: None,
+            diff_folds: crate::shared::tree::Folds::default(),
             diff_cache: None,
             diff_query: String::new(),
             diff_hit: None,

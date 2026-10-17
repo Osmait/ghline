@@ -2520,13 +2520,13 @@ mod file_tree {
         let mut app = diff();
         press(&mut app, Key::Char('h'));
         assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
-        assert!(app.diff_folded.contains("src/layout"));
+        assert!(app.diff_folds.folded.contains("src/layout"));
         assert_eq!(shown(&app), "src/layout/mod.rs", "still reading it");
         let labels: Vec<String> = app.file_rows().into_iter().map(|r| r.label).collect();
         assert_eq!(labels, ["src/layout", "tests", "layout.rs", "CHANGELOG.md"]);
 
         press(&mut app, Key::Char('l'));
-        assert!(app.diff_folded.is_empty(), "l opens it again");
+        assert!(app.diff_folds.folded.is_empty(), "l opens it again");
         assert_eq!(app.pane, Pane::Files, "and stays in the tree");
     }
 
@@ -2546,9 +2546,9 @@ mod file_tree {
         press(&mut app, Key::Char('k'));
         assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
         press(&mut app, Key::Enter);
-        assert!(app.diff_folded.contains("src/layout"));
+        assert!(app.diff_folds.folded.contains("src/layout"));
         press(&mut app, Key::Enter);
-        assert!(app.diff_folded.is_empty());
+        assert!(app.diff_folds.folded.is_empty());
         assert_eq!(app.pane, Pane::Files);
 
         press(&mut app, Key::Char('j'));
@@ -2564,7 +2564,7 @@ mod file_tree {
         assert_eq!(labels, ["src/layout", "tests", "CHANGELOG.md"]);
         assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
         press(&mut app, Key::Char('O'));
-        assert!(app.diff_folded.is_empty());
+        assert!(app.diff_folds.folded.is_empty());
     }
 
     #[test]
@@ -2573,7 +2573,7 @@ mod file_tree {
         press(&mut app, Key::Char('G'));
         assert_eq!(shown(&app), "CHANGELOG.md");
         press(&mut app, Key::Char('h'));
-        assert!(app.diff_folded.is_empty());
+        assert!(app.diff_folds.folded.is_empty());
     }
 
     #[test]
@@ -2583,7 +2583,7 @@ mod file_tree {
         press(&mut app, Key::Esc);
         app.pane = Pane::List;
         ch(&mut app, 'd');
-        assert!(app.diff_folded.is_empty());
+        assert!(app.diff_folds.folded.is_empty());
     }
 }
 

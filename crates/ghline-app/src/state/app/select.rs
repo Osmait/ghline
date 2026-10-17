@@ -500,8 +500,7 @@ impl App {
         self.view = View::Diff;
         // folds belong to the PR they were made in, and so does a commit
         self.diff_commit = None;
-        self.diff_folded.clear();
-        self.diff_dir = None;
+        self.diff_folds.clear();
         self.diff_pan = 0;
         self.file_idx = self.first_file();
         self.diff_scroll = 0;
