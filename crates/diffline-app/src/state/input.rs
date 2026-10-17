@@ -33,6 +33,11 @@ pub const COMMANDS: &[(&str, &str)] = &[
     ("next scope", "]s"),
     ("prev scope", "[s"),
     ("split view", "␣v"),
+    ("fold all folders", "O"),
+    ("ignore whitespace", "␣w"),
+    ("toggle file tree", "␣e"),
+    ("toggle queue", "␣c"),
+    ("find", "/"),
     ("pick a theme", "␣t"),
     ("write a keymap to start from", ""),
     ("write a theme to start from", ""),
@@ -692,9 +697,9 @@ impl App {
 
     // --- comments ---
 
-    /// `c`: opens the note editor over whatever is selected.
-    /// `c`. In the tree this is a note about the file itself; in the diff it
-    /// is a note about the selected lines.
+    /// `␣n`, or `enter` on a line: the note editor over whatever is
+    /// selected. In the tree this is a note about the file itself; in the diff
+    /// it is a note about the selected lines.
     pub fn open_comment(&mut self) {
         if self.pane == Pane::Tree {
             if self.path().is_empty() {
@@ -1039,10 +1044,14 @@ impl App {
                 let (path, text) = crate::tui::theme::template("mine");
                 self.ask_write(Write::File { path, text });
             }
-            "split view" => {
-                self.split = !self.split;
-                self.hscroll = 0;
-            }
+            // each one the action its key runs, so the two cannot drift: the
+            // palette's split view did not say which view it had left you in
+            "split view" => self.run(Action::Split, 1),
+            "fold all folders" => self.run(Action::FoldAll, 1),
+            "ignore whitespace" => self.run(Action::IgnoreWhitespace, 1),
+            "toggle file tree" => self.run(Action::TreePane, 1),
+            "toggle queue" => self.run(Action::QueuePane, 1),
+            "find" => self.run(Action::Search, 1),
             "refresh" => {
                 self.refresh();
                 self.flash("refreshing…");
@@ -1066,6 +1075,7 @@ impl App {
     fn open_themes(&mut self) {
         self.modal = Some(Modal::Themes);
         let now = crate::tui::theme::current();
+        self.theme_before = now;
         self.sel = crate::tui::theme::Theme::all()
             .iter()
             .position(|t| *t == now)
@@ -1168,6 +1178,13 @@ impl App {
             // --- motions ---
             Action::LineDown => self.move_by(n),
             Action::LineUp => self.move_by(-n),
+            // `gg`/`G` on the list in focus, not on the diff hidden behind it
+            Action::Top if self.pane == Pane::Tree => self.tree_step(-(i64::from(u32::MAX))),
+            Action::Bottom if self.pane == Pane::Tree => self.tree_step(i64::from(u32::MAX)),
+            Action::Top if self.pane == Pane::Queue => self.queue_sel = 0,
+            Action::Bottom if self.pane == Pane::Queue => {
+                self.queue_sel = self.comments.len().saturating_sub(1);
+            }
             Action::Top => {
                 if n > 1 {
                     self.goto_line(n as usize);
@@ -1271,7 +1288,8 @@ impl App {
             Action::Enter => match self.pane {
                 Pane::Tree => self.tree_enter(),
                 Pane::Queue => self.goto_comment(self.queue_sel),
-                Pane::Diff => {}
+                // a note on the line, as a double click on it is
+                Pane::Diff => self.open_comment(),
             },
             Action::Redraw => self.wants_redraw = true,
 
@@ -1314,9 +1332,7 @@ impl App {
     fn modal_key(&mut self, m: Modal, press: Press) {
         let ctrl = press.ctrl;
         if press.key == Key::Esc {
-            self.modal = None;
-            self.query.clear();
-            self.draft.clear();
+            self.close_modal();
             return;
         }
 
@@ -1336,13 +1352,7 @@ impl App {
             return;
         }
 
-        let len = match m {
-            Modal::Agents => self.agent_choices().len(),
-            Modal::Themes => crate::tui::theme::Theme::all().len(),
-            Modal::Palette => self.palette_hits().len(),
-            Modal::History => self.history_hits().len(),
-            _ => self.hits().len(),
-        };
+        let len = self.modal_len(m);
         let last = len.saturating_sub(1);
 
         // The agent picker has no query to type into, so it is the one modal
@@ -1356,15 +1366,8 @@ impl App {
                 }
                 Key::Char('k') | Key::Up => self.sel = self.sel.saturating_sub(1),
                 Key::Enter => {
-                    if let Some(t) = all.get(self.sel).copied() {
-                        crate::tui::theme::set(t);
-                        // Applied here and written on the worker: a theme you
-                        // picked and liked should survive a crash, but not at
-                        // the cost of a disk write between the key and the
-                        // frame that answers it.
-                        self.ask_write(Write::Theme(t));
-                    }
-                    self.modal = None;
+                    self.accept(Modal::Themes);
+                    return;
                 }
                 _ => {}
             }
@@ -1393,12 +1396,14 @@ impl App {
             Key::Up => self.sel = self.sel.saturating_sub(1),
             Key::Char('n') if ctrl => self.sel = (self.sel + 1).min(last),
             Key::Char('p') if ctrl => self.sel = self.sel.saturating_sub(1),
-            Key::Tab if m == Modal::Finder => {
+            Key::Tab | Key::BackTab if m == Modal::Finder => {
+                let n = FinderTab::ALL.len();
                 let i = FinderTab::ALL
                     .iter()
                     .position(|t| *t == self.finder_tab)
                     .unwrap_or(0);
-                self.finder_tab = FinderTab::ALL[(i + 1) % FinderTab::ALL.len()];
+                let step = if press.key == Key::Tab { 1 } else { n - 1 };
+                self.finder_tab = FinderTab::ALL[(i + step) % n];
                 self.sel = 0;
             }
             Key::Enter => self.accept(m),
@@ -1420,8 +1425,43 @@ impl App {
         }
     }
 
+    /// How many rows the modal `m` lists, for the keys and the wheel alike.
+    pub fn modal_len(&self, m: Modal) -> usize {
+        match m {
+            Modal::Agents => self.agent_choices().len(),
+            Modal::Themes => crate::tui::theme::Theme::all().len(),
+            Modal::Palette => self.palette_hits().len(),
+            Modal::History => self.history_hits().len(),
+            _ => self.hits().len(),
+        }
+    }
+
+    /// Closes whatever modal is up, as `esc` does — and the theme picker,
+    /// which previews as it moves, puts back the theme it opened on. Its hint
+    /// says `esc undo`, and leaving it used to keep whatever was last looked
+    /// at, unsaved.
+    pub fn close_modal(&mut self) {
+        if self.modal == Some(Modal::Themes) {
+            crate::tui::theme::set(self.theme_before);
+        }
+        self.modal = None;
+        self.query.clear();
+        self.draft.clear();
+    }
+
     fn accept(&mut self, m: Modal) {
         match m {
+            // Applied here and written on the worker: a theme you picked and
+            // liked should survive a crash, but not at the cost of a disk
+            // write between the key and the frame that answers it. Here
+            // rather than under enter, so a double click keeps it too.
+            Modal::Themes => {
+                if let Some(t) = crate::tui::theme::Theme::all().get(self.sel).copied() {
+                    crate::tui::theme::set(t);
+                    self.ask_write(Write::Theme(t));
+                }
+                self.modal = None;
+            }
             Modal::Finder => self.take_hit(),
             Modal::History => {
                 let hits = self.history_hits();
@@ -1569,7 +1609,7 @@ mod tests {
     }
 
     #[test]
-    fn c_in_the_tree_asks_about_the_file_rather_than_a_line() {
+    fn a_note_in_the_tree_asks_about_the_file_rather_than_a_line() {
         let mut a = app();
         a.pane = Pane::Tree;
         leader(&mut a, 'n');
@@ -1965,6 +2005,66 @@ mod tests {
         a.rows_state.insert("src/a.rs".into(), Load::Ready);
         a.cursor = 1;
         a
+    }
+
+    // --- what the audit of every command found ---
+
+    #[test]
+    fn esc_in_the_theme_picker_puts_back_the_theme_it_opened_on() {
+        use crate::tui::theme::{Theme, current, set};
+        set(Theme::Default);
+        let mut a = app();
+        a.run(Action::Themes, 1);
+        press(&mut a, Key::Char('j'));
+        assert_ne!(current(), Theme::Default, "moving previews");
+        press(&mut a, Key::Esc);
+        assert_eq!(current(), Theme::Default, "and esc undoes it");
+        set(Theme::Default);
+    }
+
+    #[test]
+    fn enter_on_a_line_of_the_diff_opens_a_note_on_it() {
+        let mut a = app();
+        a.pane = Pane::Diff;
+        press(&mut a, Key::Enter);
+        assert_eq!(a.modal, Some(Modal::Comment));
+    }
+
+    #[test]
+    fn gg_and_capital_g_move_the_tree_when_the_tree_has_the_focus() {
+        let mut a = app();
+        a.pane = Pane::Tree;
+        press(&mut a, Key::Char('G'));
+        assert_eq!(a.path(), "src/b.rs", "the last file of the tree");
+        assert_eq!(
+            a.cursor, 0,
+            "and not the diff's cursor, which a new file resets"
+        );
+        typed(&mut a, "gg");
+        // the top of the tree is the `src/` folder, and on a folder the diff
+        // keeps the file it was showing
+        assert_eq!(a.tree_row(&a.tree_rows()), 0);
+        assert_eq!(a.tree_folds.dir.as_deref(), Some("src"));
+    }
+
+    #[test]
+    fn shift_tab_walks_the_finders_tabs_backwards() {
+        let mut a = app();
+        a.run(Action::Search, 1);
+        let first = a.finder_tab;
+        press(&mut a, Key::BackTab);
+        assert_ne!(a.finder_tab, first);
+        press(&mut a, Key::Tab);
+        assert_eq!(a.finder_tab, first);
+    }
+
+    #[test]
+    fn the_palette_offers_the_tree_the_queue_and_whitespace() {
+        let mut a = app();
+        assert!(a.run_command("ignore whitespace"));
+        assert!(a.ignore_ws);
+        assert!(a.run_command("fold all folders"));
+        assert!(!a.tree_folds.folded.is_empty());
     }
 
     // --- searching every file ---
