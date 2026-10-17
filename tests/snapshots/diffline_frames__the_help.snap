@@ -6,11 +6,11 @@ expression: "frame(\" ?\")"
 ─────────────────────────────────────┌────────────────────────────────────────────────────────────────────────────────────┐────────────────── ● 1 queued · ␣c ──
  CHANGES                      2 │ DIF│ KEYMAP                                                         no config directory │                  blame off │ ctx ±3 
 ────────────────────────────────│────├────────────────────────────────────────────────────────────────────────────────────┤─────────────────────────────────────
-  ▾ src/                        │▌   │ <leader>a     pick the target agent        <leader>b     inline blame              │                                     
-    ▾ layout/                   │   1│ G             last line                    <esc>         cancel the selection      │                                     
-▌     M solver.rs      +12 −4 ● │   1│ ]c            next change                  [c            previous change           │                                     
-    ▾ ui/                       │   1│ <leader>d     back to the code             :             the command list          │                                     
-      A sidebar.rs        +7 −0 │    │ <leader>-     collapse context             <leader>+     expand context            │                                     
+  ▾  src/                      │▌   │ <leader>a     pick the target agent        <leader>b     inline blame              │                                     
+    ▾  layout/                 │   1│ G             last line                    <esc>         cancel the selection      │                                     
+▌     M  solver.rs    +12 −4 ● │   1│ ]c            next change                  [c            previous change           │                                     
+    ▾  ui/                     │   1│ <leader>d     back to the code             :             the command list          │                                     
+      A  sidebar.rs      +7 −0 │    │ <leader>-     collapse context             <leader>+     expand context            │                                     
                                 │    │ <leader>=     expand context               zb            cursor line to the bottom │                                     
                                 │   1│ zz            cursor line to the middle    zt            cursor line to the top    │                                     
                                 │    │ <leader>x     delete the note under the c… <leader>g     blast radius              │                                     
