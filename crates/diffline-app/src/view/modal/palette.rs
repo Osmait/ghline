@@ -41,7 +41,7 @@ pub(crate) fn palette(buf: &mut Buffer, area: Rect, app: &mut App) {
             .iter()
             .find(|(l, _)| l == label)
             .and_then(|(_, a)| *a)
-            .and_then(|a| app.keys.key_for(a))
+            .and_then(|a| app.keys.key_label(a))
             .unwrap_or_default();
         let key = key.as_str();
         put_trunc(

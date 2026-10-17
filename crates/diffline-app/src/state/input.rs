@@ -21,7 +21,7 @@ enum Word {
 /// `None` for the few with no key of their own.
 pub const COMMANDS: &[(&str, Option<Action>)] = &[
     ("toggle blame", Some(Action::Blame)),
-    ("toggle blast radius", Some(Action::Deps)),
+    ("blast radius", Some(Action::Deps)),
     ("expand context", Some(Action::ContextMore)),
     ("collapse context", Some(Action::ContextLess)),
     ("next file", Some(Action::FileNext)),
@@ -34,8 +34,8 @@ pub const COMMANDS: &[(&str, Option<Action>)] = &[
     ("commit history", Some(Action::History)),
     ("next scope", Some(Action::ScopeNext)),
     ("prev scope", Some(Action::ScopePrev)),
-    ("split view", Some(Action::Split)),
-    ("fold all folders", Some(Action::FoldAll)),
+    ("split or unified view", Some(Action::Split)),
+    ("fold or open all folders", Some(Action::FoldAll)),
     ("ignore whitespace", Some(Action::IgnoreWhitespace)),
     ("toggle file tree", Some(Action::TreePane)),
     ("toggle queue", Some(Action::QueuePane)),
@@ -393,10 +393,15 @@ impl App {
         let mut col = 0usize;
         let mut prev_sep = true;
         let to_end = motion == Word::End;
-        for c in text.chars() {
+        let chars: Vec<char> = text.chars().collect();
+        for (k, &c) in chars.iter().enumerate() {
             let sep = !c.is_alphanumeric() && c != '_';
             if to_end {
-                if !sep && col > 0 {
+                // the last letter of a word: the next is a separator or the end
+                let next_sep = chars
+                    .get(k + 1)
+                    .is_none_or(|n| !n.is_alphanumeric() && *n != '_');
+                if !sep && next_sep {
                     cols.push(col);
                 }
             } else if !sep && prev_sep {
@@ -411,11 +416,13 @@ impl App {
         } else {
             cols.into_iter().rfind(|c| *c < here)
         };
-        self.hscroll = next.unwrap_or(if motion == Word::Back {
-            0
-        } else {
-            self.longest_line()
-        });
+        self.hscroll = next
+            .unwrap_or(if motion == Word::Back {
+                0
+            } else {
+                self.max_hscroll()
+            })
+            .min(self.max_hscroll());
     }
 
     /// `^`: the first character that is not a space.
@@ -571,7 +578,7 @@ impl App {
         self.pane = Pane::Diff;
     }
 
-    /// `n` / `p`: round the files, so the last leads back to the first.
+    /// `]f` / `[f`: round the files, so the last leads back to the first.
     pub fn step_file(&mut self, d: i64) {
         if self.files.is_empty() {
             return;
@@ -634,7 +641,7 @@ impl App {
             .collect()
     }
 
-    /// `[` / `]`: working tree, this branch, the last commit.
+    /// `]s` / `[s`: working tree, this branch, the last commit.
     pub fn step_scope(&mut self, d: i64) {
         if self.scopes.is_empty() {
             return;
@@ -780,7 +787,7 @@ impl App {
         });
     }
 
-    /// `x`: drops whatever comment covers the cursor.
+    /// `␣x`: drops whatever comment covers the cursor.
     pub fn delete_comment(&mut self) {
         let path = self.path().to_string();
         let Some(a) = self.row().and_then(|r| r.anchor(&path)) else {
@@ -794,7 +801,7 @@ impl App {
         }
     }
 
-    /// `S`: hands the queue to the chosen agent.
+    /// `␣s`: hands the queue to the chosen agent.
     pub fn send_queue(&mut self) {
         if self.comments.is_empty() {
             self.flash("queue is empty");
@@ -820,7 +827,11 @@ impl App {
         }
 
         let Some(agent) = self.agent().cloned() else {
-            self.flash("no agent to send to — press a");
+            let pick = self
+                .keys
+                .key_label(Action::Agents)
+                .unwrap_or_else(|| ":".into());
+            self.flash(format!("no agent to send to — {pick} picks one"));
             return;
         };
         // Asked of the multiplexer, not of the status: a backend that cannot
@@ -1017,7 +1028,7 @@ impl App {
         self.query.clear();
         match label {
             "toggle blame" => self.toggle_blame(),
-            "toggle blast radius" => self.modal = Some(Modal::Deps),
+            "blast radius" => self.modal = Some(Modal::Deps),
             "expand context" => self.set_context(self.context as i64 + 3),
             "collapse context" => self.set_context(self.context as i64 - 3),
             "next file" => self.step_file(1),
@@ -1048,8 +1059,8 @@ impl App {
             }
             // each one the action its key runs, so the two cannot drift: the
             // palette's split view did not say which view it had left you in
-            "split view" => self.run(Action::Split, 1),
-            "fold all folders" => self.run(Action::FoldAll, 1),
+            "split or unified view" => self.run(Action::Split, 1),
+            "fold or open all folders" => self.run(Action::FoldAll, 1),
             "ignore whitespace" => self.run(Action::IgnoreWhitespace, 1),
             "toggle file tree" => self.run(Action::TreePane, 1),
             "toggle queue" => self.run(Action::QueuePane, 1),
@@ -1227,7 +1238,7 @@ impl App {
 
             // --- along the line ---
             Action::ScrollRight if self.pane == Pane::Diff => {
-                self.hscroll = (self.hscroll + n as usize).min(self.longest_line());
+                self.hscroll = (self.hscroll + n as usize).min(self.max_hscroll());
             }
             Action::ScrollLeft if self.pane == Pane::Diff && self.hscroll > 0 => {
                 self.hscroll = self.hscroll.saturating_sub(n as usize);
@@ -1245,7 +1256,13 @@ impl App {
             Action::WordBack => self.word(Word::Back),
             Action::LineStart => self.hscroll = 0,
             Action::FirstWord => self.first_non_blank(),
-            Action::LineEnd => self.hscroll = self.longest_line(),
+            // the end of the cursor's line at the pane's right edge, in view,
+            // rather than scrolled off it as far as the line is long
+            Action::LineEnd => {
+                use unicode_width::UnicodeWidthStr;
+                let width = self.cursor_text().width();
+                self.hscroll = width.saturating_sub(self.code_cols.max(1));
+            }
             Action::PaneNext => self.focus_by(1),
             Action::PanePrev => self.focus_by(-1),
             Action::PaneLeft => self.focus_by(-1),
@@ -1611,7 +1628,7 @@ mod tests {
         }
         assert_eq!(
             a.hscroll,
-            a.longest_line(),
+            a.max_hscroll(),
             "a pane of blank columns reads as a broken program"
         );
     }
@@ -2106,7 +2123,7 @@ mod tests {
         let mut a = app();
         assert!(a.run_command("ignore whitespace"));
         assert!(a.ignore_ws);
-        assert!(a.run_command("fold all folders"));
+        assert!(a.run_command("fold or open all folders"));
         assert!(!a.tree_folds.folded.is_empty());
     }
 
