@@ -274,9 +274,15 @@ fn highlight_rows(path: &str, rows: &[Row]) -> Vec<Vec<crate::shared::syntax::Sp
     let Some(lang) = crate::shared::syntax::of_path(path) else {
         return Vec::new();
     };
+    // A hunk header is not code: lexed with the rest, its line numbers came
+    // out in the number colour. It goes in as an empty line, keeping the
+    // rows and the spans the same length.
     let joined: String = rows
         .iter()
-        .map(|r| r.text.as_str())
+        .map(|r| match r.kind {
+            crate::model::Kind::Header => "",
+            _ => r.text.as_str(),
+        })
         .collect::<Vec<_>>()
         .join("\n");
     let mut spans = crate::shared::syntax::highlight(lang, &joined);
@@ -321,6 +327,22 @@ mod tests {
             new: Some(1),
             text: text.into(),
         }
+    }
+
+    #[test]
+    fn a_hunk_header_is_not_coloured_as_code() {
+        let header = Row {
+            kind: Kind::Header,
+            old: None,
+            new: None,
+            text: "@@ -9,7 +9,7 @@ fn main() {".into(),
+        };
+        let spans = highlight_rows("x.rs", &[header, row("fn main() {}")]);
+        assert!(
+            spans[0].is_empty(),
+            "its numbers are not numbers in the code"
+        );
+        assert!(!spans[1].is_empty());
     }
 
     #[test]
