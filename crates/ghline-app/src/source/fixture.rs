@@ -274,6 +274,7 @@ pub fn prs(repo: usize) -> Vec<Item> {
             it.labels = vec![Label::new(label, rgb)];
             d.checks = *checks;
             d.branch = (*branch).into();
+            d.base = "main".into();
             // Every row shows a diffstat, so every row has one; the numbers
             // are derived from the position rather than invented one at a
             // time, which is all a fixture owes a column of digits.
@@ -294,6 +295,7 @@ pub fn prs(repo: usize) -> Vec<Item> {
                         add: "+0".into(),
                         del: "-0".into(),
                         hunks: Vec::new(),
+                        ..FileChange::default()
                     },
                 ];
                 d.files = 4;
@@ -463,6 +465,7 @@ fn changed(path: &str, add: &str, del: &str) -> FileChange {
         add: add.into(),
         del: del.into(),
         hunks: vec![Hunk::from(&HUNK)],
+        ..FileChange::default()
     }
 }
 

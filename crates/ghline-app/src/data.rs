@@ -216,13 +216,48 @@ pub struct Review {
     pub state: ReviewState,
 }
 
-#[derive(Clone)]
+/// What a pull request did to a file.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Change {
+    #[default]
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+}
+
+impl Change {
+    /// `gh`'s `changeType`. Anything it adds later reads as a modification,
+    /// which is the one that claims nothing.
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "ADDED" => Self::Added,
+            "DELETED" => Self::Deleted,
+            "RENAMED" => Self::Renamed,
+            _ => Self::Modified,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct FileChange {
     pub path: String,
     pub add: String,
     pub del: String,
+    pub change: Change,
+    /// Where a renamed file used to be. From the diff, since `gh`'s file list
+    /// gives only the new path; `None` until the diff arrives.
+    pub from: Option<String>,
     /// The file's hunks. Empty if the diff has not been fetched yet, or if
     /// there are no textual changes (a mode change, for instance).
+    pub hunks: Vec<Hunk>,
+}
+
+/// One file of a unified diff, as `gh pr diff` gives it.
+pub struct DiffFile {
+    pub path: String,
+    /// Its old path, when the diff says it was renamed.
+    pub from: Option<String>,
     pub hunks: Vec<Hunk>,
 }
 
@@ -350,6 +385,9 @@ pub struct PrDetail {
     pub del: String,
     pub files: u32,
     pub branch: String,
+    /// The branch it merges into. Empty when `gh` did not say, which a view
+    /// shows as nothing rather than guessing `main`.
+    pub base: String,
     pub reviews: Vec<Review>,
     pub file_list: Vec<FileChange>,
     /// Name of the workflow the checks belong to.
@@ -477,6 +515,23 @@ impl Item {
     /// Head branch of a pull request; empty for anything else.
     pub fn branch(&self) -> &str {
         self.as_pr().map_or("", |p| p.branch.as_str())
+    }
+
+    /// Base branch of a pull request; empty for anything else, or unknown.
+    pub fn base(&self) -> &str {
+        self.as_pr().map_or("", |p| p.base.as_str())
+    }
+
+    /// `head → base`, as every view that names a PR's branches writes it.
+    ///
+    /// One place, because there were three that each wrote `→ main` by hand,
+    /// and so told a PR into `develop` that it was going somewhere else —
+    /// the merge confirmation among them. With no base it says only the head.
+    pub fn onto(&self) -> String {
+        match (self.branch(), self.base()) {
+            (head, "") => head.to_string(),
+            (head, base) => format!("{head} → {base}"),
+        }
     }
 
     /// Workflow name, which both a pull request's checks and a run carry.
@@ -796,6 +851,27 @@ mod tests {
             author: "someone".into(),
             state,
         }
+    }
+
+    #[test]
+    fn a_change_type_gh_has_not_told_us_about_reads_as_a_modification() {
+        assert_eq!(Change::parse("ADDED"), Change::Added);
+        assert_eq!(Change::parse("RENAMED"), Change::Renamed);
+        assert_eq!(Change::parse("COPIED"), Change::Modified);
+    }
+
+    #[test]
+    fn a_pull_request_names_the_base_it_merges_into_and_not_main() {
+        let mut it = Item::new(Detail::Pr(Box::new(PrDetail {
+            branch: "feat/x".into(),
+            base: "develop".into(),
+            ..PrDetail::default()
+        })));
+        assert_eq!(it.onto(), "feat/x → develop");
+        if let Detail::Pr(p) = &mut it.detail {
+            p.base.clear();
+        }
+        assert_eq!(it.onto(), "feat/x", "no base, no guess");
     }
 
     #[test]

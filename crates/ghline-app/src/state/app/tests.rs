@@ -2678,3 +2678,37 @@ mod diff_nav {
         assert_eq!(app.diff_query, "side");
     }
 }
+
+mod file_changes {
+    use super::*;
+    use crate::data::{Change, DiffFile};
+
+    #[test]
+    fn the_diff_brings_a_renamed_files_old_path_with_it() {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.apply(Response::PrDiff {
+            repo,
+            num,
+            result: Ok(vec![DiffFile {
+                path: "src/layout/mod.rs".into(),
+                from: Some("src/layout.rs".into()),
+                hunks: Vec::new(),
+            }]),
+        });
+        let f = app
+            .diff_files()
+            .iter()
+            .find(|f| f.path == "src/layout/mod.rs")
+            .unwrap();
+        assert_eq!(f.from.as_deref(), Some("src/layout.rs"));
+        assert_eq!(
+            f.change,
+            Change::Modified,
+            "the kind is gh's file list's to say"
+        );
+    }
+}

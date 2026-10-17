@@ -256,8 +256,8 @@ fn pull(buf: &mut Buffer, area: Rect, app: &mut App) {
             _ => "merge",
         };
         format!(
-            "{verb} {} → main · {} {} across {} files",
-            cur.branch(),
+            "{verb} {} · {} {} across {} files",
+            cur.onto(),
             pr.map_or("", |p| p.add.as_str()),
             pr.map_or("", |p| p.del.as_str()),
             pr.map_or(0, |p| p.files)
