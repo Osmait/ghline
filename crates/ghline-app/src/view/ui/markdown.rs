@@ -210,8 +210,11 @@ fn fold(spans: Vec<Seg>, width: usize) -> Vec<Vec<Seg>> {
                     line.push((indent.clone(), style));
                 }
             }
-            if blank && line.is_empty() {
-                continue; // no leading space on a folded line
+            // No leading space on a folded line. Only a folded one: the first
+            // line's leading space is a nested item's indentation, and
+            // dropping it put every long sub-bullet back at the top level.
+            if blank && line.is_empty() && !out.is_empty() {
+                continue;
             }
             line.push((word, style));
             used += w;
@@ -334,6 +337,24 @@ mod tests {
         assert!(
             out[1].starts_with("  "),
             "continuation is indented: {out:?}"
+        );
+    }
+
+    #[test]
+    fn a_nested_item_too_long_for_one_line_stays_nested() {
+        let out = plain(&render(
+            "- outer\n  - an inner item that is far too long for the pane\n  - short",
+            30,
+        ));
+        let lines: Vec<&str> = out.iter().map(|l| l.trim_end()).collect();
+        assert!(lines[1].starts_with("    - an inner"), "{lines:?}");
+        assert!(
+            lines[2].starts_with("      "),
+            "folds under its text: {lines:?}"
+        );
+        assert!(
+            lines.iter().any(|l| l.starts_with("    - short")),
+            "{lines:?}"
         );
     }
 
