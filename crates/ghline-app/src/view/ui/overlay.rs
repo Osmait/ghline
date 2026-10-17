@@ -1,4 +1,5 @@
-//! Modals: the account picker (`a`) and the keybinding help (`?`).
+//! Modals: the account picker (`a`), the theme picker (`t`), the commit
+//! picker (`v` in a diff) and the keybinding help (`?`).
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
@@ -178,6 +179,72 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
             slot.area.y + 1,
             slot.area.right() - 1,
             t.about(),
+            s.fg(theme::dimmer()),
+        );
+    }
+}
+
+/// The commit picker: every change the pull request makes, then each of its
+/// commits on its own, oldest first as they were made.
+pub fn commits(buf: &mut Buffer, area: Rect, app: &mut App) {
+    let commits = app.commits().to_vec();
+    let rows = commits.len() + 1;
+    // as tall as the list, but never past the screen: the rows scroll
+    let tall = (rows as u16 * 2 + 7).min(area.height.saturating_sub(2));
+    let body = Dialog::new("COMMITS")
+        .hint("j/k · enter · esc")
+        .accent(theme::yellow())
+        .size(Size::new(76, tall))
+        .open(buf, area);
+
+    let fit = (body.inner.height / 2).max(1) as usize;
+    let scroll = app.commit_sel.saturating_sub(fit.saturating_sub(1));
+    app.hits.push(Region::plain(Target::Commits, body.outer));
+    app.hits
+        .push(Region::rows(Target::Commits, body.inner, 2, scroll, rows));
+
+    let shown = app.diff_commit.clone();
+    for slot in body.rows(buf, rows, 2, app.commit_sel, scroll) {
+        let s = slot.style;
+        let (on, first, second) = match slot.index.checked_sub(1).and_then(|i| commits.get(i)) {
+            None => (
+                shown.is_none(),
+                "All changes".to_string(),
+                format!("{} commits, as one diff", commits.len()),
+            ),
+            Some(c) => (
+                shown.as_deref() == Some(c.sha.as_str()),
+                format!("{}  {}", c.short(), c.headline),
+                format!("{} · {}", c.author, c.when),
+            ),
+        };
+        put(
+            buf,
+            slot.area.x + 2,
+            slot.area.y,
+            slot.area.right(),
+            if on { "●" } else { "○" },
+            s.fg(if on { theme::green() } else { theme::dimmer() }),
+        );
+        let fg = if slot.selected {
+            theme::bright()
+        } else {
+            theme::fg()
+        };
+        put_trunc(
+            buf,
+            slot.area.x + 4,
+            slot.area.y,
+            slot.area.right() - 1,
+            &first,
+            s.fg(fg),
+        );
+        put_trunc(
+            buf,
+            slot.area.x + 4,
+            slot.area.y + 1,
+            slot.area.right() - 1,
+            &second,
             s.fg(theme::dimmer()),
         );
     }

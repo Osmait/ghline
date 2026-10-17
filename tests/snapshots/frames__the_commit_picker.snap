@@ -1,0 +1,48 @@
+---
+source: tests/frames.rs
+expression: "frame(\"<enter>dv\")"
+---
+ gh  │  ● ada-example (personal) [a]  │  ada-example / tuikit › Pull Requests › #217 › diff                                                  gh · live  ?  help 
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ FILES CHANGED                        │ src/layout/mod.rs                                     1 hunk · fix/sidebar-clamp → main  ▤ unified [s]  ○ ignore ws [w] 
+──────────────────────────────────────│─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ▾ src/layout/                      │              @@ -18,7 +18,9 @@ fn solve(area: Rect) -> Layout {                                                         
+▌     mod.rs               ●1 +12 -4 │    18    18        let total = area.width;                                                                              
+      solver.rs              +64 -18 │    19        -     let side = total / 4;                                                                                
+  ▾ tests/                           │          19  +     let side = (total / 4).max(MIN_SIDEBAR);                                                             
+      layout.rs                +7 -0 │  ┃ noa-example · 2h ago                                                                                                 
+    CHANGELOG.md               +0 -0 │  ┃ Should MIN_SIDEBAR come from the config rather than a constant?                                                      
+                                      │  ┃ ↳ ada-example · 1h ago                                                                                               
+                                      │  ┃ Next PR — it needs the settings store.                                                                               
+                                      │          20  +     debug_assert!(side <= total);                                                                        
+                                      │    20    21        let body = total - side;                                                                             
+                                      │  ┃ ✓ iris-example: nit: blank line above                                                                                
+                                      │   ┌──────────────────────────────────────────────────────────────────────────┐                                          
+                                      │   │ COMMITS                                                j/k · enter · esc │                                          
+                                      │   ├──────────────────────────────────────────────────────────────────────────┤                                          
+                                      │   │▌ ● All changes                                                           │                                          
+                                      │   │▌   2 commits, as one diff                                                │                                          
+                                      │   │  ○ 4f1c2a9  fix(layout): clamp the sidebar to its minimum                │                                          
+                                      │   │    ada-example · 5h ago                                                  │                                          
+                                      │   │  ○ 9b3e77d  test(layout): the clamp at either end                        │                                          
+                                      │   │    ada-example · 4h ago                                                  │                                          
+                                      │   │                                                                          │                                          
+                                      │   │                                                                          │                                          
+                                      │   │                                                                          │                                          
+                                      │   └──────────────────────────────────────────────────────────────────────────┘                                          
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+                                      │                                                                                                                         
+──────────────────────────────────────│                                                                                                                         
+ 4 files changed · +12 -3             │                                                                                                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  DIFF   j/k move · enter open · h/l fold · O fold all · v commits · s split · w ws · esc back                                          1/4  ada-example/tuikit

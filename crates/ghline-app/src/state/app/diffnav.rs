@@ -208,6 +208,44 @@ impl App {
         self.diff_scroll = line.map_or(0, |l| l.saturating_sub(Self::ABOVE));
     }
 
+    /// `v`: the commit picker, on the row of what the diff is showing now.
+    pub(super) fn open_commits(&mut self) {
+        if self.commits().is_empty() {
+            self.flash_ok("no commits to pick from yet");
+            return;
+        }
+        self.commits_open = true;
+        self.commit_sel = match &self.diff_commit {
+            Some(sha) => self
+                .commits()
+                .iter()
+                .position(|c| &c.sha == sha)
+                .map_or(0, |i| i + 1),
+            None => 0,
+        };
+    }
+
+    /// Shows one commit's changes, or — row 0 — all of the pull request's.
+    /// Everything about where you were in the old set of files goes: a
+    /// commit is a different set of files, not a scroll position in this one.
+    pub(super) fn pick_commit(&mut self, row: usize) {
+        self.commits_open = false;
+        let sha = row
+            .checked_sub(1)
+            .and_then(|i| self.commits().get(i))
+            .map(|c| c.sha.clone());
+        if sha == self.diff_commit {
+            return;
+        }
+        self.diff_commit = sha;
+        self.diff_folded.clear();
+        self.diff_dir = None;
+        self.diff_hit = None;
+        self.diff_pan = 0;
+        self.file_idx = self.first_file();
+        self.diff_scroll = 0;
+    }
+
     /// The furthest the pane can scroll, which is where the render clamps to.
     fn max_scroll(&self, len: usize) -> usize {
         len.saturating_sub(self.detail_height.max(1) as usize)

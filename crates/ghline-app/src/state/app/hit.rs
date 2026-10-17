@@ -19,6 +19,7 @@ pub enum Target {
     Themes,
     Accounts,
     Dispatch,
+    Commits,
 }
 
 pub type Region = crate::tui::hit::Region<Target>;

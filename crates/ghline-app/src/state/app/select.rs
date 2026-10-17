@@ -393,9 +393,23 @@ impl App {
         self.current_index().map(|i| &self.list()[i])
     }
 
-    /// Changed files of the selected PR.
+    /// Changed files of the selected PR — or of the one commit of it the
+    /// diff is showing, which is what every pane of the diff then works on.
     pub fn diff_files(&self) -> &[crate::data::FileChange] {
-        self.current().map_or(&[], Item::files)
+        match &self.diff_commit {
+            Some(sha) => self
+                .commit_files
+                .get(&(self.item_repo_key(), sha.clone()))
+                .map_or(&[], Vec::as_slice),
+            None => self.current().map_or(&[], Item::files),
+        }
+    }
+
+    /// The selected PR's commits, oldest first.
+    pub fn commits(&self) -> &[crate::data::Commit] {
+        self.current()
+            .and_then(Item::as_pr)
+            .map_or(&[], |p| p.commits.as_slice())
     }
 
     pub fn file_idx(&self) -> usize {
@@ -484,7 +498,8 @@ impl App {
             return;
         }
         self.view = View::Diff;
-        // folds belong to the PR they were made in
+        // folds belong to the PR they were made in, and so does a commit
+        self.diff_commit = None;
         self.diff_folded.clear();
         self.diff_dir = None;
         self.diff_pan = 0;

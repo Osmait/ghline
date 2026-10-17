@@ -45,4 +45,4 @@ expression: "frame(\"<enter>d\")"
 ──────────────────────────────────────│                                                                                                                         
  4 files changed · +12 -3             │                                                                                                                         
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  DIFF   j/k move · enter open · h/l fold · O fold all · s split · w ignore ws · esc back                                               1/4  ada-example/tuikit
+  DIFF   j/k move · enter open · h/l fold · O fold all · v commits · s split · w ws · esc back                                          1/4  ada-example/tuikit

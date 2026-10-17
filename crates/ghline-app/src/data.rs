@@ -220,6 +220,23 @@ pub struct Review {
     pub when: String,
 }
 
+/// One commit of a pull request.
+#[derive(Clone, Debug, Default)]
+pub struct Commit {
+    pub sha: String,
+    /// The first line of its message.
+    pub headline: String,
+    pub author: String,
+    pub when: String,
+}
+
+impl Commit {
+    /// The seven characters a sha is written with.
+    pub fn short(&self) -> &str {
+        self.sha.get(..7).unwrap_or(&self.sha)
+    }
+}
+
 /// What the detail of a pull request brings, beyond what its list row had.
 #[derive(Clone, Default)]
 pub struct PrFetched {
@@ -228,6 +245,7 @@ pub struct PrFetched {
     pub reviews: Vec<Review>,
     /// The conversation: comments on the pull request as a whole.
     pub comments: Vec<Comment>,
+    pub commits: Vec<Commit>,
 }
 
 /// What a pull request did to a file.
@@ -449,6 +467,8 @@ pub struct PrDetail {
     pub threads: Vec<Thread>,
     /// The conversation, from the detail.
     pub comments: Vec<Comment>,
+    /// Its commits, oldest first, from the detail.
+    pub commits: Vec<Commit>,
     /// Name of the workflow the checks belong to.
     pub workflow: String,
     /// How it was merged, once it has been.
@@ -735,6 +755,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("n / N", "next / previous match"),
     ("( / )", "previous / next comment"),
     ("C", "show / hide comments"),
+    ("v", "one commit of the PR"),
     ("tab", "next pane"),
     ("m", "merge the pull request"),
     ("c", "close / reopen the PR"),

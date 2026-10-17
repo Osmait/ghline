@@ -86,6 +86,10 @@ pub enum Request {
         repo: String,
         num: i64,
     },
+    CommitDiff {
+        repo: String,
+        sha: String,
+    },
     Search {
         owner: String,
         query: String,
@@ -178,6 +182,11 @@ pub enum Response {
         repo: String,
         num: i64,
         result: Result<Vec<Thread>, Error>,
+    },
+    CommitDiff {
+        repo: String,
+        sha: String,
+        result: Result<Vec<DiffFile>, Error>,
     },
     Search {
         query: String,
@@ -360,6 +369,10 @@ fn handle(req: Request) -> Response {
         Request::PrThreads { repo, num } => {
             let result = crate::forge::current().pr_threads(&repo, num);
             Response::PrThreads { repo, num, result }
+        }
+        Request::CommitDiff { repo, sha } => {
+            let result = crate::forge::current().commit_diff(&repo, &sha);
+            Response::CommitDiff { repo, sha, result }
         }
 
         Request::Search {

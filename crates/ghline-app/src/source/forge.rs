@@ -44,6 +44,8 @@ pub trait Forge: Send + Sync + 'static {
 
     fn pr_threads(&self, repo: &str, num: i64) -> Res<Vec<Thread>>;
 
+    fn commit_diff(&self, repo: &str, sha: &str) -> Res<Vec<DiffFile>>;
+
     fn search_issues(&self, owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>>;
 
     fn search_commits(&self, owner: &str, query: &str) -> Res<Vec<SearchHit>>;
@@ -122,6 +124,10 @@ impl Forge for Cli {
 
     fn pr_threads(&self, repo: &str, num: i64) -> Res<Vec<Thread>> {
         gh::pr_threads(repo, num)
+    }
+
+    fn commit_diff(&self, repo: &str, sha: &str) -> Res<Vec<DiffFile>> {
+        gh::commit_diff(repo, sha)
     }
 
     fn search_issues(&self, owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>> {

@@ -8,9 +8,9 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::data::{
-    Account, Change, Comment, Detail, DiffFile, DiffSide, FileChange, Hunk, IssueDetail, Item, Job,
-    Label, PrDetail, PrFetched, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status,
-    Step, Thread, ThreadComment, TreeEntry,
+    Account, Change, Comment, Commit, Detail, DiffFile, DiffSide, FileChange, Hunk, IssueDetail,
+    Item, Job, Label, PrDetail, PrFetched, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit,
+    Status, Step, Thread, ThreadComment, TreeEntry,
 };
 use crate::data::{Kind, LogKind};
 
@@ -453,7 +453,7 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<PrFetched> {
         "-R",
         repo,
         "--json",
-        "body,files,reviews,comments",
+        "body,files,reviews,comments,commits",
     ])?;
 
     let files = arr(&v, "files")
@@ -492,12 +492,44 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<PrFetched> {
         })
         .collect();
 
+    let commits = arr(&v, "commits")
+        .iter()
+        .map(|c| Commit {
+            sha: s(c, "oid"),
+            headline: s(c, "messageHeadline"),
+            // the first author is the one a commit is known by
+            author: c
+                .pointer("/authors/0/login")
+                .or_else(|| c.pointer("/authors/0/name"))
+                .and_then(|x| x.as_str())
+                .unwrap_or("ghost")
+                .to_string(),
+            when: ago(&s(c, "committedDate")),
+        })
+        .collect();
+
     Ok(PrFetched {
         body: s(&v, "body"),
         files,
         reviews,
         comments,
+        commits,
     })
+}
+
+/// One commit's own diff, against its parent.
+///
+/// Through the REST API with the diff media type rather than `gh` porcelain:
+/// there is no `gh` command for a commit's diff, and this one returns the same
+/// unified format `gh pr diff` does, so the same parser reads it.
+pub fn commit_diff(repo: &str, sha: &str) -> Res<Vec<DiffFile>> {
+    let raw = run(&[
+        "api",
+        "-H",
+        "Accept: application/vnd.github.diff",
+        &format!("repos/{repo}/commits/{sha}"),
+    ])?;
+    Ok(parse_unified(&raw))
 }
 
 /// An issue's body and comments.
