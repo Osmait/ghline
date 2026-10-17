@@ -7,7 +7,7 @@
 
 use std::process::Command;
 
-use crate::model::{ChangedFile, Kind, LogEntry, Row, Scope, Status};
+use crate::model::{ChangedFile, DiffOpts, Kind, LogEntry, Row, Scope, Status};
 use crate::shared::error::{Error, Result as Res};
 
 /// Runs git in `repo` and returns its stdout.
@@ -63,8 +63,8 @@ impl crate::vcs::Vcs for Git {
         changed_files(repo, scope)
     }
 
-    fn file_diff(&self, repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>> {
-        file_diff(repo, scope, path, context)
+    fn file_diff(&self, repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<Vec<Row>> {
+        file_diff(repo, scope, path, opts)
     }
 
     fn log(&self, repo: &str, limit: usize) -> Res<Vec<LogEntry>> {
@@ -221,13 +221,18 @@ fn parse_log(text: &str) -> Vec<LogEntry> {
         .collect()
 }
 
-/// One file's diff, at `context` lines either side.
-pub fn file_diff(repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>> {
-    let unified = format!("-U{context}");
+/// One file's diff, at `opts.context` lines either side, and with changes of
+/// whitespace alone dropped when `opts.ignore_ws` — by git itself, which
+/// knows a re-indented block from an edited one better than a filter here.
+pub fn file_diff(repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<Vec<Row>> {
+    let unified = format!("-U{}", opts.context);
     let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
 
     let mut args = vec!["diff", "--no-color", &unified];
+    if opts.ignore_ws {
+        args.push("-w");
+    }
     args.extend_from_slice(&sel);
     args.push("--");
     args.push(path);
@@ -848,6 +853,38 @@ filename src/a.rs
         assert_eq!(entries[0].subject, "fix: a | b\ttab · dot");
     }
 
+    fn ctx(context: u32) -> DiffOpts {
+        DiffOpts {
+            context,
+            ignore_ws: false,
+        }
+    }
+
+    #[test]
+    fn ignoring_whitespace_really_asks_git_to() {
+        let r = Repo::new("whitespace");
+        r.write("a.txt", "fn f() {\n  one();\n}\n");
+        r.commit("first");
+        r.write("a.txt", "fn f() {\n    one();\n}\n");
+
+        let all = file_diff(r.path(), &Scope::WorkingTree, "a.txt", ctx(3)).unwrap();
+        assert!(
+            all.iter().any(|x| x.kind == Kind::Added),
+            "the indent is a change"
+        );
+        let opts = DiffOpts {
+            ignore_ws: true,
+            ..ctx(3)
+        };
+        let quiet = file_diff(r.path(), &Scope::WorkingTree, "a.txt", opts).unwrap();
+        assert!(
+            !quiet
+                .iter()
+                .any(|x| matches!(x.kind, Kind::Added | Kind::Deleted)),
+            "and with -w it is not: {quiet:?}"
+        );
+    }
+
     #[test]
     fn a_real_diff_numbers_its_lines() {
         let r = Repo::new("diff");
@@ -855,7 +892,7 @@ filename src/a.rs
         r.commit("first");
         r.write("a.txt", "one\nCHANGED\nthree\n");
 
-        let rows = file_diff(r.path(), &Scope::WorkingTree, "a.txt", 3).unwrap();
+        let rows = file_diff(r.path(), &Scope::WorkingTree, "a.txt", ctx(3)).unwrap();
         let del = rows.iter().find(|x| x.kind == Kind::Deleted).unwrap();
         let add = rows.iter().find(|x| x.kind == Kind::Added).unwrap();
 
@@ -873,8 +910,8 @@ filename src/a.rs
         r.commit("first");
         r.write("a.txt", &body.replace("line 20\n", "CHANGED\n"));
 
-        let narrow = file_diff(r.path(), &Scope::WorkingTree, "a.txt", 3).unwrap();
-        let wide = file_diff(r.path(), &Scope::WorkingTree, "a.txt", 9).unwrap();
+        let narrow = file_diff(r.path(), &Scope::WorkingTree, "a.txt", ctx(3)).unwrap();
+        let wide = file_diff(r.path(), &Scope::WorkingTree, "a.txt", ctx(9)).unwrap();
         assert!(
             wide.len() > narrow.len(),
             "±9 should show more than ±3: {} vs {}",

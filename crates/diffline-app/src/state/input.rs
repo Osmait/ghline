@@ -564,6 +564,22 @@ impl App {
         self.anchor = None;
     }
 
+    /// `␣w`. Every cached diff was asked for under the other rule, so all of
+    /// them go rather than only the open one's — a file opened later would
+    /// otherwise show whitespace the reader had just asked to leave out.
+    fn toggle_whitespace(&mut self) {
+        self.ignore_ws = !self.ignore_ws;
+        self.rows.clear();
+        self.spans.clear();
+        self.words.clear();
+        self.rows_state.clear();
+        self.flash(if self.ignore_ws {
+            "whitespace changes ignored"
+        } else {
+            "whitespace changes shown"
+        });
+    }
+
     fn set_context(&mut self, v: i64) {
         // Three at a time between 3 and 21: below three a hunk stops reading
         // as code, and past twenty-one it is the file rather than the change.
@@ -1138,6 +1154,7 @@ impl App {
             }
             Action::OtherEnd if self.pane == Pane::Tree => self.fold_here(),
             Action::FoldAll => self.fold_all(),
+            Action::IgnoreWhitespace => self.toggle_whitespace(),
             Action::OtherEnd => {
                 if let Some(a) = self.anchor {
                     self.anchor = Some(self.cursor);

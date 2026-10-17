@@ -19,29 +19,29 @@ expression: "frame(\" ?\")"
                                 │    │ O             fold or open every folder    <C-d>         half a screen down        │                                     
                                 │    │ <C-u>         half a screen up             <leader>?     this help                 │                                     
                                 │    │ <leader>l     the commit history           }             next hunk                 │                                     
-                                │    │ {             previous hunk                <down>        line down                 │                                     
-                                │    │ gj            line down                    j             line down                 │                                     
-                                │    │ $             end of the line              0             start of the line         │                                     
-                                │    │ <up>          line up                      gk            line up                   │                                     
-                                │    │ k             line up                      <leader>n     note on the selection     │                                     
-                                │    │ o             other end · fold a folder    <C-f>         a screen down             │                                     
-                                │    │ <pagedown>    a screen down                <C-b>         a screen up               │                                     
-                                │    │ <pageup>      a screen up                  <tab>         next pane                 │                                     
-                                │    │ <s-tab>       previous pane                <leader>c     show or hide the review que…                                    
-                                │    │ <leader>q     quit                         <C-l>         repaint the screen        │                                     
-                                │    │ <leader>r     refresh                      ]s            next scope                │                                     
-                                │    │ [s            previous scope               L             bottom of the screen      │                                     
-                                │    │ M             middle of the screen         H             top of the screen         │                                     
-                                │    │ <left>        scroll the line left         h             scroll the line left      │                                     
-                                │    │ <right>       scroll the line right        l             scroll the line right     │                                     
-                                │    │ /             search                       n             next match                │                                     
-                                │    │ N             previous match               <leader>s     send the queue            │                                     
-                                │    │ <leader>v     split or unified view        <leader>t     pick a theme              │                                     
-                                │    │ gg            first line                   <leader>e     show or hide the file tree│                                     
-                                │    │ <C-e>         scroll down, cursor stays    <C-y>         scroll up, cursor stays   │                                     
-                                │    │ V             visual line mode             v             visual line mode          │                                     
-                                │    │ b             back a word                  e             to the end of a word      │                                     
-                                │    │ w             forward a word                                                       │                                     
+                                │    │ {             previous hunk                <leader>w     ignore whitespace changes │                                     
+                                │    │ <down>        line down                    gj            line down                 │                                     
+                                │    │ j             line down                    $             end of the line           │                                     
+                                │    │ 0             start of the line            <up>          line up                   │                                     
+                                │    │ gk            line up                      k             line up                   │                                     
+                                │    │ <leader>n     note on the selection        o             other end · fold a folder │                                     
+                                │    │ <C-f>         a screen down                <pagedown>    a screen down             │                                     
+                                │    │ <C-b>         a screen up                  <pageup>      a screen up               │                                     
+                                │    │ <tab>         next pane                    <s-tab>       previous pane             │                                     
+                                │    │ <leader>c     show or hide the review que… <leader>q     quit                      │                                     
+                                │    │ <C-l>         repaint the screen           <leader>r     refresh                   │                                     
+                                │    │ ]s            next scope                   [s            previous scope            │                                     
+                                │    │ L             bottom of the screen         M             middle of the screen      │                                     
+                                │    │ H             top of the screen            <left>        scroll the line left      │                                     
+                                │    │ h             scroll the line left         <right>       scroll the line right     │                                     
+                                │    │ l             scroll the line right        /             search                    │                                     
+                                │    │ n             next match                   N             previous match            │                                     
+                                │    │ <leader>s     send the queue               <leader>v     split or unified view     │                                     
+                                │    │ <leader>t     pick a theme                 gg            first line                │                                     
+                                │    │ <leader>e     show or hide the file tree   <C-e>         scroll down, cursor stays │                                     
+                                │    │ <C-y>         scroll up, cursor stays      V             visual line mode          │                                     
+                                │    │ v             visual line mode             b             back a word               │                                     
+                                │    │ e             to the end of a word         w             forward a word            │                                     
                                 │    │                                                                                    │                                     
                                 │    │                                                                                    │                                     
                                 │    └────────────────────────────────────────────────────────────────────────────────────┘                                     
