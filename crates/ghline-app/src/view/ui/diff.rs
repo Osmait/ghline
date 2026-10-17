@@ -17,7 +17,7 @@ use crate::shared::syntax::Span;
 use crate::tui::diff::Pair;
 use crate::tui::theme;
 use crate::tui::{
-    bold, fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline,
+    bold, fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, tail, vline,
 };
 
 const FILES_W: u16 = 38;
@@ -800,25 +800,6 @@ fn draw_line_tinted(
     }
 }
 
-/// The end of `path` that fits in `cols` columns, behind a `…` when some of
-/// it had to go.
-fn tail(path: &str, cols: usize) -> String {
-    if path.width() <= cols || cols == 0 {
-        return path.to_string();
-    }
-    let mut used = 1; // the `…`
-    let mut start = path.len();
-    for (i, c) in path.char_indices().rev() {
-        let w = c.width().unwrap_or(0);
-        if used + w > cols {
-            break;
-        }
-        used += w;
-        start = i;
-    }
-    format!("…{}", &path[start..])
-}
-
 /// A review comment's row: a bar down the left in the accent, then who said
 /// it and when, or a line of what they said.
 ///
@@ -1165,15 +1146,6 @@ mod tests {
             .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
             .collect();
         assert_eq!(line, "  abcdefg…");
-    }
-
-    #[test]
-    fn a_path_too_long_for_the_header_keeps_its_name() {
-        assert_eq!(
-            tail(".github/workflows/backend.yaml", 16),
-            "…ws/backend.yaml"
-        );
-        assert_eq!(tail("short.rs", 16), "short.rs");
     }
 
     #[test]

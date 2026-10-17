@@ -39,7 +39,7 @@
 //! | | |
 //! |---|---|
 //! | [`geom`] | `centered`, `centered_over`, `pct`, `scroll_into_view` |
-//! | [`atom`] | `put`, `put_trunc`, `put_right`, `fill`, `clear`, `hline`, `vline`, `skel_bar`, `scrim`, `bold`, `wrap`, `truncate_pad` |
+//! | [`atom`] | `put`, `put_trunc`, `put_right`, `fill`, `clear`, `hline`, `vline`, `skel_bar`, `scrim`, `bold`, `wrap`, `truncate_pad`, `tail` |
 //! | [`molecule`] | `frame`, `rule`, `modal_head`, `query_line`, `empty` |
 //! | [`organism`] | `Dialog`, `Section`, `rows` |
 //! | [`diff`] | pairing old and new lines for a split view |
@@ -76,7 +76,7 @@ pub mod molecule;
 pub mod organism;
 
 pub use atom::{
-    Seg, bold, clear, fill, hline, pill, put, put_right, put_trunc, scrim, seen, skel_bar,
+    Seg, bold, clear, fill, hline, pill, put, put_right, put_trunc, scrim, seen, skel_bar, tail,
     truncate_pad, vline, wrap,
 };
 pub use geom::{centered, centered_over, pct, scroll_into_view};
