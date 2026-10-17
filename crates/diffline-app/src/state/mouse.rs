@@ -127,9 +127,15 @@ impl App {
                 self.pane = pane;
                 match (pane, index) {
                     (Pane::Tree, Some(i)) => {
-                        self.goto_file(i);
+                        // a row of the tree, which may be a folder: a double
+                        // click opens a file's diff and folds a folder
+                        let file = self.tree_select(i);
                         if repeat {
-                            self.pane = Pane::Diff;
+                            if file {
+                                self.pane = Pane::Diff;
+                            } else {
+                                self.tree_enter();
+                            }
                         }
                     }
                     (Pane::Diff, Some(i)) => {
@@ -194,7 +200,7 @@ impl App {
             // scrolling rather than like holding `j` down.
             Target::Pane(Pane::Diff) => self.scroll_view_by(d),
             Target::Pane(Pane::Tree) => {
-                self.tree_scroll = step(self.tree_scroll, d, self.files.len());
+                self.tree_scroll = step(self.tree_scroll, d, self.tree_rows().len());
             }
             Target::Pane(Pane::Queue) => {
                 // One card per notch: a card is four rows tall, so one is
@@ -324,6 +330,15 @@ mod tests {
 
     /// Where the last frame drew row `i` of `pane`, from the regions it
     /// recorded — the same answer a real pointer would get.
+    /// The tree row file `i` is drawn on: folders take rows of their own, so
+    /// a file's index into the list is not its row.
+    fn tree_row_of(a: &App, i: usize) -> usize {
+        a.tree_rows()
+            .iter()
+            .position(|r| r.entry == crate::shared::tree::Entry::File(i))
+            .unwrap_or_else(|| panic!("file {i} is not in the tree"))
+    }
+
     fn cell_of(a: &App, pane: Pane, i: usize) -> (u16, u16) {
         let r = a
             .hits
@@ -386,7 +401,7 @@ mod tests {
         assert_eq!(a.cursor, 4, "a diff click puts the cursor on the row");
 
         draw_wide(&mut a);
-        let (x, y) = cell_of(&a, Pane::Tree, 1);
+        let (x, y) = cell_of(&a, Pane::Tree, tree_row_of(&a, 1));
         a.on_mouse(ev(Motion::Down(Button::Left), x, y));
         assert_eq!(a.file_idx, 1, "and a tree click chose the file under it");
     }
@@ -558,8 +573,9 @@ mod tests {
             crate::shared::key::Key::Char('j'),
         ));
         draw_wide(&mut a);
+        let at = a.tree_row(&a.tree_rows());
         assert!(
-            a.tree_scroll <= a.file_idx,
+            a.tree_scroll <= at,
             "the selection pulled the list back to itself"
         );
     }
@@ -615,7 +631,7 @@ mod tests {
         draw_wide(&mut a);
 
         let now = Instant::now();
-        let (x, y) = cell_of(&a, Pane::Tree, 1);
+        let (x, y) = cell_of(&a, Pane::Tree, tree_row_of(&a, 1));
         a.on_mouse_at(ev(Motion::Down(Button::Left), x, y), now);
         assert_eq!(a.pane, Pane::Tree, "one click only chooses");
         a.on_mouse_at(ev(Motion::Down(Button::Left), x, y), now);

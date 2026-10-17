@@ -17,6 +17,29 @@ selection, and the commands behind a leader, which is space.
 
 ![a note being anchored to a range of the diff](img/diffline.svg)
 
+## The files are a tree that folds
+
+The changed files are a folder tree, laid out as ghline lays a pull request's
+out — the same code, in `line_shared::tree`: folders before files at every
+level, and a folder holding nothing but another folder joined into one row.
+A change is mostly read by where it lands, so a folder can be folded out of
+the way once it has been read:
+
+- `enter` on a folder folds or opens it; on a file it moves into the diff.
+- `h` folds the folder the cursor is in and `l` opens a folded one; with
+  nothing to fold or open they walk between the panes as they do elsewhere.
+- `o` folds or opens the folder the cursor is in, and `O` folds everything,
+  or opens everything if anything is folded.
+- A folded folder shows how many files are under it and their counts summed.
+
+While the cursor is on a folder the diff keeps the file it was showing, and
+`]f`/`[f` step through the files in the tree's order.
+
+On an edited line — a deletion paired with the addition that replaced it —
+the words that changed are reversed, as git's `diff-highlight` does. Under a
+theme that cannot tint added and deleted lines, the terminal one, those lines
+keep their green and red and take no syntax colour, which would hide them.
+
 ## Comments are anchored to lines, not to rows
 
 A comment belongs to a *line of a file* rather than to a row on screen, because
