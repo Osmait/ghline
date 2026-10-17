@@ -33,6 +33,45 @@ fn label(args: &[&str]) -> String {
         .join(" ")
 }
 
+/// A `gh` that exited non-zero, with what it said.
+///
+/// `gh api` writes only `gh: Unprocessable Entity (HTTP 422)` to stderr and
+/// puts GitHub's reason in the JSON it prints to stdout. The reason goes first
+/// — the status bar shows a failure's first line — and the rest follows.
+fn failure(args: &[&str], out: &std::process::Output) -> Error {
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    let reasons = api_reasons(&String::from_utf8_lossy(&out.stdout));
+    Error::Command {
+        args: label(args),
+        status: out.status.code(),
+        stderr: if reasons.is_empty() {
+            stderr
+        } else {
+            format!("{}\n{stderr}", reasons.join("; "))
+        },
+    }
+}
+
+/// GitHub's reasons in an API error body: its `errors`, which are strings or
+/// objects with a `message`, or failing those nothing.
+fn api_reasons(stdout: &str) -> Vec<String> {
+    let Ok(v) = serde_json::from_str::<Value>(stdout.trim()) else {
+        return Vec::new();
+    };
+    v.get("errors")
+        .and_then(Value::as_array)
+        .map(|es| {
+            es.iter()
+                .filter_map(|e| {
+                    e.as_str()
+                        .map(str::to_string)
+                        .or_else(|| e.get("message").and_then(Value::as_str).map(str::to_string))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Runs `gh` and returns its stdout.
 fn run(args: &[&str]) -> Res<String> {
     let out = Command::new("gh")
@@ -44,11 +83,7 @@ fn run(args: &[&str]) -> Res<String> {
             source,
         })?;
     if !out.status.success() {
-        return Err(Error::Command {
-            args: label(args),
-            status: out.status.code(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-        });
+        return Err(failure(args, &out));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
@@ -75,11 +110,7 @@ fn run_with_input(args: &[&str], input: &str) -> Res<String> {
     }
     let out = child.wait_with_output().map_err(spawn)?;
     if !out.status.success() {
-        return Err(Error::Command {
-            args: label(args),
-            status: out.status.code(),
-            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
-        });
+        return Err(failure(args, &out));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
@@ -1553,6 +1584,18 @@ mod tests {
             "gh api graphql"
         );
         assert_eq!(label(&[]), "gh");
+    }
+
+    #[test]
+    fn an_api_refusal_says_githubs_reason_and_not_just_its_status() {
+        let body = r#"{"message":"Unprocessable Entity","errors":["Review Can not approve your own pull request"],"status":"422"}"#;
+        assert_eq!(
+            api_reasons(body),
+            ["Review Can not approve your own pull request"]
+        );
+        let objects = r#"{"errors":[{"message":"line must be part of the diff"}]}"#;
+        assert_eq!(api_reasons(objects), ["line must be part of the diff"]);
+        assert!(api_reasons("not json").is_empty());
     }
 
     #[test]
