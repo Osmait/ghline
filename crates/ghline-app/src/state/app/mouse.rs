@@ -179,6 +179,12 @@ impl App {
             return;
         };
         match region.target {
+            // the wheel moves the view, and the cursor rides along with it
+            // rather than having to reach the edge before anything scrolls
+            Target::Pane(Pane::DiffBody) => {
+                self.diff_scroll = (self.diff_scroll as i64 + d).max(0) as usize;
+                self.diff_cursor = (self.diff_cursor as i64 + d).max(0) as usize;
+            }
             Target::Pane(pane) => self.move_pane_by(pane, d),
             Target::Finder => {
                 self.finder_sel = step_sel(self.finder_sel, d, self.finder_len());
