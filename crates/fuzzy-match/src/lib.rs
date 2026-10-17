@@ -30,8 +30,10 @@ const EXACT_CASE: i32 = 2;
 ///
 /// Greedy means the first letter that fits wins, even where a later one would
 /// have scored better — "gt" against "git-host-tui" takes the `t` of "git",
-/// not the one starting "tui". Finding the best alignment needs a second pass
-/// over the string; for names this short the ranking is the same either way.
+/// not the one starting "tui". Finding the best alignment in general needs a
+/// second pass over the string; the one alignment checked besides is the
+/// query typed whole, where greedy goes worst — a path, whose first letters
+/// are spent on folders before the name the query is.
 ///
 /// ```rust
 /// use fuzzy_match::score;
@@ -112,8 +114,67 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
     // a short haystack that matched is a closer fit than a long one. Counted
     // rather than known, since the scan above stops at the last match — but
     // only on the paths that matched, which is the minority of candidates.
-    total -= ((seen + chars.count()) / 8) as i32;
+    let length = ((seen + chars.count()) / 8) as i32;
+    total -= length;
+
+    // Greedy takes the first letter that fits, and in a path that is the
+    // wrong one: "tree.rs" against `crates/line-shared/src/tree.rs` spent
+    // its `t` on "crates" and scattered the rest, losing to `theme.rs`. So a
+    // query that is in the haystack as it was typed is scored there too, and
+    // the better alignment wins. Only on a match, so only the minority pays.
+    if let Some((run, start)) = contiguous(query, haystack)
+        && run - length > total
+    {
+        // the same `Vec`, refilled: it already holds one slot per letter, so
+        // this costs no allocation the greedy pass had not already made
+        let n = positions.len();
+        positions.clear();
+        positions.extend(start..start + n);
+        return Some((run - length, positions));
+    }
     Some((total, positions))
+}
+
+/// The best place `query` sits in `haystack` letter for letter, ignoring
+/// case — its score, before the length is taken off, and the character it
+/// starts at. Walks the haystack in place: the tests below hold `score` to
+/// the one allocation of its positions, and this is inside it.
+fn contiguous(query: &str, haystack: &str) -> Option<(i32, usize)> {
+    let n = query.chars().count();
+    let same = |a: char, b: char| a.eq_ignore_ascii_case(&b);
+    let mut best: Option<(i32, usize)> = None;
+    let mut before: Option<char> = None;
+    for (start, (byte, first)) in haystack.char_indices().enumerate() {
+        let rest = &haystack[byte..];
+        let fits = rest.chars().take(n).count() == n
+            && rest.chars().zip(query.chars()).all(|(h, q)| same(h, q));
+        if fits {
+            let mut total = 0;
+            for (k, (h, q)) in rest.chars().zip(query.chars()).enumerate() {
+                let mut points = 1;
+                if k == 0 {
+                    points += if start == 0 {
+                        STRING_START
+                    } else if is_boundary(before, h) {
+                        WORD_START
+                    } else {
+                        0
+                    };
+                } else {
+                    points += CONSECUTIVE;
+                }
+                if h == q {
+                    points += EXACT_CASE;
+                }
+                total += points;
+            }
+            if best.is_none_or(|(b, _)| total > b) {
+                best = Some((total, start));
+            }
+        }
+        before = Some(first);
+    }
+    best
 }
 
 /// Is this the first letter of a word? Separators, and the lowercase-to-
@@ -161,6 +222,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_query_typed_whole_finds_the_file_it_names_before_a_scatter() {
+        let items = [
+            "crates/tui-kit/src/theme.rs",
+            "crates/line-shared/src/tree.rs",
+        ];
+        let ranked = rank("tree.rs", &items, |s| s);
+        assert_eq!(
+            ranked.first().map(|(i, _)| *i),
+            Some(1),
+            "tree.rs, not theme.rs"
+        );
+        let (_, at) = score("tree.rs", items[1]).unwrap();
+        assert_eq!(
+            at,
+            (23..30).collect::<Vec<_>>(),
+            "underlined where it is whole"
+        );
+    }
 
     fn s(q: &str, h: &str) -> Option<i32> {
         score(q, h).map(|(s, _)| s)
