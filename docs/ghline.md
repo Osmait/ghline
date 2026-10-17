@@ -23,6 +23,7 @@ settings, themes and colours are in [config.md](config.md).
 | Diff | `gh pr diff`, split per file and per hunk |
 | Review comments | `reviewThreads` through `gh api graphql` |
 | One commit's diff | `gh api repos/…/commits/<sha>` with the diff media type |
+| Sending a review | `POST repos/…/pulls/<n>/reviews` through `gh api --input -` |
 | Logs | `gh run view --log`, split per job and step |
 | Actions | `gh pr merge/close/reopen` and `DELETE /git/refs` |
 
@@ -229,6 +230,28 @@ parent, the files pane says `COMMIT 4f1c2a9`, and the first row of the picker
 hidden while a commit is shown: their lines are the last version's, and in an
 earlier commit they would sit under whatever happens to have that number.
 
+### Writing a review
+
+The diff has a cursor — `j`/`k`, and every jump lands it — and a review is
+written against it:
+
+- `i` opens a note on the cursor's line, or on the line a comment under the
+  cursor is about; `enter` keeps it as a draft, `^j` is a new line, `esc`
+  keeps nothing. A draft is drawn where its thread will be, marked `✎ draft`,
+  and the tree counts a file's drafts, `✎1`. `i` on the same line edits it.
+- `X` drops the draft on the cursor's line, and so does keeping one empty.
+- `R` sends them all as one review: `tab` picks Comment, Approve or Request
+  changes, the letters are its words, and `enter` sends. A comment with no
+  notes and no words, and a request for changes with no words, are refused
+  before they go — GitHub would refuse them too. The drafts stay until
+  GitHub has them; once it does, the threads are fetched again and the notes
+  come back as what they now are.
+
+Drafts are kept per pull request for as long as ghline runs, are never taken
+on a single commit (GitHub anchors a comment to the last version), and stay in
+view when `C` hides what others said. GitHub refuses an approval or a request
+for changes on a pull request of your own; that refusal is shown as it comes.
+
 The rest of what was said is in the PR's detail, beside its description: each
 review with what its reviewer wrote under the verdict, and the conversation —
 comments on the pull request as a whole — rendered as Markdown. A reply to a
@@ -354,6 +377,9 @@ thing off if you would rather have it back.
 | `(` `)` | previous / next review comment (in the diff) |
 | `C` | show / hide review comments (in the diff) |
 | `v` | read one commit of the PR on its own (in the diff) |
+| `i` | a note on the cursor's line (in the diff) |
+| `X` | drop the note on the cursor's line (in the diff) |
+| `R` | send the review: the notes, a verdict and its words |
 | `g` `G` | start / end of the pane |
 | `^d` `^u` | half a page |
 | `PgUp` `PgDn` | a whole page |

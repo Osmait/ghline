@@ -318,6 +318,37 @@ pub struct Thread {
     pub pending: bool,
 }
 
+/// What a review says of the pull request as a whole.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Verdict {
+    /// Notes, with no verdict either way.
+    #[default]
+    Comment,
+    Approve,
+    RequestChanges,
+}
+
+impl Verdict {
+    pub const ALL: [Self; 3] = [Self::Comment, Self::Approve, Self::RequestChanges];
+
+    /// What GitHub's API calls it.
+    pub fn event(self) -> &'static str {
+        match self {
+            Self::Comment => "COMMENT",
+            Self::Approve => "APPROVE",
+            Self::RequestChanges => "REQUEST_CHANGES",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Comment => "Comment",
+            Self::Approve => "Approve",
+            Self::RequestChanges => "Request changes",
+        }
+    }
+}
+
 /// A note the reader has written against a line and not yet sent. Sent with
 /// the rest as one review, which is how GitHub takes them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -771,6 +802,7 @@ pub const HELP: &[(&str, &str)] = &[
     ("v", "one commit of the PR"),
     ("i", "a note on this line"),
     ("X", "drop the note here"),
+    ("R", "send the review"),
     ("tab", "next pane"),
     ("m", "merge the pull request"),
     ("c", "close / reopen the PR"),

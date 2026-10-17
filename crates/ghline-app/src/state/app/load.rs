@@ -46,7 +46,7 @@ impl App {
     /// looks like progress. The thread only dies when the program is being
     /// torn down, so this is a guard rather than a path anyone walks; the
     /// flag is enough to stop the animation and say why.
-    fn ask(&mut self, req: Request) {
+    pub(super) fn ask(&mut self, req: Request) {
         if self.service.is_some() && !self.service.as_ref().is_some_and(|w| w.send(req)) {
             self.worker_gone = true;
             self.busy = false;
@@ -599,6 +599,33 @@ impl App {
                     self.diff_state.insert((repo, num), Load::from(e));
                 }
             },
+
+            Response::ReviewSent {
+                repo,
+                num,
+                verdict,
+                result,
+            } => {
+                self.busy = false;
+                match result {
+                    Ok(()) => {
+                        let sent = self
+                            .drafts
+                            .remove(&(repo.clone(), num))
+                            .map_or(0, |d| d.len());
+                        self.flash_ok(format!(
+                            "review sent · {} · {sent} {}",
+                            verdict.label(),
+                            if sent == 1 { "note" } else { "notes" }
+                        ));
+                        // what was just said is now GitHub's to tell back:
+                        // the threads and the reviews are asked for again
+                        self.threads_state.remove(&(repo.clone(), num));
+                        self.detail_state.remove(&(repo, num));
+                    }
+                    Err(e) => self.flash_warn(format!("review not sent: {}", e.brief())),
+                }
+            }
 
             Response::CommitDiff { repo, sha, result } => match result {
                 Ok(files) => {

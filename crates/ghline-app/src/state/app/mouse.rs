@@ -64,6 +64,7 @@ impl App {
             || self.dispatch_open
             || self.commits_open
             || self.note_open.is_some()
+            || self.review_open
     }
 
     fn click(&mut self, at: Position, now: Instant) {

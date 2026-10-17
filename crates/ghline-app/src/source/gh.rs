@@ -8,9 +8,9 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::data::{
-    Account, Change, Comment, Commit, Detail, DiffFile, DiffSide, FileChange, Hunk, IssueDetail,
-    Item, Job, Label, PrDetail, PrFetched, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit,
-    Status, Step, Thread, ThreadComment, TreeEntry,
+    Account, Change, Comment, Commit, Detail, DiffFile, DiffSide, Draft, FileChange, Hunk,
+    IssueDetail, Item, Job, Label, PrDetail, PrFetched, RawLog, Repo, Review, ReviewState,
+    RunDetail, SearchHit, Status, Step, Thread, ThreadComment, TreeEntry, Verdict,
 };
 use crate::data::{Kind, LogKind};
 
@@ -43,6 +43,37 @@ fn run(args: &[&str]) -> Res<String> {
             install: Some("install the GitHub CLI"),
             source,
         })?;
+    if !out.status.success() {
+        return Err(Error::Command {
+            args: label(args),
+            status: out.status.code(),
+            stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+        });
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// Runs `gh` with `input` on its stdin, for a request body too shaped for
+/// flags — an array of objects, which `-f` can only spell by convention.
+fn run_with_input(args: &[&str], input: &str) -> Res<String> {
+    use std::io::Write as _;
+    use std::process::Stdio;
+    let spawn = |source| Error::Spawn {
+        program: "gh",
+        install: Some("install the GitHub CLI"),
+        source,
+    };
+    let mut child = Command::new("gh")
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(spawn)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input.as_bytes()).map_err(spawn)?;
+    }
+    let out = child.wait_with_output().map_err(spawn)?;
     if !out.status.success() {
         return Err(Error::Command {
             args: label(args),
@@ -958,6 +989,51 @@ pub fn merge(repo: &str, num: i64, method: &str) -> Res<()> {
     run(&["pr", "merge", &num.to_string(), "-R", repo, flag]).map(|_| ())
 }
 
+/// Sends a review: a verdict, a body, and the drafts as its line comments.
+pub fn submit_review(
+    repo: &str,
+    num: i64,
+    verdict: Verdict,
+    body: &str,
+    drafts: &[Draft],
+) -> Res<()> {
+    run_with_input(
+        &[
+            "api",
+            "--method",
+            "POST",
+            &format!("repos/{repo}/pulls/{num}/reviews"),
+            "--input",
+            "-",
+        ],
+        &review_payload(verdict, body, drafts).to_string(),
+    )
+    .map(|_| ())
+}
+
+/// The request body GitHub's "create a review" endpoint takes.
+fn review_payload(verdict: Verdict, body: &str, drafts: &[Draft]) -> Value {
+    let comments: Vec<Value> = drafts
+        .iter()
+        .map(|d| {
+            serde_json::json!({
+                "path": d.path,
+                "line": d.line,
+                "side": match d.side {
+                    DiffSide::Left => "LEFT",
+                    DiffSide::Right => "RIGHT",
+                },
+                "body": d.body,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "event": verdict.event(),
+        "body": body,
+        "comments": comments,
+    })
+}
+
 pub fn close(repo: &str, num: i64) -> Res<()> {
     run(&["pr", "close", &num.to_string(), "-R", repo]).map(|_| ())
 }
@@ -1477,6 +1553,22 @@ mod tests {
             "gh api graphql"
         );
         assert_eq!(label(&[]), "gh");
+    }
+
+    #[test]
+    fn a_review_is_sent_with_its_notes_as_line_comments() {
+        let drafts = [Draft {
+            path: "a.rs".into(),
+            line: 12,
+            side: DiffSide::Left,
+            body: "why?".into(),
+        }];
+        let v = review_payload(Verdict::RequestChanges, "see notes", &drafts);
+        assert_eq!(v["event"], "REQUEST_CHANGES");
+        assert_eq!(v["body"], "see notes");
+        assert_eq!(v["comments"][0]["path"], "a.rs");
+        assert_eq!(v["comments"][0]["line"], 12);
+        assert_eq!(v["comments"][0]["side"], "LEFT");
     }
 
     #[test]

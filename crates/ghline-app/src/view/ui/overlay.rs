@@ -1,6 +1,6 @@
 //! Modals: the account picker (`a`), the theme picker (`t`), the commit
-//! picker (`v` in a diff), the note editor (`i` in a diff) and the
-//! keybinding help (`?`).
+//! picker (`v` in a diff), the note editor (`i` in a diff), the review
+//! dialog (`R`) and the keybinding help (`?`).
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
@@ -301,6 +301,92 @@ pub fn note(buf: &mut Buffer, area: Rect, app: &mut App) {
         if i == last {
             put(buf, cx, y, max, "█", base.fg(theme::orange()));
         }
+    }
+}
+
+/// The review dialog: what goes with it, the verdict, and the body — and,
+/// while it cannot be sent, why not, so enter is never a guess.
+pub fn review(buf: &mut Buffer, area: Rect, app: &mut App) {
+    use crate::data::Verdict;
+    let width: u16 = 76;
+    let text_w = width.saturating_sub(6) as usize;
+    let mut lines: Vec<String> = Vec::new();
+    for para in app.review_text.split('\n') {
+        let folded = crate::tui::wrap(para, text_w);
+        if folded.is_empty() {
+            lines.push(String::new());
+        } else {
+            lines.extend(folded);
+        }
+    }
+    let tall = (lines.len() as u16 + 14).clamp(16, area.height.saturating_sub(2));
+    let body = Dialog::new("SEND REVIEW")
+        .hint("tab verdict · enter send · ^j new line · esc")
+        .accent(theme::green())
+        .size(Size::new(width, tall))
+        .open(buf, area);
+    app.hits.push(Region::plain(Target::Note, body.outer));
+
+    let base = Style::default().bg(theme::panel());
+    let x = body.inner.x + 2;
+    let max = body.inner.right().saturating_sub(1);
+    let mut y = body.inner.y;
+
+    let drafts = app.drafts();
+    let files = {
+        let mut f: Vec<&str> = drafts.iter().map(|d| d.path.as_str()).collect();
+        f.sort_unstable();
+        f.dedup();
+        f.len()
+    };
+    let summary = match (drafts.len(), files) {
+        (0, _) => "no notes: the review is its verdict and its words".to_string(),
+        (1, _) => "1 note".to_string(),
+        (n, 1) => format!("{n} notes on 1 file"),
+        (n, f) => format!("{n} notes on {f} files"),
+    };
+    put_trunc(buf, x, y, max, &summary, base.fg(theme::dim()));
+    y += 2;
+
+    for v in Verdict::ALL {
+        let on = v == app.review_verdict;
+        let color = match v {
+            Verdict::Comment => theme::cyan(),
+            Verdict::Approve => theme::green(),
+            Verdict::RequestChanges => theme::red(),
+        };
+        let cx = put(buf, x, y, max, if on { "● " } else { "○ " }, base.fg(color));
+        let style = if on {
+            crate::tui::bold(base.fg(theme::bright()))
+        } else {
+            base.fg(theme::dim())
+        };
+        put_trunc(buf, cx, y, max, v.label(), style);
+        y += 1;
+    }
+    y += 1;
+
+    // the body, its last lines if it outgrows the box: the end is where the
+    // typing is
+    let room = body.inner.bottom().saturating_sub(y + 2) as usize;
+    let skip = lines.len().saturating_sub(room.max(1));
+    let last = lines.len().saturating_sub(1);
+    for (ly, (i, line)) in (y..).zip(lines.iter().enumerate().skip(skip)) {
+        let cx = put_trunc(buf, x, ly, max, line, base.fg(theme::bright()));
+        if i == last {
+            put(buf, cx, ly, max, "█", base.fg(theme::green()));
+        }
+    }
+
+    if let Some(why) = app.review_refusal() {
+        put_trunc(
+            buf,
+            x,
+            body.inner.bottom().saturating_sub(1),
+            max,
+            why,
+            base.fg(theme::orange()),
+        );
     }
 }
 
