@@ -9,7 +9,7 @@ use super::parts::{count_style, put_right_parts};
 use crate::app::App;
 use crate::hit::{Region, Target};
 use crate::tui::theme;
-use crate::tui::{fill, put, put_trunc};
+use crate::tui::{fill, pill, put, put_trunc};
 
 pub(super) fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel());
@@ -21,10 +21,7 @@ pub(super) fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {
         0,
         area.right(),
         " DIFFLINE ",
-        Style::default()
-            .bg(theme::yellow())
-            .fg(theme::panel())
-            .add_modifier(Modifier::BOLD),
+        pill(theme::yellow(), theme::panel()).add_modifier(Modifier::BOLD),
     );
 
     x = put(buf, x + 1, 0, area.right(), "⎇ ", base.fg(theme::purple()));
@@ -42,7 +39,7 @@ pub(super) fn header_bar(buf: &mut Buffer, area: Rect, app: &mut App) {
     for (i, s) in app.scopes.iter().enumerate() {
         let on = *s == app.scope;
         let style = if on {
-            base.bg(theme::fg()).fg(theme::panel())
+            pill(theme::fg(), theme::panel())
         } else {
             base.fg(theme::dim())
         };
@@ -100,11 +97,14 @@ pub(super) fn queue_tab(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
     // On the rule under the header, right-aligned: out of the way of the code
     // and of the file names, and on the one row that is already a border.
-    let style = Style::default().fg(theme::panel()).bg(if n == 0 {
-        theme::dimmer()
-    } else {
-        theme::yellow()
-    });
+    let style = pill(
+        if n == 0 {
+            theme::dimmer()
+        } else {
+            theme::yellow()
+        },
+        theme::panel(),
+    );
     let x = area.width - w - 2;
     put(buf, x, 1, area.width, &label, style);
     app.hits.push(Region::plain(

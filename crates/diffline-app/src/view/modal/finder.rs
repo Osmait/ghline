@@ -9,8 +9,8 @@ use crate::hit::{Region, Target};
 use crate::model::Kind;
 use crate::tui::theme;
 use crate::tui::{
-    centered_over as centered, fill, frame, put, put_right, put_trunc, rule, scroll_into_view,
-    vline,
+    centered_over as centered, fill, frame, pill, put, put_right, put_trunc, rule,
+    scroll_into_view, vline,
 };
 
 pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &mut App) {
@@ -28,7 +28,7 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &mut App) {
     for t in FinderTab::ALL {
         let on = t == app.finder_tab;
         let style = if on {
-            base.bg(theme::yellow()).fg(theme::panel())
+            pill(theme::yellow(), theme::panel())
         } else {
             base.fg(theme::dim())
         };

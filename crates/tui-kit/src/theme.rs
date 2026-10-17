@@ -16,6 +16,12 @@
 //! either program has, and `theme::dimmer()` reads at a call site in a way that
 //! `theme::role(Role::Dimmer)` does not.
 //!
+//! One theme, `terminal`, is not colours at all: it hands every role back to
+//! the terminal — its default ground and text, and its sixteen ANSI colours —
+//! so the interface follows whatever theme the terminal itself is wearing.
+//! Code that does arithmetic on a colour therefore meets `Color::Reset` and
+//! the named ANSI colours as well as `Color::Rgb`, and must leave them be.
+//!
 //! Choosing between them is choosing a *role*, never a colour. Four of the
 //! surfaces are within a few points of black under both themes bundled here and
 //! a theme read off disk may make any of them anything at all, so pick by what
@@ -189,6 +195,51 @@ const MOCHA: Palette = Palette {
     orange: rgb(0x00fab387), // peach
 };
 
+/// The terminal's own colours, whatever theme it is wearing.
+///
+/// Surfaces are `Reset`, which is the terminal's default ground, and so are
+/// the text roles that want its default ink. Accents are the ANSI colours by
+/// number, which every terminal theme defines. That costs the design its
+/// lifted panels and its tinted diff lines — ANSI has nothing a shade off the
+/// ground — so added and deleted lines say so in green and red ink alone, and
+/// the one shade there is, bright black, carries the selection and the rules.
+///
+/// Gray rather than bright black for `dim` and `dimmer`: they are drawn on the
+/// selected row, which is bright black, and would vanish into it.
+///
+/// No white for `bright`: on a light terminal it is the ground.
+const TERMINAL: Palette = Palette {
+    bg: Color::Reset,
+    panel: Color::Reset,
+    panel_alt: Color::Reset,
+    tab_active_bg: Color::Reset,
+    border: Color::DarkGray,
+    border_soft: Color::DarkGray,
+    sel: Color::DarkGray,
+    sel_mark_idle: Color::DarkGray,
+    err_bg: Color::Reset,
+    diff_add_bg: Color::Reset,
+    diff_del_bg: Color::Reset,
+    diff_void_bg: Color::Reset,
+    fg: Color::Reset,
+    bright: Color::Reset,
+    body: Color::Reset,
+    step_fg: Color::Reset,
+    log_fg: Color::Reset,
+    dim: Color::Gray,
+    dimmer: Color::Gray,
+    dimmest: Color::DarkGray,
+    gutter: Color::DarkGray,
+    cyan: Color::Cyan,
+    cyan_soft: Color::Blue,
+    green: Color::Green,
+    yellow: Color::Yellow,
+    red: Color::Red,
+    purple: Color::Magenta,
+    // ANSI has no orange; bright red is the nearest every theme defines.
+    orange: Color::LightRed,
+};
+
 /// Which palette is in force.
 ///
 /// `Copy`, and small enough to be worth passing about, because it is stored as
@@ -201,14 +252,16 @@ pub enum Theme {
     Default,
     /// Catppuccin Mocha.
     Mocha,
+    /// Whatever the terminal is wearing.
+    Terminal,
     /// One the reader wrote, by index into `custom()`.
     Custom(usize),
 }
 
 impl Theme {
-    /// The two built in, and whatever is in the themes directory.
+    /// The three built in, and whatever is in the themes directory.
     pub fn all() -> Vec<Self> {
-        let mut v = vec![Self::Default, Self::Mocha];
+        let mut v = vec![Self::Default, Self::Mocha, Self::Terminal];
         v.extend((0..custom().len()).map(Self::Custom));
         v
     }
@@ -218,6 +271,7 @@ impl Theme {
         match self {
             Self::Default => "default",
             Self::Mocha => "catppuccin mocha",
+            Self::Terminal => "terminal",
             Self::Custom(i) => custom().get(i).map_or("?", |c| c.name),
         }
     }
@@ -228,6 +282,7 @@ impl Theme {
         match self {
             Self::Default => "default",
             Self::Mocha => "mocha",
+            Self::Terminal => "terminal",
             Self::Custom(i) => custom().get(i).map_or("?", |c| c.key),
         }
     }
@@ -249,6 +304,7 @@ impl Theme {
         match self {
             Self::Default => "the palette this ships with",
             Self::Mocha => "catppuccin.com · the darkest of the four flavours",
+            Self::Terminal => "the terminal's own ground, ink and ANSI colours",
             Self::Custom(_) => "yours, from the themes directory",
         }
     }
@@ -257,6 +313,7 @@ impl Theme {
         match self {
             Self::Default => &DEFAULT,
             Self::Mocha => &MOCHA,
+            Self::Terminal => &TERMINAL,
             Self::Custom(i) => custom().get(i).map_or(&MOCHA, |c| &c.palette),
         }
     }
@@ -443,7 +500,13 @@ pub fn template(name: &str) -> (std::path::PathBuf, String) {
 
     let width = ROLES.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
     for (role, about) in ROLES {
-        let c = role_of(&p, role);
+        // A role the terminal theme leaves to the terminal has no hex to
+        // write, and `#000000` would be a black hole in the file. Mocha's is
+        // what the parser would fill it with anyway.
+        let c = match role_of(&p, role) {
+            c @ Color::Rgb(..) => c,
+            _ => role_of(&MOCHA, role),
+        };
         out.push_str(&format!(
             "{role:<width$} = {}   # {about}\n",
             hex_of(c),
@@ -534,7 +597,7 @@ static ACTIVE: AtomicUsize = AtomicUsize::new(0);
 /// Worked out from the index rather than by indexing `all()`, because `all()`
 /// builds a `Vec` — and this is called by every colour lookup, which is once
 /// per cell per frame. It was allocating thousands of times a frame to answer
-/// a question with three possible shapes. `built_in_count` and the order in
+/// a question with four possible shapes. `built_in_count` and the order in
 /// `all()` are the two halves of the same fact, and a test below holds them
 /// together.
 pub fn current() -> Theme {
@@ -542,6 +605,7 @@ pub fn current() -> Theme {
     match i {
         0 => Theme::Default,
         1 => Theme::Mocha,
+        2 => Theme::Terminal,
         n => {
             let k = n - BUILT_IN;
             if k < custom().len() {
@@ -555,7 +619,7 @@ pub fn current() -> Theme {
 }
 
 /// How many themes ship, and so where the custom ones start.
-const BUILT_IN: usize = 2;
+const BUILT_IN: usize = 3;
 
 /// Makes `theme` the one the accessors read, from the next lookup on.
 ///
@@ -884,6 +948,26 @@ pub(crate) mod tests {
                 purple(),
                 orange(),
             ];
+            if t == Theme::Terminal {
+                // Handing a role to the terminal is the point of this one, so
+                // the hole to look for is a different one: a role that is
+                // meant to stand out from the ground and is the ground.
+                let marks = [border(), sel(), dim(), dimmer(), gutter()];
+                let accents = [
+                    cyan(),
+                    cyan_soft(),
+                    green(),
+                    yellow(),
+                    red(),
+                    purple(),
+                    orange(),
+                ];
+                assert!(
+                    marks.iter().chain(&accents).all(|c| *c != Color::Reset),
+                    "terminal leaves a mark or an accent to the default ink"
+                );
+                continue;
+            }
             assert!(
                 colours.iter().all(|c| matches!(c, Color::Rgb(..))),
                 "{} leaves a role to the terminal's default",
@@ -893,6 +977,30 @@ pub(crate) mod tests {
             assert_ne!(fg(), bg(), "{}", t.name());
         }
         set(Theme::Default);
+    }
+
+    #[test]
+    fn the_terminal_theme_draws_on_the_terminals_own_ground_and_ink() {
+        let _g = LOCK.lock();
+        set(Theme::Terminal);
+        assert_eq!(bg(), Color::Reset);
+        assert_eq!(panel(), Color::Reset);
+        assert_eq!(fg(), Color::Reset);
+        assert_eq!(green(), Color::Green, "an accent is the ANSI colour itself");
+        set(Theme::Default);
+    }
+
+    #[test]
+    fn a_template_written_from_the_terminal_theme_reads_back_without_a_black_hole() {
+        // Its surfaces have no hex. Written as `#000000`, a theme started
+        // from this one would open on black panels.
+        let _g = LOCK.lock();
+        set(Theme::Terminal);
+        let (_, text) = template("mine");
+        set(Theme::Default);
+        assert!(!text.contains("#000000"), "{text}");
+        let p = parse_palette(&text);
+        assert_eq!(hexof(p.bg), hexof(MOCHA.bg));
     }
 
     #[test]

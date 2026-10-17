@@ -76,8 +76,8 @@ pub mod molecule;
 pub mod organism;
 
 pub use atom::{
-    Seg, bold, clear, fill, hline, put, put_right, put_trunc, scrim, skel_bar, truncate_pad, vline,
-    wrap,
+    Seg, bold, clear, fill, hline, pill, put, put_right, put_trunc, scrim, seen, skel_bar,
+    truncate_pad, vline, wrap,
 };
 pub use geom::{centered, centered_over, pct, scroll_into_view};
 pub use molecule::{

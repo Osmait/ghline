@@ -63,10 +63,21 @@ version survives an older one. A theme that cannot be written is still applied,
 and says so — silently forgetting looks like a bug. The headless render modes
 deliberately ignore it, so a snapshot is the same frame on any machine.
 
-Two ship: the default palette and Catppuccin Mocha. A theme is a whole
+Three ship: the default palette, Catppuccin Mocha, and `terminal`. A theme is a whole
 `Palette` and switching one in is a single store, so the change lands on the
 very next frame. A test walks every theme and fails if a role is left
 undefined, which would otherwise show up as an invisible pane.
+
+### Following the terminal
+
+`terminal` is not a palette but a hand-back: the ground and the text are the
+terminal's defaults, and every accent is one of its sixteen ANSI colours, so
+the interface wears whatever theme the terminal does and changes when it
+changes. ANSI has nothing a shade off the ground, so this one is flatter than
+the others — panels sit on the ground itself, added and deleted lines are told
+apart by their green and red ink rather than a tint behind them, and bright
+black carries the selection and the rules. Pills are drawn in reverse video,
+which is what keeps them legible on a light terminal and a dark one alike.
 
 ### Writing your own
 

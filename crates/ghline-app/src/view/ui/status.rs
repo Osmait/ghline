@@ -8,7 +8,7 @@ use crate::actions::FlashKind;
 use crate::app::{App, Cmd, Pane, View};
 use crate::data::Kind;
 use crate::tui::theme;
-use crate::tui::{bold, fill, hline, put, put_right};
+use crate::tui::{bold, fill, hline, pill, put, put_right};
 
 pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
     hline(buf, area.x, area.y, area.width, theme::border());
@@ -64,7 +64,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         y,
         area.right(),
         &format!(" {mode_label} "),
-        bold(Style::default().bg(mode_color).fg(theme::bg())),
+        bold(pill(mode_color, theme::bg())),
     );
 
     let on_pr = app.actionable_pr();

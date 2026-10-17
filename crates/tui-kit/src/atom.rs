@@ -294,6 +294,32 @@ pub fn bold(style: Style) -> Style {
     style.add_modifier(Modifier::BOLD)
 }
 
+/// `ink` on a `ground` of its own: a pill, the tab in force.
+///
+/// Drawn in reverse video rather than as a plain pair, for the terminal theme:
+/// its surfaces are `Color::Reset`, and a `Reset` foreground is the terminal's
+/// *text* colour — light ink on a yellow pill. Reversed, the same `Reset`
+/// lands as the terminal's ground, which is what a pill means on a light
+/// terminal and a dark one alike. An RGB theme draws exactly as before.
+pub fn pill(ground: Color, ink: Color) -> Style {
+    Style::default()
+        .fg(ground)
+        .bg(ink)
+        .add_modifier(Modifier::REVERSED)
+}
+
+/// The colours a cell is seen in, with reverse video undone.
+///
+/// For whatever reads a buffer back rather than handing it to a terminal —
+/// the SVG and ANSI renders — so that a [`pill`] comes out as one.
+pub fn seen(style: Style) -> (Option<Color>, Option<Color>) {
+    if style.add_modifier.contains(Modifier::REVERSED) {
+        (style.bg, style.fg)
+    } else {
+        (style.fg, style.bg)
+    }
+}
+
 /// Dims what is underneath, like the design's `background: #0b0e14bb`.
 ///
 /// This walks every cell of the frame a modal covers, which is the whole
@@ -314,6 +340,10 @@ pub fn scrim(buf: &mut Buffer, area: Rect) {
         ),
         other => other,
     };
+    // The terminal theme's colours are the terminal's to mix, not ours, so
+    // they are dimmed by asking the terminal to rather than left at full
+    // strength behind the modal.
+    let faint = |c: Color| !matches!(c, Color::Rgb(..));
     let (fg_default, bg_default) = (theme::fg(), theme::bg());
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
@@ -321,7 +351,11 @@ pub fn scrim(buf: &mut Buffer, area: Rect) {
                 let s = cell.style();
                 let fg = s.fg.unwrap_or(fg_default);
                 let bg = s.bg.unwrap_or(bg_default);
-                cell.set_style(Style::default().fg(shade(fg)).bg(shade(bg)));
+                let mut dimmed = Style::default().fg(shade(fg)).bg(shade(bg));
+                if faint(fg) || faint(bg) {
+                    dimmed = dimmed.add_modifier(Modifier::DIM);
+                }
+                cell.set_style(dimmed);
             }
         }
     }
