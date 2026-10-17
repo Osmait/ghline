@@ -10,10 +10,8 @@
 //! the last moment, which keeps the two modes from each needing their own copy
 //! of every motion.
 
-use std::collections::HashSet;
-
 use super::App;
-use super::files::{Entry, rows as tree_rows};
+use super::files::leaves;
 use super::prepared::{code, file_rows, split_rows};
 use unicode_width::UnicodeWidthStr;
 
@@ -50,19 +48,13 @@ pub fn find(text: &str, query: &str) -> Option<std::ops::Range<usize>> {
 impl App {
     /// The files in the order the tree shows them, folded or not.
     fn file_order(&self) -> Vec<usize> {
-        tree_rows(self.diff_files(), &HashSet::new())
-            .into_iter()
-            .filter_map(|r| match r.entry {
-                Entry::File(i) => Some(i),
-                Entry::Dir(_) => None,
-            })
-            .collect()
+        crate::shared::tree::order(&leaves(self.diff_files()))
     }
 
     /// Shows file `idx` from its top, with the tree's cursor back on it.
     fn show_file(&mut self, idx: usize) {
         self.file_idx = idx;
-        self.diff_dir = None;
+        self.diff_folds.dir = None;
         self.diff_scroll = 0;
         self.diff_cursor = 0;
         self.diff_pan = 0;
@@ -239,8 +231,7 @@ impl App {
             return;
         }
         self.diff_commit = sha;
-        self.diff_folded.clear();
-        self.diff_dir = None;
+        self.diff_folds.clear();
         self.diff_hit = None;
         self.diff_pan = 0;
         self.file_idx = self.first_file();
