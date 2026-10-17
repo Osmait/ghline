@@ -2684,6 +2684,24 @@ mod diff_nav {
     }
 
     #[test]
+    fn a_second_search_is_typed_afresh_and_n_still_repeats_the_first() {
+        let mut app = reading();
+        search(&mut app, "side");
+        search(&mut app, "debug");
+        assert_eq!(app.diff_query, "debug", "not `sidedebug`");
+    }
+
+    #[test]
+    fn esc_in_the_diffs_search_clears_it() {
+        let mut app = reading();
+        search(&mut app, "side");
+        ch(&mut app, '/');
+        press(&mut app, Key::Esc);
+        assert!(app.diff_query.is_empty());
+        assert!(app.diff_hit.is_none());
+    }
+
+    #[test]
     fn searching_the_diff_leaves_the_lists_filter_alone() {
         let mut app = reading();
         search(&mut app, "side");
