@@ -928,9 +928,12 @@ impl App {
         }
 
         if self.help_open {
+            // longer than a short terminal, so it scrolls
             match press.key {
                 Key::Esc | Key::Char('q') => self.help_open = false,
                 Key::Char('?') => self.help_open = false,
+                Key::Char('j') | Key::Down => self.help_scroll += 1,
+                Key::Char('k') | Key::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
                 _ => {}
             }
             return;
@@ -960,7 +963,10 @@ impl App {
             Key::Char('[') => self.step_repo(Dir::Prev),
             Key::Char(']') => self.step_repo(Dir::Next),
             Key::Char('t') => self.open_themes(),
-            Key::Char('?') => self.help_open = true,
+            Key::Char('?') => {
+                self.help_open = true;
+                self.help_scroll = 0;
+            }
             Key::Char(':') => {
                 self.cmd = Some(Cmd::Colon);
                 self.cmd_text.clear();

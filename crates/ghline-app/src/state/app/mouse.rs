@@ -240,7 +240,8 @@ impl App {
             Target::Commits => {
                 self.commit_sel = step_sel(self.commit_sel, d, self.commits().len() + 1);
             }
-            Target::Note | Target::Help => {}
+            Target::Note => {}
+            Target::Help => self.help_scroll = (self.help_scroll as i64 + d).max(0) as usize,
             Target::Review => {
                 let n = crate::data::Verdict::ALL.len() as i64;
                 let at = crate::data::Verdict::ALL
