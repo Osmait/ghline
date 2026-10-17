@@ -132,11 +132,16 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         let (add, del) = files
             .iter()
             .fold((0, 0), |(a, d), f| (a + count(&f.add), d + count(&f.del)));
-        format!("{} files in this commit · +{add} -{del}", files.len())
+        format!("{} in this commit · +{add} -{del}", files_n(files.len()))
     } else {
         match app.current() {
             Some(cur) => cur.as_pr().map_or_else(String::new, |p| {
-                format!("{} files changed · {} {}", p.files, p.add, p.del)
+                format!(
+                    "{} changed · {} {}",
+                    files_n(p.files as usize),
+                    p.add,
+                    p.del
+                )
             }),
             None => String::new(),
         }
@@ -824,6 +829,11 @@ fn draw_note(buf: &mut Buffer, x: u16, y: u16, max: u16, r: &crate::data::DiffRo
             base.fg(theme::dimmer()),
         );
     }
+}
+
+/// `1 file`, `2 files`.
+fn files_n(n: usize) -> String {
+    format!("{n} {}", if n == 1 { "file" } else { "files" })
 }
 
 /// The byte where `text` stops fitting in `cols` columns.
