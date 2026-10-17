@@ -33,7 +33,11 @@ the way once it has been read:
 - A folded folder shows how many files are under it and their counts summed.
 
 While the cursor is on a folder the diff keeps the file it was showing, and
-`]f`/`[f` step through the files in the tree's order.
+`]f`/`[f` step through the files in the tree's order. So do `}` and `{` once
+they run out of hunks: past a file's last hunk `}` carries on into the next
+file and before its first `{` goes back to the one before, so a change reads
+straight through without a trip to the tree. The diff's header cuts a long
+path from the left, keeping the file's name.
 
 ## Searching every file
 
