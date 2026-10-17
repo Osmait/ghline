@@ -775,6 +775,12 @@ impl App {
                 Key::Esc => {
                     self.cmd = None;
                     self.cmd_text.clear();
+                    // the prompt says `esc to clear`, and in the diff that
+                    // means the search and every match it lit
+                    if mode == Cmd::Slash && self.view == View::Diff {
+                        self.diff_query.clear();
+                        self.diff_hit = None;
+                    }
                 }
                 Key::Enter => {
                     if mode == Cmd::Colon {
@@ -890,9 +896,11 @@ impl App {
                 self.cmd = Some(Cmd::Slash);
                 self.cmd_text = match self.view {
                     View::Logs => self.log_filter.clone(),
-                    // in the diff `/` searches the code rather than filtering
-                    // a list, which is what a filter would be of here
-                    View::Diff => self.diff_query.clone(),
+                    // In the diff `/` searches the code rather than filtering
+                    // a list, and starts empty as vim's does: a search is
+                    // typed afresh, and `n` is how the last one is repeated.
+                    // Starting from the old text meant typing onto its end.
+                    View::Diff => String::new(),
                     _ => self.filter.clone(),
                 };
             }
