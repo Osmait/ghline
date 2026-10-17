@@ -95,6 +95,16 @@ impl App {
         self.tree_folds.toggle_all(&files, self.file_idx);
     }
 
+    /// The file `d` places from the open one in the tree's order, without
+    /// going round: past either end there is no neighbour.
+    pub fn neighbour_file(&self, d: i64) -> Option<usize> {
+        let order = tree::order(&self.leaves());
+        let at = order.iter().position(|i| *i == self.file_idx)? as i64;
+        usize::try_from(at + d)
+            .ok()
+            .and_then(|i| order.get(i).copied())
+    }
+
     /// The file `d` places from the open one in the tree's order, round the
     /// ends — which is the order the reader sees them in.
     pub fn file_after(&self, d: i64) -> Option<usize> {

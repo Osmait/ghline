@@ -209,31 +209,43 @@ impl App {
         }
     }
 
-    /// `{` and `}`: the previous or next hunk header, vim's paragraph motion
-    /// read onto a diff — a hunk is what a paragraph is here.
+    /// `}` and `{`: the next or previous hunk, landing on its first line.
+    ///
+    /// Past the last hunk `}` carries on into the next file, and before the
+    /// first `{` goes to the file before — a change reads straight through,
+    /// file after file, as ghline's pull requests do — instead of stopping
+    /// at the file's last line. `{` inside the first hunk still goes to its
+    /// top first.
     fn hunk(&mut self, d: i64) {
         let rows = self.diff_rows();
-        let mut i = self.cursor as i64;
-        loop {
-            i += d;
-            if i < 0 || i >= rows.len() as i64 {
-                // the ends are still somewhere to go, as they are in vim
-                self.cursor = if d > 0 {
-                    rows.len().saturating_sub(1)
-                } else {
-                    0
-                };
-                let rows = self.diff_rows();
-                if !rows.is_empty() && !rows[self.cursor].kind.is_code() {
-                    self.move_cursor(if d > 0 { -1 } else { 1 });
-                }
-                return;
+        let starts: Vec<usize> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.kind == Kind::Header)
+            .map(|(i, _)| first_code(rows, i))
+            .collect();
+        // A hunk's start is its first line, so standing on it is standing at
+        // that hunk — the one above is what `{` wants, not the same line again.
+        let target = if d > 0 {
+            starts.iter().find(|s| **s > self.cursor)
+        } else {
+            starts.iter().rev().find(|s| **s < self.cursor)
+        };
+        if let Some(&t) = target {
+            self.cursor = t;
+            return;
+        }
+        if d < 0 && self.cursor > first_code(rows, 0) {
+            self.cursor = first_code(rows, 0);
+            return;
+        }
+        match self.neighbour_file(d) {
+            Some(f) => {
+                self.goto_file(f);
+                let name = self.files.get(f).map_or("", |x| x.name()).to_string();
+                self.flash(name);
             }
-            if rows[i as usize].kind == Kind::Header {
-                self.cursor = i as usize;
-                self.move_cursor(1);
-                return;
-            }
+            None => self.flash(if d > 0 { "last file" } else { "first file" }),
         }
     }
 
@@ -2158,15 +2170,71 @@ mod tests {
         assert_eq!(a.hscroll, 12, "and it did not move anything");
     }
 
+    /// The fixture's `src/a.rs` with a second hunk after its first.
+    fn two_hunks() -> App {
+        let mut a = app();
+        let mut rows = a.rows["src/a.rs"].clone();
+        rows.push(Row {
+            kind: Kind::Header,
+            old: None,
+            new: None,
+            text: "@@ -20,2 +21,2 @@".into(),
+        });
+        rows.push(Row {
+            kind: Kind::Context,
+            old: Some(20),
+            new: Some(21),
+            text: "fn later() {".into(),
+        });
+        a.rows.insert("src/a.rs".into(), rows);
+        a.cursor = first_code(a.diff_rows(), 0);
+        a
+    }
+
+    #[test]
+    fn a_brace_at_a_hunks_first_line_goes_to_the_hunk_before() {
+        let mut a = two_hunks();
+        press(&mut a, Key::Char('}'));
+        assert_eq!(a.cursor, 6, "the second hunk's first line");
+        press(&mut a, Key::Char('{'));
+        assert_eq!(a.cursor, 1, "and back, rather than standing still");
+    }
+
+    #[test]
+    fn past_the_last_hunk_a_brace_goes_on_into_the_next_file() {
+        let mut a = two_hunks();
+        press(&mut a, Key::Char('}'));
+        press(&mut a, Key::Char('}'));
+        assert_eq!(a.path(), "src/b.rs");
+        assert_eq!(a.pane, Pane::Diff, "still reading");
+    }
+
+    #[test]
+    fn above_the_first_hunk_a_brace_goes_back_to_the_file_before() {
+        let mut a = app();
+        a.goto_file(1);
+        press(&mut a, Key::Char('{'));
+        assert_eq!(a.path(), "src/a.rs");
+    }
+
+    #[test]
+    fn the_last_files_last_hunk_goes_nowhere_and_says_so() {
+        let mut a = app();
+        a.goto_file(1);
+        press(&mut a, Key::Char('}'));
+        assert_eq!(a.path(), "src/b.rs");
+        assert_eq!(a.toast, "last file");
+    }
+
     #[test]
     fn hunks_and_changes_are_different_motions() {
         let mut a = app();
         a.cursor = first_code(a.diff_rows(), 0);
 
-        // `}` goes to the next hunk; this fixture has one, so it lands at the
-        // end rather than nowhere
+        // `}` goes to the next hunk; this fixture has one, so it carries on
+        // into the next file
         press(&mut a, Key::Char('}'));
-        assert!(a.diff_rows()[a.cursor].kind.is_code(), "never on a header");
+        assert_eq!(a.path(), "src/b.rs");
 
         // `]c` walks changed lines, and a run of them counts once
         let mut b = app();
