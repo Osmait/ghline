@@ -2433,6 +2433,17 @@ mod residue {
     }
 
     #[test]
+    fn a_bracket_in_the_diff_keeps_the_reader_in_it() {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        ch(&mut app, ']');
+        assert_eq!(app.view, View::Diff, "not thrown back to the list");
+        assert!(app.flash.is_some(), "and told how to change repository");
+    }
+
+    #[test]
     fn ctrl_d_pages_a_list_rather_than_quitting() {
         let mut app = seeded();
         app.pane = Pane::List;
