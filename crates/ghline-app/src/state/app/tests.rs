@@ -950,6 +950,21 @@ mod mouse {
     }
 
     #[test]
+    fn the_help_scrolls_on_a_short_terminal_instead_of_losing_its_end() {
+        let mut app = seeded();
+        ch(&mut app, '?');
+        render_sized(&mut app, W, 20);
+        ch(&mut app, 'j');
+        ch(&mut app, 'j');
+        render_sized(&mut app, W, 20);
+        assert_eq!(app.help_scroll, 2);
+        let r = region(&app, Target::Help);
+        wheel(&mut app, r.area.x + 3, r.area.y + 4, true);
+        assert!(app.help_scroll > 2, "and the wheel scrolls it too");
+        assert!(app.help_open);
+    }
+
+    #[test]
     fn a_click_inside_the_help_keeps_it_open() {
         let mut app = seeded();
         ch(&mut app, '?');
