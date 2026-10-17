@@ -264,7 +264,7 @@ fn one_two_and_three_show_issues_prs_and_actions() {
 }
 
 #[test]
-fn four_shows_the_repositorys_files() {
+fn four_shows_the_files_of_the_repository() {
     let mut app = seeded();
     ch(&mut app, '4');
     assert_eq!(crate::data::TABS[app.tab].id, "files");
