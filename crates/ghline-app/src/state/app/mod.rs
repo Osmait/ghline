@@ -366,6 +366,10 @@ pub struct App {
     /// The note being written, and where it goes; `None` when no editor is up.
     pub note_open: Option<review::Anchor>,
     pub note_text: String,
+    /// The review being sent: its dialog, its verdict and its body.
+    pub review_open: bool,
+    pub review_verdict: crate::data::Verdict,
+    pub review_text: String,
     /// The commit picker, and the row it is on: 0 is "all changes".
     pub commits_open: bool,
     pub commit_sel: usize,
@@ -536,6 +540,9 @@ impl App {
             drafts: HashMap::new(),
             note_open: None,
             note_text: String::new(),
+            review_open: false,
+            review_verdict: crate::data::Verdict::Comment,
+            review_text: String::new(),
             commits_open: false,
             commit_sel: 0,
             diff_width: 100,

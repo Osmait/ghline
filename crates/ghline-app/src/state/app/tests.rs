@@ -3245,3 +3245,114 @@ mod drafts {
         assert!(app.note_open.is_none());
     }
 }
+
+mod sending_a_review {
+    use super::*;
+    use crate::data::{DiffSide, Draft, Verdict};
+
+    /// The fixture's PR diff, focused, with a recorder and one draft.
+    fn with_a_draft() -> (App, std::rc::Rc<Recorder>) {
+        let (mut app, tape) = recording();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        let key = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.drafts.insert(
+            key,
+            vec![Draft {
+                path: "src/layout/mod.rs".into(),
+                line: 19,
+                side: DiffSide::Right,
+                body: "why max?".into(),
+            }],
+        );
+        tape.0.borrow_mut().clear();
+        (app, tape)
+    }
+
+    fn sent(tape: &Recorder) -> Option<(Verdict, String, usize)> {
+        tape.0.borrow().iter().find_map(|r| match r {
+            Request::SubmitReview {
+                verdict,
+                body,
+                drafts,
+                ..
+            } => Some((*verdict, body.clone(), drafts.len())),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn capital_r_sends_the_drafts_with_the_verdict_and_the_words() {
+        let (mut app, tape) = with_a_draft();
+        ch(&mut app, 'R');
+        assert!(app.review_open);
+        press(&mut app, Key::Tab);
+        assert_eq!(app.review_verdict, Verdict::Approve);
+        for c in "lgtm".chars() {
+            ch(&mut app, c);
+        }
+        press(&mut app, Key::Enter);
+        assert!(!app.review_open);
+        assert_eq!(sent(&tape), Some((Verdict::Approve, "lgtm".into(), 1)));
+        assert!(app.busy);
+    }
+
+    #[test]
+    fn a_comment_with_nothing_in_it_is_not_sent() {
+        let (mut app, tape) = with_a_draft();
+        app.drafts.clear();
+        ch(&mut app, 'R');
+        press(&mut app, Key::Enter);
+        assert!(app.review_open, "still open, to be finished");
+        assert!(sent(&tape).is_none());
+    }
+
+    #[test]
+    fn requesting_changes_needs_words() {
+        let (mut app, tape) = with_a_draft();
+        ch(&mut app, 'R');
+        press(&mut app, Key::BackTab);
+        assert_eq!(app.review_verdict, Verdict::RequestChanges);
+        press(&mut app, Key::Enter);
+        assert!(sent(&tape).is_none());
+        assert!(app.review_refusal().is_some());
+    }
+
+    #[test]
+    fn a_review_that_landed_takes_its_drafts_and_asks_again_for_the_threads() {
+        let (mut app, _) = with_a_draft();
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.threads_state.insert((repo.clone(), num), Load::Ready);
+        app.apply(Response::ReviewSent {
+            repo: repo.clone(),
+            num,
+            verdict: Verdict::Comment,
+            result: Ok(()),
+        });
+        assert!(app.drafts().is_empty());
+        assert!(
+            !app.threads_state.contains_key(&(repo, num)),
+            "fetched again"
+        );
+    }
+
+    #[test]
+    fn a_review_that_failed_keeps_its_drafts() {
+        let (mut app, _) = with_a_draft();
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.apply(Response::ReviewSent {
+            repo,
+            num,
+            verdict: Verdict::Approve,
+            result: Err(crate::shared::error::Error::Command {
+                args: "api".into(),
+                status: Some(1),
+                stderr: "Can not approve your own pull request".into(),
+            }),
+        });
+        assert_eq!(app.drafts().len(), 1);
+        assert!(app.flash.is_some());
+    }
+}

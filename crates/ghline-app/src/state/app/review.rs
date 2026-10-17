@@ -12,7 +12,8 @@
 //! else once sent.
 
 use super::App;
-use crate::data::{DiffKind, DiffSide, Draft, Thread, ThreadComment};
+use crate::data::{DiffKind, DiffSide, Draft, Kind, Thread, ThreadComment, Verdict};
+use crate::service::Request;
 use crate::shared::key::{Key, Press};
 
 /// Where a note is going: a line of one side of one file.
@@ -171,5 +172,75 @@ impl App {
             list.remove(i);
         }
         self.flash_ok("draft dropped");
+    }
+
+    /// `R`: the dialog that sends the review — every draft, a verdict, and
+    /// what to say of the pull request as a whole.
+    pub(super) fn open_review(&mut self) {
+        if self.current().map(crate::data::Item::kind) != Some(Kind::Pr) {
+            return;
+        }
+        self.review_open = true;
+        self.review_verdict = Verdict::Comment;
+        self.review_text.clear();
+    }
+
+    /// The dialog owns every key: the letters are the review's body, so the
+    /// verdict moves on tab and the arrows, as the agent picker's rows do.
+    pub(super) fn review_key(&mut self, press: Press) {
+        let at = Verdict::ALL
+            .iter()
+            .position(|v| *v == self.review_verdict)
+            .unwrap_or(0);
+        let n = Verdict::ALL.len();
+        match press.key {
+            Key::Esc => self.review_open = false,
+            Key::Tab | Key::Down => self.review_verdict = Verdict::ALL[(at + 1) % n],
+            Key::BackTab | Key::Up => self.review_verdict = Verdict::ALL[(at + n - 1) % n],
+            Key::Char('j') if press.ctrl => self.review_text.push('\n'),
+            Key::Enter => self.send_review(),
+            Key::Backspace => {
+                self.review_text.pop();
+            }
+            Key::Char(c) if !press.ctrl => self.review_text.push(c),
+            _ => {}
+        }
+    }
+
+    /// Why this review cannot be sent as it stands, in GitHub's own terms —
+    /// said here rather than after a round trip that ends in a 422.
+    pub fn review_refusal(&self) -> Option<&'static str> {
+        let body = self.review_text.trim();
+        match self.review_verdict {
+            Verdict::RequestChanges if body.is_empty() => {
+                Some("requesting changes needs a word on what to change")
+            }
+            Verdict::Comment if body.is_empty() && self.drafts().is_empty() => {
+                Some("a comment needs a note or something to say")
+            }
+            _ => None,
+        }
+    }
+
+    /// Sends it. The drafts stay until GitHub says it has them: a review that
+    /// failed to send must not take the notes it carried with it.
+    fn send_review(&mut self) {
+        if let Some(why) = self.review_refusal() {
+            self.flash_warn(why);
+            return;
+        }
+        let (repo, num) = self.draft_key();
+        let request = Request::SubmitReview {
+            repo,
+            num,
+            verdict: self.review_verdict,
+            body: self.review_text.trim().to_string(),
+            drafts: self.drafts().to_vec(),
+        };
+        self.review_open = false;
+        // busy first: a worker that is gone clears it again on the way out
+        self.busy = true;
+        self.flash_ok("sending the review…");
+        self.ask(request);
     }
 }

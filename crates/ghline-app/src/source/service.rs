@@ -11,7 +11,9 @@ use std::thread;
 use crate::data::Kind;
 use crate::data::MergeMethod;
 use crate::data::Source as FinderSource;
-use crate::data::{Account, Comment, DiffFile, Item, Job, PrFetched, RawLog, Repo, Thread};
+use crate::data::{
+    Account, Comment, DiffFile, Draft, Item, Job, PrFetched, RawLog, Repo, Thread, Verdict,
+};
 use crate::shared::error::Error;
 
 pub enum Request {
@@ -89,6 +91,13 @@ pub enum Request {
     CommitDiff {
         repo: String,
         sha: String,
+    },
+    SubmitReview {
+        repo: String,
+        num: i64,
+        verdict: Verdict,
+        body: String,
+        drafts: Vec<Draft>,
     },
     Search {
         owner: String,
@@ -187,6 +196,12 @@ pub enum Response {
         repo: String,
         sha: String,
         result: Result<Vec<DiffFile>, Error>,
+    },
+    ReviewSent {
+        repo: String,
+        num: i64,
+        verdict: Verdict,
+        result: Result<(), Error>,
     },
     Search {
         query: String,
@@ -373,6 +388,21 @@ fn handle(req: Request) -> Response {
         Request::CommitDiff { repo, sha } => {
             let result = crate::forge::current().commit_diff(&repo, &sha);
             Response::CommitDiff { repo, sha, result }
+        }
+        Request::SubmitReview {
+            repo,
+            num,
+            verdict,
+            body,
+            drafts,
+        } => {
+            let result = crate::forge::current().submit_review(&repo, num, verdict, &body, &drafts);
+            Response::ReviewSent {
+                repo,
+                num,
+                verdict,
+                result,
+            }
         }
 
         Request::Search {

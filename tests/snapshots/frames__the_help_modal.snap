@@ -7,30 +7,29 @@ expression: "frame(\"?\")"
   1 Issues 12    2 Pull Requests 4    3 Actions    4 Files    5 Agents                                                                  12 items · / to filter  
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
-▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
-  ⇅ #214   feat(finder): rank by subsequ┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✓ checks  
-           feat/fuzzy-rank · iris-exampl│ KEYBINDINGS                                                    esc to close │                                         
-  ⇅ #212   perf(render): reuse the cell ├─────────────────────────────────────────────────────────────────────────────┤                         open  ✓ checks  
-           perf/reuse-buffer · kai-examp│         j / k  move in the pane            ^d / ^u  half page scroll        │                                         
-  ⑂ #211   wip: split the reducer by vie│         h / l  pane left / right                 d  diff of the PR files    │                        draft  ○ checks  
-           wip/split-reducer · noa-examp│         g / G  top / bottom                      s  split / unified diff    │                                         
-  ⑃ #209   chore: drop the unused ansi c│         1 2 3  Issues / PRs / Actions            w  ignore whitespace       │                       merged  ✓ checks  
-           chore/deps · noa-example · +8│         enter  enter the pane                { / }  previous / next hunk    │                                         
-  ⇅ #207   fix(logs): keep the filter ac│       esc / q  back one level                J / K  next / previous file    │                         open  ✓ checks  
-           fix/log-filter · eli-example │             a  switch account                H / L  pan the diff            │                                         
-  ⇅ #205   feat(diff): word-level highli│             t  switch theme                  n / N  next / previous match   │                         open  ◐ checks  
-           feat/word-diff · iris-example│             b  hide / show repos             ( / )  previous / next comment │                                         
-  ⇅ #202   docs: write down the key map │         [ / ]  previous / next repo              C  show / hide comments    │                         open  ✓ checks  
-           docs/keymap · ada-example · +│             p  find repos, issues, P…            v  one commit of the PR    │                                         
-  ⇅ #199   fix(finder): do not steal the│             o  fold a job or a folder            i  a note on this line     │                         open  ✗ checks  
-           fix/finder-esc · kai-example │             O  fold / open all                   X  drop the note here      │                                         
-  ⇅ #196   test: golden frames for the n│             /  filter / search diff            tab  next pane               │                         open  ✓ checks  
-           test/narrow · noa-example · +│             e  jump to first error               m  merge the pull request  │                                         
-  ⇅ #193   refactor: move theming out of│             f  toggle log follow                 c  close / reopen the PR   │                         open  ✓ checks  
-           refactor/theme · iris-example│             r  refresh (fake)                    D  delete the branch       │                                         
-  ⇅ #189   build: pin the toolchain [cho│             :  command line                  y / n  confirm / cancel        │                       closed  ✓ checks  
-           build/pin · ada-example · +19│      :account  account picker                click  focus pane, select row  │                                         
-                                        │  :issues :prs  jump to a tab              2x click  open it                 │                                         
+▌          fix/sidebar-clamp · ada-examp┌─────────────────────────────────────────────────────────────────────────────┐                                         
+  ⇅ #214   feat(finder): rank by subsequ│ KEYBINDINGS                                                    esc to close │                         open  ✓ checks  
+           feat/fuzzy-rank · iris-exampl├─────────────────────────────────────────────────────────────────────────────┤                                         
+  ⇅ #212   perf(render): reuse the cell │         j / k  move in the pane                  d  diff of the PR files    │                         open  ✓ checks  
+           perf/reuse-buffer · kai-examp│         h / l  pane left / right                 s  split / unified diff    │                                         
+  ⑂ #211   wip: split the reducer by vie│         g / G  top / bottom                      w  ignore whitespace       │                        draft  ○ checks  
+           wip/split-reducer · noa-examp│         1 2 3  Issues / PRs / Actions        { / }  previous / next hunk    │                                         
+  ⑃ #209   chore: drop the unused ansi c│         enter  enter the pane                J / K  next / previous file    │                       merged  ✓ checks  
+           chore/deps · noa-example · +8│       esc / q  back one level                H / L  pan the diff            │                                         
+  ⇅ #207   fix(logs): keep the filter ac│             a  switch account                n / N  next / previous match   │                         open  ✓ checks  
+           fix/log-filter · eli-example │             t  switch theme                  ( / )  previous / next comment │                                         
+  ⇅ #205   feat(diff): word-level highli│             b  hide / show repos                 C  show / hide comments    │                         open  ◐ checks  
+           feat/word-diff · iris-example│         [ / ]  previous / next repo              v  one commit of the PR    │                                         
+  ⇅ #202   docs: write down the key map │             p  find repos, issues, P…            i  a note on this line     │                         open  ✓ checks  
+           docs/keymap · ada-example · +│             o  fold a job or a folder            X  drop the note here      │                                         
+  ⇅ #199   fix(finder): do not steal the│             O  fold / open all                   R  send the review         │                         open  ✗ checks  
+           fix/finder-esc · kai-example │             /  filter / search diff            tab  next pane               │                                         
+  ⇅ #196   test: golden frames for the n│             e  jump to first error               m  merge the pull request  │                         open  ✓ checks  
+           test/narrow · noa-example · +│             f  toggle log follow                 c  close / reopen the PR   │                                         
+  ⇅ #193   refactor: move theming out of│             r  refresh (fake)                    D  delete the branch       │                         open  ✓ checks  
+           refactor/theme · iris-example│             :  command line                  y / n  confirm / cancel        │                                         
+  ⇅ #189   build: pin the toolchain [cho│      :account  account picker                click  focus pane, select row  │                       closed  ✓ checks  
+           build/pin · ada-example · +19│  :issues :prs  jump to a tab              2x click  open it                 │                                         
                                         │         :logs  open logs of selection        wheel  scroll under pointer    │                                         
                                         │  :diff :files  open the diff                     4  the repo's files        │                                         
                                         │        :theme  theme picker                      5  agents running here     │                                         
@@ -38,6 +37,7 @@ expression: "frame(\"?\")"
                                         │         :find  the finder                       ^l  repaint the screen      │                                         
                                         │             ?  this help                         x  send this to an agent   │                                         
                                         │            :q  close overlay           x then type  …and say something spe… │                                         
+                                        │       ^d / ^u  half page scroll                                             │                                         
                                         │                                                                             │                                         
                                         └─────────────────────────────────────────────────────────────────────────────┘                                         
                                                                                                                                                                 
