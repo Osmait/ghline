@@ -5,7 +5,7 @@
 //! way as a repository you cannot read. It implements `Display` and
 //! `std::error::Error`, so it works with `?` and the usual tooling.
 //!
-//! (This line exists only to be commented on by a throwaway review.)
+//! (This line was changed after the review, so its thread is outdated.)
 //!
 //! Three programs are driven through this: `gh`, `git` and `herdr`. Every
 //! case therefore names which one it was — a type shared by three callers
