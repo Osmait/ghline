@@ -317,6 +317,7 @@ pub enum DiffKind {
 }
 
 /// A line ready to draw, with both of its line numbers.
+#[derive(Clone)]
 pub struct DiffRow {
     pub kind: DiffKind,
     pub text: String,

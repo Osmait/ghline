@@ -12,6 +12,7 @@ pub mod hit;
 mod input;
 mod load;
 mod mouse;
+pub mod prepared;
 mod select;
 
 use std::collections::{HashMap, HashSet};
@@ -339,6 +340,8 @@ pub struct App {
     /// The folder the file tree's cursor is on; `None` when it is on
     /// `file_idx`. See `files` for why the two are kept apart.
     pub diff_dir: Option<String>,
+    /// The open file's rows, colours and changed words. See `prepared`.
+    pub diff_cache: Option<(prepared::Key, std::rc::Rc<prepared::Prepared>)>,
     /// Two-column diff instead of unified (`s`).
     pub split: bool,
     /// Ignore whitespace-only changes (`w`).
@@ -488,6 +491,7 @@ impl App {
             file_idx: 0,
             diff_folded: HashSet::new(),
             diff_dir: None,
+            diff_cache: None,
             split: false,
             ws: false,
             diff_scroll: 0,
