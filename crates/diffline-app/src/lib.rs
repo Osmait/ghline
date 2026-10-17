@@ -62,6 +62,8 @@ pub mod source {
 
 pub mod state {
     pub mod app;
+    #[cfg(test)]
+    mod commands_test;
     pub mod files;
     pub mod hit;
     pub mod input;
