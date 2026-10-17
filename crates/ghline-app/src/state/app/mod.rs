@@ -7,6 +7,7 @@
 #[cfg(test)]
 mod tests;
 
+pub mod files;
 pub mod hit;
 mod input;
 mod load;
@@ -333,6 +334,11 @@ pub struct App {
     pub log_scroll: usize,
     /// Selected file in the diff view.
     pub file_idx: usize,
+    /// Folders folded in the diff's file tree, by full path.
+    pub diff_folded: HashSet<String>,
+    /// The folder the file tree's cursor is on; `None` when it is on
+    /// `file_idx`. See `files` for why the two are kept apart.
+    pub diff_dir: Option<String>,
     /// Two-column diff instead of unified (`s`).
     pub split: bool,
     /// Ignore whitespace-only changes (`w`).
@@ -480,6 +486,8 @@ impl App {
             tree_scroll: 0,
             log_scroll: 0,
             file_idx: 0,
+            diff_folded: HashSet::new(),
+            diff_dir: None,
             split: false,
             ws: false,
             diff_scroll: 0,

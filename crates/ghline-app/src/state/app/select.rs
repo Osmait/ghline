@@ -477,14 +477,17 @@ impl App {
         crate::data::Hunk::rows(&hunks)
     }
 
-    /// Opens the PR's diff at the given file.
-    pub fn open_diff(&mut self, idx: usize) {
+    /// Opens the PR's diff on its first file, with every folder open.
+    pub fn open_diff(&mut self) {
         if self.current().map(|c| c.kind() != Kind::Pr).unwrap_or(true) {
             self.flash_warn("the diff is only available for pull requests");
             return;
         }
         self.view = View::Diff;
-        self.file_idx = idx;
+        // folds belong to the PR they were made in
+        self.diff_folded.clear();
+        self.diff_dir = None;
+        self.file_idx = self.first_file();
         self.diff_scroll = 0;
         self.pane = Pane::Files;
     }

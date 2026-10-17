@@ -97,7 +97,10 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Pane::FileView => "j/k line · ^d/^u page · h files · E edit here · x send".to_string(),
         Pane::Tree => "j/k node · o fold · enter/l log · esc back".to_string(),
         Pane::Log => "j/k scroll · f follow · / filter · e first error · h jobs · esc".to_string(),
-        Pane::Files => "j/k file · enter/l diff · s split · w ignore ws · esc back".to_string(),
+        Pane::Files => {
+            "j/k move · enter open · h/l fold · O fold all · s split · w ignore ws · esc back"
+                .to_string()
+        }
         Pane::DiffBody => {
             "j/k scroll · ^d/^u page · s split · w ignore ws · h files · esc".to_string()
         }
@@ -113,7 +116,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         }
         Pane::Body => format!("+{}", app.detail_scroll),
         Pane::Log => format!("+{}", app.log_scroll),
-        Pane::Files => format!("{}/{}", app.file_idx() + 1, app.diff_files().len()),
+        Pane::Files => format!("{}/{}", app.file_ordinal() + 1, app.diff_files().len()),
         Pane::DiffBody => format!("+{}", app.diff_scroll),
         Pane::FileView => {
             let n = app.file_lines();
