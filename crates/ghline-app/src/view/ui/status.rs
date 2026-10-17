@@ -81,7 +81,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             } else {
                 "b repos"
             };
-            format!("j/k move · {repos} · enter open · 1/2/3 tabs · / filter{pr_keys}")
+            format!("j/k move · {repos} · enter open · 1-5 tabs · / filter{pr_keys}")
         }
         Pane::Body => {
             let right = if app.panes().contains(&Pane::Checks) {
@@ -95,12 +95,12 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             } else {
                 ""
             };
-            format!("j/k scroll · ^d/^u page{repos}{right} · esc back{pr_keys}")
+            format!("j/k scroll · ^d/^u half page{repos}{right} · esc back{pr_keys}")
         }
         Pane::Checks => format!("j/k check · enter logs · h body · esc back{pr_keys}"),
         Pane::Agents => "j/k agent · 1-5 tabs · / filter · r refresh".to_string(),
         Pane::FileTree => "j/k move · o/enter fold · l read · / find · E edit · x send".to_string(),
-        Pane::FileView => "j/k line · ^d/^u page · h files · E edit here · x send".to_string(),
+        Pane::FileView => "j/k line · ^d/^u half page · h files · E edit here · x send".to_string(),
         Pane::Tree => "j/k node · o fold · enter/l log · esc back".to_string(),
         Pane::Log => "j/k scroll · f follow · / filter · e first error · h jobs · esc".to_string(),
         Pane::Files => {
