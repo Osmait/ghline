@@ -349,14 +349,15 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         base.fg(theme::dimmer()),
     );
     // Both are cut from the left when they must be cut: a name is at the end,
-    // and the name is what says which file this is. The path keeps at least
-    // two thirds of the room, so a long old path cannot push it to a `…`.
+    // and the name is what says which file this is. The path gives way to the
+    // tag only down to its own file name, so both names stay in view: on a
+    // rename those two are the whole story.
     let free = meta_x.saturating_sub(1).saturating_sub(area.x + 1) as usize;
+    let name_w = path.rsplit('/').next().unwrap_or(&path).width() + 2; // `…/`
     let path_cols = if path.width() + tag_w <= free {
         path.width()
     } else {
-        path.width()
-            .min(free.saturating_sub(tag_w).max(free * 2 / 3))
+        path.width().min(free.saturating_sub(tag_w).max(name_w))
     };
     let px = put_trunc(
         buf,
