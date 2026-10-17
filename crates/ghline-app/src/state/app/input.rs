@@ -191,10 +191,15 @@ impl App {
         if !self.sidebar && self.pane == Pane::Repos {
             self.pane = Pane::List;
         }
-        self.flash_ok(if self.sidebar {
-            "repositories shown [b]"
-        } else {
-            "repositories hidden [b]"
+        // The diff and the logs take the whole width and never draw the
+        // pane, so there the choice is said to be for the list — "shown" with
+        // nothing appearing read as the key not working.
+        let away = matches!(self.view, View::Diff | View::Logs);
+        self.flash_ok(match (self.sidebar, away) {
+            (true, false) => "repositories shown [b]",
+            (false, false) => "repositories hidden [b]",
+            (true, true) => "repositories shown in the list [b]",
+            (false, true) => "repositories hidden in the list [b]",
         });
     }
 
@@ -965,6 +970,12 @@ impl App {
             }
             Key::Char('b') => self.toggle_sidebar(),
             Key::Char('p') => self.open_finder(),
+            // In the diff or the logs a repository step would throw the
+            // reading away for the list without a word; there it says how to
+            // get to one instead, and the reading stays.
+            Key::Char('[' | ']') if matches!(self.view, View::Diff | View::Logs) => {
+                self.flash_ok("esc back to the list to change repository");
+            }
             Key::Char('[') => self.step_repo(Dir::Prev),
             Key::Char(']') => self.step_repo(Dir::Next),
             Key::Char('t') => self.open_themes(),
