@@ -694,15 +694,32 @@ impl App {
                 num,
                 result,
                 merged_branch,
+                now,
             } => {
                 self.busy = false;
                 match result {
                     Ok(msg) => {
                         self.flash_ok(msg);
-                        // re-request the repo's lists and counters
+                        // The row says what happened at once, in every list it
+                        // is in — the all-repositories list too, which is kept
+                        // under its own key and so was never reloaded: a
+                        // closed PR went on reading as open, and offering to
+                        // close it again rather than to reopen it.
+                        if let Some(state) = now {
+                            for item in self.lists.values_mut().flatten() {
+                                if is_it(item, &repo, num) {
+                                    item.state = state;
+                                }
+                            }
+                        }
+                        // re-request the repo's lists and counters, the list
+                        // being read, and the item's own page
+                        let shown = self.repo_key();
                         for t in 0..3 {
                             self.lists_state.insert((repo.clone(), t), Load::Idle);
+                            self.lists_state.insert((shown.clone(), t), Load::Idle);
                         }
+                        self.detail_state.insert((repo.clone(), num), Load::Idle);
                         if let Some(a) = self
                             .accounts
                             .iter()
