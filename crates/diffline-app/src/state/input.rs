@@ -1054,10 +1054,7 @@ impl App {
             "toggle file tree" => self.run(Action::TreePane, 1),
             "toggle queue" => self.run(Action::QueuePane, 1),
             "find" => self.run(Action::Search, 1),
-            "refresh" => {
-                self.refresh();
-                self.flash("refreshing…");
-            }
+            "refresh" => self.run(Action::Refresh, 1),
             "open help" => self.run(Action::Help, 1),
             "quit" => self.should_quit = true,
             _ => return false,
