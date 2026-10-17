@@ -67,6 +67,15 @@ impl crate::vcs::Vcs for Git {
         file_diff(repo, scope, path, opts)
     }
 
+    fn scope_diff(
+        &self,
+        repo: &str,
+        scope: &Scope,
+        opts: DiffOpts,
+    ) -> Res<Vec<(String, Vec<Row>)>> {
+        scope_diff(repo, scope, opts)
+    }
+
     fn log(&self, repo: &str, limit: usize) -> Res<Vec<LogEntry>> {
         log(repo, limit)
     }
@@ -238,6 +247,52 @@ pub fn file_diff(repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<V
     args.push(path);
 
     Ok(parse_unified(&run(repo, &args)?))
+}
+
+/// Every file's diff in the scope, from one `git diff` with the same options
+/// a single file's is asked with — so a row found here is the row the pane
+/// shows once that file is opened.
+pub fn scope_diff(repo: &str, scope: &Scope, opts: DiffOpts) -> Res<Vec<(String, Vec<Row>)>> {
+    let unified = format!("-U{}", opts.context);
+    let owned = selectors(repo, scope);
+    let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
+    let mut args = vec!["diff", "--no-color", &unified];
+    if opts.ignore_ws {
+        args.push("-w");
+    }
+    args.extend_from_slice(&sel);
+    let raw = run(repo, &args)?;
+    Ok(split_files(&raw)
+        .into_iter()
+        .map(|(path, part)| (path, parse_unified(part)))
+        .collect())
+}
+
+/// A many-file diff cut at its `diff --git` lines, each piece with the path
+/// it is of — the new one, `b/`, which is the path the file list uses.
+fn split_files(raw: &str) -> Vec<(String, &str)> {
+    let mut starts: Vec<(usize, String)> = Vec::new();
+    let mut at = 0;
+    for line in raw.split_inclusive('\n') {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            let path = rest
+                .trim_end()
+                .split(" b/")
+                .nth(1)
+                .unwrap_or_default()
+                .to_string();
+            starts.push((at, path));
+        }
+        at += line.len();
+    }
+    starts
+        .iter()
+        .enumerate()
+        .map(|(i, (from, path))| {
+            let to = starts.get(i + 1).map_or(raw.len(), |(next, _)| *next);
+            (path.clone(), &raw[*from..to])
+        })
+        .collect()
 }
 
 /// Turns `git diff` output into rows, numbering both sides as it goes.
@@ -857,6 +912,25 @@ filename src/a.rs
         DiffOpts {
             context,
             ignore_ws: false,
+        }
+    }
+
+    #[test]
+    fn the_whole_scope_diff_is_each_files_own_diff() {
+        let r = Repo::new("scope");
+        std::fs::create_dir_all(r.0.join("dir")).unwrap();
+        r.write("a.txt", "one\ntwo\n");
+        r.write("dir/b.txt", "uno\ndos\n");
+        r.commit("first");
+        r.write("a.txt", "one\nTWO\n");
+        r.write("dir/b.txt", "uno\nDOS\n");
+
+        let all = scope_diff(r.path(), &Scope::WorkingTree, ctx(3)).unwrap();
+        let paths: Vec<&str> = all.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(paths, ["a.txt", "dir/b.txt"]);
+        for (path, rows) in &all {
+            let own = file_diff(r.path(), &Scope::WorkingTree, path, ctx(3)).unwrap();
+            assert_eq!(rows, &own, "{path} reads the same either way");
         }
     }
 

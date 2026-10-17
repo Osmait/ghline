@@ -50,6 +50,11 @@ pub trait Vcs: Sync + 'static {
     /// One file's diff, at `context` lines either side, as rows.
     fn file_diff(&self, repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<Vec<Row>>;
 
+    /// Every file's diff in the scope at once, by path, for a search that has
+    /// to read the files nobody has opened.
+    fn scope_diff(&self, repo: &str, scope: &Scope, opts: DiffOpts)
+    -> Res<Vec<(String, Vec<Row>)>>;
+
     /// The last `limit` commits reaching the checkout, newest first.
     ///
     /// Required rather than provided: a version control system without
@@ -117,6 +122,9 @@ mod tests {
             Ok(Vec::new())
         }
         fn file_diff(&self, _r: &str, _s: &Scope, _p: &str, _o: DiffOpts) -> Res<Vec<Row>> {
+            Ok(Vec::new())
+        }
+        fn scope_diff(&self, _r: &str, _s: &Scope, _o: DiffOpts) -> Res<Vec<(String, Vec<Row>)>> {
             Ok(Vec::new())
         }
         fn log(&self, _repo: &str, _limit: usize) -> Res<Vec<LogEntry>> {

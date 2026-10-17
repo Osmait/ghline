@@ -179,6 +179,18 @@ pub struct App {
     /// Rows keyed by path, so stepping between files does not re-fetch.
     pub rows: HashMap<String, Vec<Row>>,
     pub spans: HashMap<String, Vec<Vec<crate::shared::syntax::Span>>>,
+    /// Every file's rows, for a search that has to read the files nobody has
+    /// opened, and the scope and options they were asked under. Kept apart
+    /// from `rows`: those are the files on show, coloured; these are only
+    /// read, and come in one answer for the whole scope.
+    pub corpus: HashMap<String, Vec<Row>>,
+    pub corpus_state: Load,
+    pub corpus_for: Option<(Scope, crate::model::DiffOpts)>,
+    /// A search waiting on the corpus, by direction, to run when it lands.
+    pub search_pending: Option<i64>,
+    /// The row a jump into a file not yet fetched is going to, applied when
+    /// its rows arrive — before then there is nothing to put the cursor on.
+    pub row_pending: Option<usize>,
     /// The changed words of each edited row, per path, worked out when its
     /// rows arrive rather than on every frame.
     pub words: HashMap<String, Vec<Option<std::ops::Range<usize>>>>,
@@ -296,6 +308,11 @@ impl App {
             rows: HashMap::new(),
             spans: HashMap::new(),
             words: HashMap::new(),
+            corpus: HashMap::new(),
+            corpus_state: Load::Idle,
+            corpus_for: None,
+            search_pending: None,
+            row_pending: None,
             rows_state: HashMap::new(),
             cursor: 0,
             diff_scroll: 0,
@@ -346,6 +363,34 @@ impl App {
     pub fn file(&self) -> Option<&ChangedFile> {
         self.files
             .get(self.file_idx.min(self.files.len().saturating_sub(1)))
+    }
+
+    /// Whether the corpus is the whole scope's under the current rule.
+    pub fn corpus_ready(&self) -> bool {
+        self.corpus_state == Load::Ready
+            && self.corpus_for.as_ref() == Some(&(self.scope.clone(), self.opts()))
+    }
+
+    /// Asks for the corpus unless it is here or on its way.
+    pub fn ensure_corpus(&mut self) {
+        if self.corpus_ready() || self.corpus_state == Load::Loading {
+            return;
+        }
+        self.corpus_state = Load::Loading;
+        if !self.ask(Request::Corpus {
+            repo: self.repo.clone(),
+            scope: self.scope.clone(),
+            opts: self.opts(),
+        }) {
+            self.corpus_state = Self::gone();
+        }
+    }
+
+    /// Lets the corpus go: what it was read from has changed.
+    pub fn forget_corpus(&mut self) {
+        self.corpus.clear();
+        self.corpus_state = Load::Idle;
+        self.corpus_for = None;
     }
 
     /// How the open diff is asked for, as one value an answer is checked by.
@@ -676,6 +721,7 @@ impl App {
                         self.files_state = Load::Ready;
                         // a new scope is a new tree, open, on its first file
                         self.tree_folds.clear();
+                        self.forget_corpus();
                         self.file_idx = self.first_file();
                         self.cursor = 0;
                     }
@@ -695,7 +741,8 @@ impl App {
                 match result {
                     Ok((rows, spans)) => {
                         if path == self.path() {
-                            self.cursor = first_code(&rows, self.cursor);
+                            let want = self.row_pending.take().unwrap_or(self.cursor);
+                            self.cursor = first_code(&rows, want);
                         }
                         self.words
                             .insert(path.clone(), crate::model::changed_words(&rows));
@@ -725,6 +772,9 @@ impl App {
                         let previous = self.file_idx;
                         let changed = self.files != files;
                         if changed {
+                            // an edit on disk: what was read for a search is
+                            // no longer what the files say
+                            self.forget_corpus();
                             self.files = files;
                             self.file_idx = self
                                 .files
@@ -781,6 +831,34 @@ impl App {
 
                 if std::mem::take(&mut self.refresh_again) {
                     self.refresh_live();
+                }
+            }
+
+            Response::Corpus {
+                scope,
+                opts,
+                result,
+            } => {
+                // an answer for a scope or a rule that has since changed is
+                // a corpus of a different diff
+                if scope != self.scope || opts != self.opts() {
+                    self.corpus_state = Load::Idle;
+                    return;
+                }
+                match result {
+                    Ok(files) => {
+                        self.corpus = files.into_iter().collect();
+                        self.corpus_state = Load::Ready;
+                        self.corpus_for = Some((scope, opts));
+                        if let Some(d) = self.search_pending.take() {
+                            self.search(d);
+                        }
+                    }
+                    Err(e) => {
+                        self.search_pending = None;
+                        self.flash(e.brief());
+                        self.corpus_state = Load::Failed(Arc::new(Failure::Ran(e)));
+                    }
                 }
             }
 

@@ -406,27 +406,109 @@ impl App {
     }
 
     /// `n` and `N`: the next or previous line matching what `/` last asked
-    /// for. Case-insensitive, as vim is with `ignorecase`, and it wraps.
-    fn search(&mut self, d: i64) {
+    /// for, in every file of the scope in the tree's order, round the end to
+    /// the start. Case-insensitive, as vim is with `ignorecase`.
+    ///
+    /// The open file is read first, from the cursor; the others from their
+    /// rows if they have been opened and from the corpus if not. When the
+    /// corpus is wanted and not here yet, the search waits for it rather than
+    /// answering "no match" about files it has not read.
+    pub fn search(&mut self, d: i64) {
         if self.last_search.is_empty() {
             self.flash("no previous search");
             return;
         }
         let needle = self.last_search.to_lowercase();
-        let rows = self.diff_rows();
-        let n = rows.len();
-        if n == 0 {
+        let hit =
+            |r: &crate::model::Row| r.kind.is_code() && r.text.to_lowercase().contains(&needle);
+
+        // the open file, past the cursor
+        let here = self.diff_rows();
+        let ahead = if d > 0 {
+            here.iter()
+                .enumerate()
+                .skip(self.cursor + 1)
+                .find(|(_, r)| hit(r))
+        } else {
+            here.iter()
+                .enumerate()
+                .take(self.cursor.min(here.len()))
+                .rev()
+                .find(|(_, r)| hit(r))
+        }
+        .map(|(i, _)| i);
+        if let Some(i) = ahead {
+            self.cursor = i;
+            self.flash(format!("/{}", self.last_search));
             return;
         }
-        for step in 1..=n {
-            let i = (self.cursor as i64 + d * step as i64).rem_euclid(n as i64) as usize;
-            if rows[i].kind.is_code() && rows[i].text.to_lowercase().contains(&needle) {
-                self.cursor = i;
-                self.flash(format!("/{}", self.last_search));
+
+        // the other files, in the order the tree shows them
+        let order = crate::shared::tree::order(&self.leaves());
+        let n = order.len();
+        if n > 1 && !self.corpus_ready() {
+            self.search_pending = Some(d);
+            self.ensure_corpus();
+            self.flash(format!("/{} · reading every file…", self.last_search));
+            return;
+        }
+        let start = order.iter().position(|f| *f == self.file_idx).unwrap_or(0);
+        for step in 1..n {
+            let f = order[(start as i64 + d * step as i64).rem_euclid(n as i64) as usize];
+            let Some(path) = self.files.get(f).map(|x| x.path.clone()) else {
+                continue;
+            };
+            let rows = self
+                .rows
+                .get(&path)
+                .or_else(|| self.corpus.get(&path))
+                .map_or(&[][..], Vec::as_slice);
+            let found = if d > 0 {
+                rows.iter().position(hit)
+            } else {
+                rows.iter().rposition(hit)
+            };
+            if let Some(r) = found {
+                self.jump_to(f, r);
+                let name = self.files.get(f).map_or("", |x| x.name()).to_string();
+                self.flash(format!("/{} · {name}", self.last_search));
                 return;
             }
         }
-        self.flash(format!("no match for {}", self.last_search));
+
+        // round the end, back into the open file from its other edge
+        let here = self.diff_rows();
+        let round = if d > 0 {
+            here.iter()
+                .enumerate()
+                .take(self.cursor + 1)
+                .find(|(_, r)| hit(r))
+        } else {
+            here.iter()
+                .enumerate()
+                .skip(self.cursor)
+                .rev()
+                .find(|(_, r)| hit(r))
+        }
+        .map(|(i, _)| i);
+        match round {
+            Some(i) => {
+                self.cursor = i;
+                self.flash(format!("/{} · round the end", self.last_search));
+            }
+            None => self.flash(format!("no match for {}", self.last_search)),
+        }
+    }
+
+    /// Opens file `f` with the cursor on its row `r`. A file whose rows have
+    /// not been fetched has nothing to put the cursor on yet, so the row waits
+    /// for them.
+    pub fn jump_to(&mut self, f: usize, r: usize) {
+        self.goto_file(f);
+        match self.rows.get(self.path()) {
+            Some(rows) => self.cursor = first_code(rows, r),
+            None => self.row_pending = Some(r),
+        }
     }
 
     pub fn goto_file(&mut self, i: usize) {
@@ -569,6 +651,7 @@ impl App {
     /// otherwise show whitespace the reader had just asked to leave out.
     fn toggle_whitespace(&mut self) {
         self.ignore_ws = !self.ignore_ws;
+        self.forget_corpus();
         self.rows.clear();
         self.spans.clear();
         self.words.clear();
@@ -588,6 +671,7 @@ impl App {
             return;
         }
         self.context = ctx;
+        self.forget_corpus();
         // only the open file is re-asked; the rest when they are opened
         let path = self.path().to_string();
         self.rows_state.insert(path, Load::Idle);
@@ -845,9 +929,8 @@ impl App {
                 )
             }),
 
-            // Only the files that have been opened have rows to search, so
-            // this lists what is known rather than pretending to index the
-            // repository — an honest smaller answer.
+            // The scope's own lines, every file's once the corpus has come:
+            // what this diff defines, not an index of the repository.
             FinderTab::Symbols => self.rows_across(|r| looks_like_a_definition(&r.text)),
         };
 
@@ -858,11 +941,12 @@ impl App {
             .collect()
     }
 
-    /// Rows from every file already fetched that pass `keep`.
+    /// Rows from every file that pass `keep`: those on show from their rows,
+    /// the rest from the corpus once it has come.
     fn rows_across(&self, keep: impl Fn(&crate::model::Row) -> bool) -> Vec<Hit> {
         let mut out = Vec::new();
         for (i, f) in self.files.iter().enumerate() {
-            let Some(rows) = self.rows.get(&f.path) else {
+            let Some(rows) = self.rows.get(&f.path).or_else(|| self.corpus.get(&f.path)) else {
                 continue;
             };
             for (ri, r) in rows.iter().enumerate() {
@@ -894,9 +978,9 @@ impl App {
         };
         self.modal = None;
         self.query.clear();
-        self.goto_file(hit.file);
-        if let Some(r) = hit.row {
-            self.cursor = first_code(self.diff_rows(), r);
+        match hit.row {
+            Some(r) => self.jump_to(hit.file, r),
+            None => self.goto_file(hit.file),
         }
         self.pane = Pane::Diff;
     }
@@ -1142,6 +1226,8 @@ impl App {
                 self.modal = Some(Modal::Finder);
                 self.query.clear();
                 self.sel = 0;
+                // the finder reads lines too, and every file's are wanted
+                self.ensure_corpus();
             }
             Action::SearchNext => self.search(1),
             Action::SearchPrev => self.search(-1),
@@ -1867,6 +1953,92 @@ mod tests {
         a.rows_state.insert("src/a.rs".into(), Load::Ready);
         a.cursor = 1;
         a
+    }
+
+    // --- searching every file ---
+
+    /// The fixture with a corpus for the whole scope: `src/b.rs`, never
+    /// opened, says `needle()` on its second row.
+    fn with_corpus() -> App {
+        let mut a = app();
+        let b = vec![
+            Row {
+                kind: Kind::Header,
+                old: None,
+                new: None,
+                text: "@@ -1 +1,2 @@".into(),
+            },
+            Row {
+                kind: Kind::Added,
+                old: None,
+                new: Some(1),
+                text: "  needle();".into(),
+            },
+        ];
+        a.corpus
+            .insert("src/a.rs".into(), a.rows["src/a.rs"].clone());
+        a.corpus.insert("src/b.rs".into(), b);
+        a.corpus_state = Load::Ready;
+        a.corpus_for = Some((a.scope.clone(), a.opts()));
+        a.last_search = "needle".into();
+        a
+    }
+
+    #[test]
+    fn n_finds_a_match_in_a_file_that_was_never_opened() {
+        let mut a = with_corpus();
+        press(&mut a, Key::Char('n'));
+        assert_eq!(a.path(), "src/b.rs");
+        assert_eq!(a.row_pending, Some(1), "the row waits for the file's rows");
+
+        // and lands when they do
+        let rows = a.corpus["src/b.rs"].clone();
+        a.apply(crate::service::Response::Diff {
+            path: "src/b.rs".into(),
+            opts: a.opts(),
+            result: Ok((rows, Vec::new())),
+        });
+        assert_eq!(a.cursor, 1);
+        assert_eq!(a.row_pending, None);
+    }
+
+    #[test]
+    fn a_search_with_no_corpus_waits_for_one_rather_than_saying_no_match() {
+        let mut a = app();
+        a.last_search = "needle".into();
+        press(&mut a, Key::Char('n'));
+        assert_eq!(a.search_pending, Some(1));
+        assert_eq!(a.path(), "src/a.rs", "nothing moved yet");
+    }
+
+    #[test]
+    fn n_round_the_end_comes_back_to_the_open_file() {
+        let mut a = with_corpus();
+        a.last_search = "main".into(); // only in src/a.rs, above the cursor
+        a.cursor = 3;
+        press(&mut a, Key::Char('n'));
+        assert_eq!(a.path(), "src/a.rs");
+        assert_eq!(a.cursor, 1);
+    }
+
+    #[test]
+    fn the_finder_reads_lines_of_files_never_opened() {
+        let mut a = with_corpus();
+        a.finder_tab = crate::app::FinderTab::Grep;
+        a.query = "needle".into();
+        let hits = a.hits();
+        assert!(
+            hits.iter().any(|h| h.file == 1),
+            "src/b.rs, from the corpus"
+        );
+    }
+
+    #[test]
+    fn a_new_rule_lets_the_corpus_go() {
+        let mut a = with_corpus();
+        a.toggle_whitespace();
+        assert!(!a.corpus_ready());
+        assert!(a.corpus.is_empty());
     }
 
     // --- moving ---
