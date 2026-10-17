@@ -203,6 +203,8 @@ pub struct App {
     pub context: u32,
     /// Whether changes of whitespace alone are left out (`␣w`).
     pub ignore_ws: bool,
+    /// The theme on when the picker opened, which `esc` puts back.
+    pub theme_before: crate::tui::theme::Theme,
     pub blame_on: bool,
     pub blame: HashMap<String, Vec<String>>,
     pub blame_state: HashMap<String, Load>,
@@ -319,6 +321,7 @@ impl App {
             anchor: None,
             context: 3,
             ignore_ws: false,
+            theme_before: crate::tui::theme::current(),
             blame_on: false,
             blame: HashMap::new(),
             blame_state: HashMap::new(),
