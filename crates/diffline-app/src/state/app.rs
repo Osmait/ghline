@@ -177,6 +177,9 @@ pub struct App {
     /// Rows keyed by path, so stepping between files does not re-fetch.
     pub rows: HashMap<String, Vec<Row>>,
     pub spans: HashMap<String, Vec<Vec<crate::shared::syntax::Span>>>,
+    /// The changed words of each edited row, per path, worked out when its
+    /// rows arrive rather than on every frame.
+    pub words: HashMap<String, Vec<Option<std::ops::Range<usize>>>>,
     pub rows_state: HashMap<String, Load>,
     pub cursor: usize,
     pub diff_scroll: usize,
@@ -287,6 +290,7 @@ impl App {
             tree_seen: 0,
             rows: HashMap::new(),
             spans: HashMap::new(),
+            words: HashMap::new(),
             rows_state: HashMap::new(),
             cursor: 0,
             diff_scroll: 0,
@@ -681,6 +685,8 @@ impl App {
                         if path == self.path() {
                             self.cursor = first_code(&rows, self.cursor);
                         }
+                        self.words
+                            .insert(path.clone(), crate::model::changed_words(&rows));
                         self.rows.insert(path.clone(), rows);
                         self.spans.insert(path.clone(), spans);
                         self.rows_state.insert(path, Load::Ready);
@@ -727,6 +733,7 @@ impl App {
                         let current = self.path().to_string();
                         self.rows.retain(|cached, _| cached == &current);
                         self.spans.retain(|cached, _| cached == &current);
+                        self.words.retain(|cached, _| cached == &current);
                         self.rows_state.retain(|cached, _| cached == &current);
                         self.blame.retain(|cached, _| cached == &current);
                         self.blame_state.retain(|cached, _| cached == &current);
@@ -741,6 +748,8 @@ impl App {
                                 let changed = self.rows.get(&path) != Some(&rows);
                                 if changed {
                                     self.cursor = first_code(&rows, self.cursor);
+                                    self.words
+                                        .insert(path.clone(), crate::model::changed_words(&rows));
                                     self.rows.insert(path.clone(), rows);
                                     self.spans.insert(path.clone(), spans);
                                     self.rows_state.insert(path.clone(), Load::Ready);
