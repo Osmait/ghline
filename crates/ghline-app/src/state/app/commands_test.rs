@@ -858,6 +858,30 @@ fn c_closes_an_open_pull_request_after_y() {
 }
 
 #[test]
+fn once_github_says_it_is_closed_the_row_reads_closed_and_c_offers_to_reopen() {
+    // live on Osmait/ghline#11: the all-repositories list is kept under its
+    // own key, was not reloaded, and the PR went on reading as open
+    let (mut app, _tape) = recording();
+    let item = app.current().unwrap().clone();
+    ch(&mut app, 'c');
+    ch(&mut app, 'y');
+    app.apply(Response::Action {
+        repo: if item.repo.is_empty() {
+            app.repo_key()
+        } else {
+            item.repo.clone()
+        },
+        num: item.num,
+        result: Ok(format!("#{} closed", item.num)),
+        merged_branch: None,
+        now: Some(Status::Closed),
+    });
+    assert_eq!(app.current().unwrap().state, Status::Closed);
+    ch(&mut app, 'c');
+    assert_eq!(app.prompt, Some(Prompt::Reopen));
+}
+
+#[test]
 fn c_reopens_a_closed_pull_request_after_y() {
     let (mut app, tape) = recording();
     app.item = app

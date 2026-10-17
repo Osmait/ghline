@@ -11,6 +11,7 @@ use std::thread;
 use crate::data::Kind;
 use crate::data::MergeMethod;
 use crate::data::Source as FinderSource;
+use crate::data::Status;
 use crate::data::{
     Account, Comment, DiffFile, Draft, Item, Job, PrFetched, RawLog, Repo, Thread, Verdict,
 };
@@ -225,6 +226,9 @@ pub enum Response {
         result: Result<String, Error>,
         /// Branch to offer for deletion if the action was a successful merge.
         merged_branch: Option<String>,
+        /// The state the item is in once the action succeeds, when it changes
+        /// one: the rows can say so before a reload does.
+        now: Option<Status>,
     },
 }
 
@@ -461,6 +465,7 @@ fn handle(req: Request) -> Response {
                 num,
                 result,
                 merged_branch,
+                now: Some(Status::Merged),
             }
         }
 
@@ -473,6 +478,7 @@ fn handle(req: Request) -> Response {
                 num,
                 result,
                 merged_branch: None,
+                now: Some(Status::Closed),
             }
         }
 
@@ -485,6 +491,7 @@ fn handle(req: Request) -> Response {
                 num,
                 result,
                 merged_branch: None,
+                now: Some(Status::Open),
             }
         }
 
@@ -497,6 +504,7 @@ fn handle(req: Request) -> Response {
                 num: 0,
                 result,
                 merged_branch: None,
+                now: None,
             }
         }
     }
