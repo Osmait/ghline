@@ -102,7 +102,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
                 .to_string()
         }
         Pane::DiffBody => {
-            "j/k scroll · {/} hunk · J/K file · / search · n/N next · s split · w ws · h files"
+            "j/k scroll · {/} hunk · J/K file · H/L pan · / search · n/N next · s split · h files"
                 .to_string()
         }
     };

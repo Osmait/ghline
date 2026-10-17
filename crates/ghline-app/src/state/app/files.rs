@@ -215,6 +215,7 @@ impl App {
                 if f != self.file_idx {
                     self.file_idx = f;
                     self.diff_scroll = 0;
+                    self.diff_pan = 0;
                 }
             }
             None => {}

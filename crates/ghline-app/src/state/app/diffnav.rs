@@ -16,6 +16,8 @@ use super::App;
 use super::files::{Entry, rows as tree_rows};
 use super::input::strip_ws_only;
 use super::prepared::{code, split_rows};
+use unicode_width::UnicodeWidthStr;
+
 use crate::data::{DiffKind, Hunk};
 
 /// Where a search hit is: a file, by index, and a row of its unified diff.
@@ -63,6 +65,25 @@ impl App {
         self.file_idx = idx;
         self.diff_dir = None;
         self.diff_scroll = 0;
+        self.diff_pan = 0;
+    }
+
+    /// `H` / `L`: the code slides by a tab stop's worth either way. Never
+    /// past the longest line, which is where the render stops it.
+    pub(super) fn pan(&mut self, d: i64) {
+        const STEP: usize = 8;
+        self.diff_pan = if d < 0 {
+            self.diff_pan.saturating_sub(STEP)
+        } else {
+            let widest = self
+                .prepared()
+                .rows
+                .iter()
+                .map(|r| code(r).width())
+                .max()
+                .unwrap_or(0);
+            (self.diff_pan + STEP).min(widest.saturating_sub(STEP))
+        };
     }
 
     /// `J` / `K`: the next or previous file, in the tree's order.

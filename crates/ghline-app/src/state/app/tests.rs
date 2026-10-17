@@ -2671,6 +2671,19 @@ mod diff_nav {
     }
 
     #[test]
+    fn l_pans_the_code_and_a_new_file_starts_back_at_its_left_edge() {
+        let mut app = reading();
+        ch(&mut app, 'L');
+        assert_eq!(app.diff_pan, 8);
+        ch(&mut app, 'H');
+        ch(&mut app, 'H');
+        assert_eq!(app.diff_pan, 0, "and never further left than the edge");
+        ch(&mut app, 'L');
+        ch(&mut app, 'J');
+        assert_eq!(app.diff_pan, 0);
+    }
+
+    #[test]
     fn searching_the_diff_leaves_the_lists_filter_alone() {
         let mut app = reading();
         search(&mut app, "side");

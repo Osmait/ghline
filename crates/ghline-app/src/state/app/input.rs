@@ -908,6 +908,8 @@ impl App {
                     self.flash_ok("first file");
                 }
             }
+            Key::Char('L') if self.view == View::Diff => self.pan(1),
+            Key::Char('H') if self.view == View::Diff => self.pan(-1),
             Key::Char('n') if self.view == View::Diff => self.search(true, false),
             Key::Char('N') if self.view == View::Diff => self.search(false, false),
             Key::PageDown => self.page_by(1),

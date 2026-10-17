@@ -347,6 +347,8 @@ pub struct App {
     pub diff_query: String,
     /// The line the last search landed on, so `n` moves on from it.
     pub diff_hit: Option<diffnav::Hit>,
+    /// Columns of code scrolled off the left of the diff (`H`/`L`).
+    pub diff_pan: usize,
     /// Two-column diff instead of unified (`s`).
     pub split: bool,
     /// Ignore whitespace-only changes (`w`).
@@ -499,6 +501,7 @@ impl App {
             diff_cache: None,
             diff_query: String::new(),
             diff_hit: None,
+            diff_pan: 0,
             split: false,
             ws: false,
             diff_scroll: 0,
