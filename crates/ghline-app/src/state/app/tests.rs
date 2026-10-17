@@ -1295,16 +1295,59 @@ mod mouse {
     fn every_pane_of_every_view_is_reachable_by_click() {
         // a pane the renderer forgot to register is a pane the mouse cannot
         // reach, and nothing else would notice
-        for view in [View::List, View::Detail, View::Logs, View::Diff] {
-            let mut app = seeded_with_sidebar();
-            app.view = view;
-            render(&mut app);
-            for pane in app.panes() {
-                assert!(
-                    app.hits.iter().any(|r| r.target == Target::Pane(pane)),
-                    "{pane:?} is on screen in {view:?} but records no region"
-                );
+        //
+        // Every tab as well as every view: the list view of the Files tab is
+        // the explorer and of the Agents tab the agent list, panes the default
+        // tab never draws and this used to never look at.
+        //
+        // The detail, the logs and the diff open from a row of issues, pull
+        // requests or runs; the Files and Agents tabs have none, so there the
+        // list view is the only one there is.
+        for tab in 0..crate::data::TABS.len() {
+            let lists = tab != crate::data::FILES_TAB && tab != crate::data::AGENTS_TAB;
+            let views: &[View] = if lists {
+                &[View::List, View::Detail, View::Logs, View::Diff]
+            } else {
+                &[View::List]
+            };
+            for &view in views {
+                let mut app = seeded_with_sidebar();
+                app.tab = tab;
+                app.view = view;
+                render(&mut app);
+                for pane in app.panes() {
+                    assert!(
+                        app.hits.iter().any(|r| r.target == Target::Pane(pane)),
+                        "{pane:?} is on screen in {view:?} of tab {tab} but records no region"
+                    );
+                }
             }
+        }
+    }
+
+    /// A modal's name, how to open it, and the region it must record.
+    type Case = (&'static str, fn(&mut App), Target);
+
+    #[test]
+    fn every_modal_records_a_region_of_its_own() {
+        // a modal with no region of its own is one a click inside closes
+        let cases: [Case; 6] = [
+            ("finder", |a| a.open_finder(), Target::Finder),
+            ("themes", |a| a.open_themes(), Target::Themes),
+            ("accounts", |a| a.accounts_open = true, Target::Accounts),
+            ("help", |a| a.help_open = true, Target::Help),
+            ("agents", |a| a.dispatch_open = true, Target::Dispatch),
+            ("review", |a| a.review_open = true, Target::Note),
+        ];
+        for (name, open, target) in cases {
+            let mut app = seeded();
+            ch(&mut app, '2');
+            open(&mut app);
+            render(&mut app);
+            assert!(
+                app.hits.iter().any(|r| r.target == target),
+                "the {name} records no {target:?}"
+            );
         }
     }
 }

@@ -53,7 +53,7 @@ impl App {
 
     /// The panes you can actually walk to. A pane that is not on screen is
     /// not one of them.
-    fn panes(&self) -> Vec<Pane> {
+    pub fn panes(&self) -> Vec<Pane> {
         let mut v = vec![Pane::Diff];
         if self.tree_shown {
             v.insert(0, Pane::Tree);

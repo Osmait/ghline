@@ -649,6 +649,43 @@ mod tests {
     }
 
     #[test]
+    fn every_pane_on_screen_and_every_modal_records_a_region() {
+        // a pane the renderer forgot to register is one the mouse cannot
+        // reach, and a modal without its own region is one a click inside
+        // closes — and nothing else would notice either
+        let mut a = app();
+        with_rows(&mut a, 8);
+        a.queue_shown = true;
+        draw_wide(&mut a);
+        for pane in a.panes() {
+            assert!(
+                a.hits.iter().any(|r| r.target == Target::Pane(pane)),
+                "{pane:?} is on screen but records no region"
+            );
+        }
+        use crate::app::Modal;
+        for m in [
+            Modal::Finder,
+            Modal::Palette,
+            Modal::Themes,
+            Modal::Comment,
+            Modal::Agents,
+            Modal::History,
+            Modal::Deps,
+            Modal::Help,
+        ] {
+            let mut a = app();
+            with_rows(&mut a, 8);
+            a.modal = Some(m);
+            draw_wide(&mut a);
+            assert!(
+                a.hits.iter().any(|r| r.target == Target::Modal),
+                "{m:?} records no region of its own"
+            );
+        }
+    }
+
+    #[test]
     fn a_click_on_a_finder_tab_switches_to_it() {
         let mut a = app();
         a.modal = Some(crate::app::Modal::Finder);
