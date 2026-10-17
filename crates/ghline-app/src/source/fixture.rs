@@ -21,8 +21,8 @@
 //! came from).
 
 use crate::data::{
-    Account, Detail, DiffSide, FileChange, Hunk, Item, Job, Label, LogKind, PrDetail, RawLog, Repo,
-    Review, ReviewState, RunDetail, StaticHunk, Status, Step, Thread, ThreadComment,
+    Account, Commit, Detail, DiffSide, FileChange, Hunk, Item, Job, Label, LogKind, PrDetail,
+    RawLog, Repo, Review, ReviewState, RunDetail, StaticHunk, Status, Step, Thread, ThreadComment,
 };
 use crate::state::app::{App, Load};
 
@@ -320,6 +320,20 @@ pub fn prs(repo: usize) -> Vec<Item> {
                     body: body.into(),
                     when: when.into(),
                 };
+                d.commits = vec![
+                    Commit {
+                        sha: "4f1c2a9e0b7d".into(),
+                        headline: "fix(layout): clamp the sidebar to its minimum".into(),
+                        author: "ada-example".into(),
+                        when: "5h ago".into(),
+                    },
+                    Commit {
+                        sha: "9b3e77d1c2a0".into(),
+                        headline: "test(layout): the clamp at either end".into(),
+                        author: "ada-example".into(),
+                        when: "4h ago".into(),
+                    },
+                ];
                 d.threads = vec![
                     Thread {
                         path: "src/layout/mod.rs".into(),

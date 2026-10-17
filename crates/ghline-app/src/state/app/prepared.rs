@@ -45,6 +45,7 @@ pub struct Prepared {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Key {
     item: (String, i64),
+    commit: Option<String>,
     path: String,
     ws: bool,
     lines: usize,
@@ -62,6 +63,7 @@ impl App {
         let notes = self.notes();
         let key = Key {
             item: (self.item_repo_key(), self.current().map_or(0, |c| c.num)),
+            commit: self.diff_commit.clone(),
             path: f.path.clone(),
             ws: self.ws,
             lines: f.hunks.iter().map(|h| h.lines.len() + 1).sum(),
@@ -79,8 +81,13 @@ impl App {
         p
     }
 
-    /// The review threads on `path`.
+    /// The review threads on `path`. None while one commit is shown: a
+    /// thread's line is a line of the pull request's last version, and in an
+    /// earlier commit it would sit under whatever happens to have that number.
     pub fn threads_on(&self, path: &str) -> Vec<&Thread> {
+        if self.diff_commit.is_some() {
+            return Vec::new();
+        }
         self.current()
             .and_then(|c| c.as_pr())
             .map(|p| p.threads.iter().filter(|t| t.path == path).collect())

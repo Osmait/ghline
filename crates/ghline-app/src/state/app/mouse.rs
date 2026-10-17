@@ -62,6 +62,7 @@ impl App {
             || self.accounts_open
             || self.help_open
             || self.dispatch_open
+            || self.commits_open
     }
 
     fn click(&mut self, at: Position, now: Instant) {
@@ -78,7 +79,13 @@ impl App {
         if self.modal_open()
             && !matches!(
                 region.map(|r| r.target),
-                Some(Target::Finder | Target::Themes | Target::Accounts | Target::Dispatch)
+                Some(
+                    Target::Finder
+                        | Target::Themes
+                        | Target::Accounts
+                        | Target::Dispatch
+                        | Target::Commits
+                )
             )
         {
             self.back();
@@ -107,6 +114,14 @@ impl App {
                     if repeat {
                         self.themes_open = false;
                         self.accept_theme();
+                    }
+                }
+            }
+            Target::Commits => {
+                if let Some(i) = index {
+                    self.commit_sel = i;
+                    if repeat {
+                        self.pick_commit(i);
                     }
                 }
             }
@@ -174,6 +189,9 @@ impl App {
             }
             Target::Accounts => {
                 self.acc_sel = step_sel(self.acc_sel, d, self.accounts.len());
+            }
+            Target::Commits => {
+                self.commit_sel = step_sel(self.commit_sel, d, self.commits().len() + 1);
             }
             Target::Dispatch => {
                 self.dispatch_sel = step_sel(self.dispatch_sel, d, self.dispatch_dests().len());

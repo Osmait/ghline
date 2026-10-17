@@ -2960,3 +2960,110 @@ mod review_threads {
         assert_eq!(heads(&mut app).len(), 0, "the cache noticed: {before} → 0");
     }
 }
+
+mod commits {
+    use super::*;
+    use crate::data::{DiffFile, Hunk};
+
+    /// The fixture's PR diff, open, with a recorder for what it asks for. Its
+    /// two commits are `4f1c2a9` and `9b3e77d`.
+    fn reading() -> (App, std::rc::Rc<Recorder>) {
+        let (mut app, tape) = recording();
+        app.accounts_state = Load::Ready;
+        app.repos_state.insert(app.login().to_string(), Load::Ready);
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        app.lists_state
+            .insert((app.repo_key(), app.tab), Load::Ready);
+        ch(&mut app, 'd');
+        (app, tape)
+    }
+
+    fn one_file(path: &str) -> DiffFile {
+        DiffFile {
+            path: path.into(),
+            from: None,
+            hunks: vec![Hunk {
+                hdr: "@@ -1,1 +1,2 @@".into(),
+                lines: vec![(' ', "a".into()), ('+', "b".into())],
+            }],
+        }
+    }
+
+    #[test]
+    fn v_opens_the_picker_on_all_changes() {
+        let (mut app, _) = reading();
+        ch(&mut app, 'v');
+        assert!(app.commits_open);
+        assert_eq!(app.commit_sel, 0, "all changes, which is what is on");
+    }
+
+    #[test]
+    fn picking_a_commit_asks_for_its_diff_and_shows_only_its_files() {
+        let (mut app, tape) = reading();
+        ch(&mut app, 'v');
+        ch(&mut app, 'j');
+        press(&mut app, Key::Enter);
+        assert!(!app.commits_open);
+        assert_eq!(app.diff_commit.as_deref(), Some("4f1c2a9e0b7d"));
+        app.ensure();
+        assert!(
+            tape.0
+                .borrow()
+                .iter()
+                .any(|r| matches!(r, Request::CommitDiff { sha, .. } if sha == "4f1c2a9e0b7d"))
+        );
+
+        app.apply(Response::CommitDiff {
+            repo: app.item_repo_key(),
+            sha: "4f1c2a9e0b7d".into(),
+            result: Ok(vec![one_file("src/layout/solver.rs")]),
+        });
+        let paths: Vec<_> = app.diff_files().iter().map(|f| f.path.clone()).collect();
+        assert_eq!(paths, ["src/layout/solver.rs"]);
+        assert_eq!(
+            app.diff_file().map(|f| f.path.as_str()),
+            Some("src/layout/solver.rs")
+        );
+    }
+
+    #[test]
+    fn a_commit_hides_the_review_threads_and_all_changes_brings_them_back() {
+        let (mut app, _) = reading();
+        let threads = |app: &App| app.threads_on("src/layout/mod.rs").len();
+        assert_eq!(threads(&app), 2);
+        ch(&mut app, 'v');
+        ch(&mut app, 'j');
+        press(&mut app, Key::Enter);
+        assert_eq!(threads(&app), 0, "their lines are the last version's");
+        ch(&mut app, 'v');
+        assert_eq!(app.commit_sel, 1, "the picker opens on what is shown");
+        ch(&mut app, 'k');
+        press(&mut app, Key::Enter);
+        assert_eq!(app.diff_commit, None);
+        assert_eq!(threads(&app), 2);
+    }
+
+    #[test]
+    fn esc_leaves_the_picker_without_changing_what_is_shown() {
+        let (mut app, _) = reading();
+        ch(&mut app, 'v');
+        ch(&mut app, 'j');
+        press(&mut app, Key::Esc);
+        assert!(!app.commits_open);
+        assert_eq!(app.diff_commit, None);
+    }
+
+    #[test]
+    fn another_pull_request_opens_on_all_its_changes() {
+        let (mut app, _) = reading();
+        ch(&mut app, 'v');
+        ch(&mut app, 'j');
+        press(&mut app, Key::Enter);
+        press(&mut app, Key::Esc);
+        press(&mut app, Key::Esc);
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        assert_eq!(app.diff_commit, None);
+    }
+}

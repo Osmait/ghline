@@ -98,11 +98,11 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Pane::Tree => "j/k node · o fold · enter/l log · esc back".to_string(),
         Pane::Log => "j/k scroll · f follow · / filter · e first error · h jobs · esc".to_string(),
         Pane::Files => {
-            "j/k move · enter open · h/l fold · O fold all · s split · w ignore ws · esc back"
+            "j/k move · enter open · h/l fold · O fold all · v commits · s split · w ws · esc back"
                 .to_string()
         }
         Pane::DiffBody => {
-            "j/k scroll · {/} hunk · J/K file · (/) comment · C comments · / search · H/L pan · s split"
+            "j/k scroll · {/} hunk · J/K file · (/) comment · v commits · / search · H/L pan · C notes"
                 .to_string()
         }
     };

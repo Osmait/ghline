@@ -68,6 +68,12 @@ fn the_diff_of_a_pull_request() {
     insta::assert_snapshot!(frame("<enter>d"));
 }
 
+/// The commit picker over the diff: every change first, then each commit.
+#[test]
+fn the_commit_picker() {
+    insta::assert_snapshot!(frame("<enter>dv"));
+}
+
 /// Modals are drawn over the panes they cover, and what shows around the edges
 /// is part of the frame.
 #[test]

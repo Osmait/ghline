@@ -632,6 +632,10 @@ impl App {
             self.themes_open = false;
             return;
         }
+        if self.commits_open {
+            self.commits_open = false;
+            return;
+        }
         match self.view {
             View::Logs => {
                 if self.pane == Pane::Log {
@@ -813,6 +817,18 @@ impl App {
             return;
         }
 
+        if self.commits_open {
+            let last = self.commits().len();
+            match press.key {
+                Key::Char('j') | Key::Down => self.commit_sel = (self.commit_sel + 1).min(last),
+                Key::Char('k') | Key::Up => self.commit_sel = self.commit_sel.saturating_sub(1),
+                Key::Enter => self.pick_commit(self.commit_sel),
+                Key::Esc | Key::Char('q' | 'v') => self.commits_open = false,
+                _ => {}
+            }
+            return;
+        }
+
         if self.themes_open {
             let last = crate::tui::theme::Theme::all().len() - 1;
             match press.key {
@@ -916,6 +932,7 @@ impl App {
                     self.flash_ok("first file");
                 }
             }
+            Key::Char('v') if self.view == View::Diff => self.open_commits(),
             Key::Char(')') if self.view == View::Diff => self.step_thread(true),
             Key::Char('(') if self.view == View::Diff => self.step_thread(false),
             // capital, because `c` already closes the pull request

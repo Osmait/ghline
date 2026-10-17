@@ -22,6 +22,7 @@ settings, themes and colours are in [config.md](config.md).
 | Checks | `gh run view --json jobs` for the run tied to the PR |
 | Diff | `gh pr diff`, split per file and per hunk |
 | Review comments | `reviewThreads` through `gh api graphql` |
+| One commit's diff | `gh api repos/…/commits/<sha>` with the diff media type |
 | Logs | `gh run view --log`, split per job and step |
 | Actions | `gh pr merge/close/reopen` and `DELETE /git/refs` |
 
@@ -221,6 +222,13 @@ is read beside its code rather than found again after reading it:
 They arrive with the diff, from `reviewThreads` in GitHub's GraphQL API; when
 that fails the diff is still there, and says the comments are not.
 
+`v` picks one commit of the pull request to read on its own: the tree, the
+diff, the search and the jumps then work on that commit's changes against its
+parent, the files pane says `COMMIT 4f1c2a9`, and the first row of the picker
+— "All changes" — goes back to the whole pull request. Review comments are
+hidden while a commit is shown: their lines are the last version's, and in an
+earlier commit they would sit under whatever happens to have that number.
+
 The rest of what was said is in the PR's detail, beside its description: each
 review with what its reviewer wrote under the verdict, and the conversation —
 comments on the pull request as a whole — rendered as Markdown. A reply to a
@@ -345,6 +353,7 @@ thing off if you would rather have it back.
 | `n` `N` | next / previous search match (in the diff) |
 | `(` `)` | previous / next review comment (in the diff) |
 | `C` | show / hide review comments (in the diff) |
+| `v` | read one commit of the PR on its own (in the diff) |
 | `g` `G` | start / end of the pane |
 | `^d` `^u` | half a page |
 | `PgUp` `PgDn` | a whole page |

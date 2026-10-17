@@ -92,13 +92,23 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         height: 1,
     };
     fill(buf, head, theme::panel());
-    put(
+    // One commit's files say which commit, in the colour its picker wears,
+    // so the tree is never read as the whole pull request when it is not.
+    let commit = app
+        .diff_commit
+        .as_ref()
+        .and_then(|sha| app.commits().iter().find(|c| &c.sha == sha));
+    let (title, color) = match commit {
+        Some(c) => (format!("COMMIT {}", c.short()), theme::yellow()),
+        None => ("FILES CHANGED".to_string(), theme::dim()),
+    };
+    put_trunc(
         buf,
         area.x + 1,
         area.y,
-        area.right(),
-        "FILES CHANGED",
-        Style::default().bg(theme::panel()).fg(theme::dim()),
+        area.right() - 1,
+        &title,
+        Style::default().bg(theme::panel()).fg(color),
     );
     hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
@@ -115,11 +125,21 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         },
         theme::panel(),
     );
-    let stats = match app.current() {
-        Some(cur) => cur.as_pr().map_or_else(String::new, |p| {
-            format!("{} files changed · {} {}", p.files, p.add, p.del)
-        }),
-        None => String::new(),
+    let stats = if app.diff_commit.is_some() {
+        // a commit's totals are its own files', not the pull request's
+        let count = |s: &str| s.trim_start_matches(['+', '-']).parse::<u32>().unwrap_or(0);
+        let files = app.diff_files();
+        let (add, del) = files
+            .iter()
+            .fold((0, 0), |(a, d), f| (a + count(&f.add), d + count(&f.del)));
+        format!("{} files in this commit · +{add} -{del}", files.len())
+    } else {
+        match app.current() {
+            Some(cur) => cur.as_pr().map_or_else(String::new, |p| {
+                format!("{} files changed · {} {}", p.files, p.add, p.del)
+            }),
+            None => String::new(),
+        }
     };
     let stats = if app.ws {
         format!("{stats} · whitespace ignored")

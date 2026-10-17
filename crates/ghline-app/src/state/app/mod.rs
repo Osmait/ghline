@@ -354,6 +354,15 @@ pub struct App {
     pub diff_pan: usize,
     /// Whether review threads are drawn in the diff (`C`).
     pub diff_notes: bool,
+    /// The one commit the diff is showing, by sha; `None` for every change
+    /// the pull request makes. Chosen with `v`.
+    pub diff_commit: Option<String>,
+    /// Each commit's own files and hunks, by `(repo, sha)`.
+    pub commit_files: HashMap<(String, String), Vec<crate::data::FileChange>>,
+    pub commit_state: HashMap<(String, String), Load>,
+    /// The commit picker, and the row it is on: 0 is "all changes".
+    pub commits_open: bool,
+    pub commit_sel: usize,
     /// The diff pane's width, which only the render knows; comments fold to it.
     pub diff_width: usize,
     /// Two-column diff instead of unified (`s`).
@@ -511,6 +520,11 @@ impl App {
             diff_hit: None,
             diff_pan: 0,
             diff_notes: true,
+            diff_commit: None,
+            commit_files: HashMap::new(),
+            commit_state: HashMap::new(),
+            commits_open: false,
+            commit_sel: 0,
             diff_width: 100,
             split: false,
             ws: false,

@@ -189,6 +189,16 @@ impl App {
                         num,
                     });
                 }
+                if let Some(sha) = self.diff_commit.clone() {
+                    let k = (key.clone(), sha.clone());
+                    if self.commit_state.get(&k).is_none_or(|s| *s == Load::Idle) {
+                        self.commit_state.insert(k, Load::Loading);
+                        self.ask(Request::CommitDiff {
+                            repo: key.clone(),
+                            sha,
+                        });
+                    }
+                }
                 if kind == Kind::Pr && idle {
                     self.diff_state.insert((key.clone(), num), Load::Loading);
                     self.ask(Request::PrDiff { repo: key, num });
@@ -499,6 +509,7 @@ impl App {
                     files,
                     reviews,
                     comments,
+                    commits,
                 }) = got
                     && let Some(it) = self.item_mut(&repo, 1, num)
                 {
@@ -516,6 +527,7 @@ impl App {
                         pr.file_list = files;
                         pr.reviews = reviews;
                         pr.comments = comments;
+                        pr.commits = commits;
                     }
                 }
                 self.land_on_first_file(was_empty);
@@ -585,6 +597,25 @@ impl App {
                 Err(e) => {
                     self.flash_warn(e.brief());
                     self.diff_state.insert((repo, num), Load::from(e));
+                }
+            },
+
+            Response::CommitDiff { repo, sha, result } => match result {
+                Ok(files) => {
+                    let was_empty = self.diff_files().is_empty();
+                    self.commit_state
+                        .insert((repo.clone(), sha.clone()), Load::Ready);
+                    self.commit_files
+                        .insert((repo, sha), files.iter().map(from_diff).collect());
+                    self.land_on_first_file(was_empty);
+                }
+                Err(e) => {
+                    self.flash_warn(format!(
+                        "commit {}: {}",
+                        &sha[..sha.len().min(7)],
+                        e.brief()
+                    ));
+                    self.commit_state.insert((repo, sha), Load::from(e));
                 }
             },
 
