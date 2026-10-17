@@ -221,6 +221,10 @@ impl App {
             // Stepped against the whole list, not the region: the agent
             // picker gives each row a region of its own, and stepping against
             // one of those pinned the selection to the row under the pointer.
+            // the help scrolls as a page does, its region having no rows
+            Target::Modal if self.modal == Some(crate::app::Modal::Help) => {
+                self.help_scroll = (self.help_scroll as i64 + d).max(0) as usize;
+            }
             Target::Modal if hit.len > 0 => {
                 if let Some(m) = self.modal {
                     self.sel = step(self.sel, d, self.modal_len(m));

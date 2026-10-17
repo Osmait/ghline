@@ -6,7 +6,7 @@ use ratatui::layout::{Rect, Size};
 use crate::app::App;
 use crate::hit::{Region, Target};
 use crate::tui::theme;
-use crate::tui::{Dialog, put, put_trunc};
+use crate::tui::{Dialog, put, put_trunc, scroll_into_view};
 
 /// The theme picker. Small on purpose — it sits over the diff, and the diff
 /// is what you are actually judging the colours against.
@@ -23,10 +23,22 @@ pub(crate) fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
         .open(buf, area);
 
     app.hits.push(Region::plain(Target::Modal, body.outer));
-    app.hits
-        .push(Region::rows(Target::Modal, body.inner, 2, 0, all.len()));
+    let mut scroll = 0;
+    scroll_into_view(
+        &mut scroll,
+        app.sel,
+        (body.inner.height / 2) as usize,
+        all.len(),
+    );
+    app.hits.push(Region::rows(
+        Target::Modal,
+        body.inner,
+        2,
+        scroll,
+        all.len(),
+    ));
 
-    for slot in body.rows(buf, all.len(), 2, app.sel, 0) {
+    for slot in body.rows(buf, all.len(), 2, app.sel, scroll) {
         let Some(t) = all.get(slot.index) else {
             continue;
         };

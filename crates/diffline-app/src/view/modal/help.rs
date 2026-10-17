@@ -17,7 +17,13 @@ use crate::tui::{centered_over as centered, frame, put, put_right, put_trunc, ru
 /// and being wrong about that is worse than not being there.
 pub(crate) fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     let rows = app.keys.listing();
-    let m = centered(area, Size::new(86, (rows.len() as u16).div_ceil(2) + 6));
+    let m = centered(
+        area,
+        Size::new(
+            86,
+            ((rows.len() as u16).div_ceil(2) + 6).min(area.height.saturating_sub(2)),
+        ),
+    );
     frame(buf, m, theme::yellow());
     app.hits.push(Region::plain(Target::Modal, m));
     let base = Style::default().bg(theme::panel());
@@ -59,13 +65,38 @@ pub(crate) fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
         top += 1;
     }
 
+    // Two to a line, and as many lines as fit: the rest scroll into view
+    // with j/k and the wheel, and the header says there are more.
+    let lines = rows.len().div_ceil(2);
+    let room = (m.bottom().saturating_sub(1).saturating_sub(top)) as usize;
+    app.help_scroll = app.help_scroll.min(lines.saturating_sub(room));
+    let scroll = app.help_scroll;
+    if lines > room {
+        let where_ = format!(
+            " {}–{} of {} · j/k ",
+            scroll + 1,
+            (scroll + room).min(lines),
+            lines
+        );
+        put_right(
+            buf,
+            m.right() - 2,
+            m.y + 2,
+            &where_,
+            base.fg(theme::dimmer()),
+        );
+    }
+
     let half = m.width / 2;
     for (i, (spec, action)) in rows.iter().enumerate() {
         let col = i % 2;
-        let y = top + (i / 2) as u16;
-        if y >= m.bottom() - 1 {
+        let Some(line) = (i / 2).checked_sub(scroll) else {
+            continue;
+        };
+        if line >= room {
             break;
         }
+        let y = top + line as u16;
         let x = m.x + 2 + col as u16 * half;
         put(buf, x, y, x + KEY_W, spec, base.fg(theme::yellow()));
         put_trunc(

@@ -16,34 +16,36 @@ enum Word {
     Back,
 }
 
-/// The commands the palette offers, and the key each is also on.
-pub const COMMANDS: &[(&str, &str)] = &[
-    ("toggle blame", "␣b"),
-    ("toggle blast radius", "␣g"),
-    ("expand context", "␣+"),
-    ("collapse context", "␣-"),
-    ("next file", "]f"),
-    ("prev file", "[f"),
-    ("add comment", "␣n"),
-    ("delete comment under cursor", "␣x"),
-    ("pick agent", "␣a"),
-    ("send queue to agent", "␣s"),
-    ("clear queue", ""),
-    ("commit history", "␣l"),
-    ("next scope", "]s"),
-    ("prev scope", "[s"),
-    ("split view", "␣v"),
-    ("fold all folders", "O"),
-    ("ignore whitespace", "␣w"),
-    ("toggle file tree", "␣e"),
-    ("toggle queue", "␣c"),
-    ("find", "/"),
-    ("pick a theme", "␣t"),
-    ("write a keymap to start from", ""),
-    ("write a theme to start from", ""),
-    ("refresh", "␣r"),
-    ("open help", "␣?"),
-    ("quit", "␣q"),
+/// The commands the palette offers, and the action each one is — whose key,
+/// whatever the reader's keymap has made it, the palette shows beside it.
+/// `None` for the few with no key of their own.
+pub const COMMANDS: &[(&str, Option<Action>)] = &[
+    ("toggle blame", Some(Action::Blame)),
+    ("toggle blast radius", Some(Action::Deps)),
+    ("expand context", Some(Action::ContextMore)),
+    ("collapse context", Some(Action::ContextLess)),
+    ("next file", Some(Action::FileNext)),
+    ("prev file", Some(Action::FilePrev)),
+    ("add comment", Some(Action::Note)),
+    ("delete comment under cursor", Some(Action::DeleteNote)),
+    ("pick agent", Some(Action::Agents)),
+    ("send queue to agent", Some(Action::Send)),
+    ("clear queue", None),
+    ("commit history", Some(Action::History)),
+    ("next scope", Some(Action::ScopeNext)),
+    ("prev scope", Some(Action::ScopePrev)),
+    ("split view", Some(Action::Split)),
+    ("fold all folders", Some(Action::FoldAll)),
+    ("ignore whitespace", Some(Action::IgnoreWhitespace)),
+    ("toggle file tree", Some(Action::TreePane)),
+    ("toggle queue", Some(Action::QueuePane)),
+    ("find", Some(Action::Search)),
+    ("pick a theme", Some(Action::Themes)),
+    ("write a keymap to start from", None),
+    ("write a theme to start from", None),
+    ("refresh", Some(Action::Refresh)),
+    ("open help", Some(Action::Help)),
+    ("quit", Some(Action::Quit)),
 ];
 
 impl App {
@@ -1056,7 +1058,7 @@ impl App {
                 self.refresh();
                 self.flash("refreshing…");
             }
-            "open help" => self.modal = Some(Modal::Help),
+            "open help" => self.run(Action::Help, 1),
             "quit" => self.should_quit = true,
             _ => return false,
         }
@@ -1321,7 +1323,10 @@ impl App {
                 self.refresh();
                 self.flash("refreshing…");
             }
-            Action::Help => self.modal = Some(Modal::Help),
+            Action::Help => {
+                self.modal = Some(Modal::Help);
+                self.help_scroll = 0;
+            }
             Action::Themes => self.open_themes(),
             Action::Quit => self.should_quit = true,
         }
@@ -1347,7 +1352,21 @@ impl App {
             }
             return;
         }
-        if matches!(m, Modal::Help | Modal::Deps) {
+        // The help is longer than a short terminal: it scrolls, and closes on
+        // the keys that close things rather than on any key at all, which
+        // made the scroll impossible.
+        if m == Modal::Help {
+            match press.key {
+                Key::Char('j') | Key::Down => self.help_scroll += 1,
+                Key::Char('k') | Key::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
+                Key::Char('d') if ctrl => self.help_scroll += 10,
+                Key::Char('u') if ctrl => self.help_scroll = self.help_scroll.saturating_sub(10),
+                Key::Char('q' | '?') | Key::Enter => self.modal = None,
+                _ => {}
+            }
+            return;
+        }
+        if m == Modal::Deps {
             self.modal = None;
             return;
         }
@@ -2020,6 +2039,20 @@ mod tests {
         press(&mut a, Key::Esc);
         assert_eq!(current(), Theme::Default, "and esc undoes it");
         set(Theme::Default);
+    }
+
+    #[test]
+    fn the_help_scrolls_and_closes_only_on_the_keys_that_close() {
+        let mut a = app();
+        a.run(Action::Help, 1);
+        press(&mut a, Key::Char('j'));
+        assert_eq!(a.help_scroll, 1);
+        press(&mut a, Key::Char('x'));
+        assert_eq!(a.modal, Some(Modal::Help), "any key no longer closes it");
+        press(&mut a, Key::Char('q'));
+        assert_eq!(a.modal, None);
+        a.run(Action::Help, 1);
+        assert_eq!(a.help_scroll, 0, "and it opens at its top again");
     }
 
     #[test]
