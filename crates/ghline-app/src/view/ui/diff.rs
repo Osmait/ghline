@@ -22,6 +22,11 @@ use crate::tui::{
 
 const FILES_W: u16 = 38;
 
+/// Where a review comment's bar is drawn. Near the edge rather than under
+/// the code: the line numbers mean nothing to a comment, and on a narrow pane
+/// the columns they would cost are most of the room its text has.
+const NOTE_X: u16 = 2;
+
 /// Background for each line kind, as in the design.
 fn row_bg(kind: DiffKind) -> Color {
     match kind {
@@ -323,15 +328,20 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, head, theme::panel());
     let base = Style::default().bg(theme::panel());
 
-    let split_label = if app.split {
-        "▥ split [s]"
-    } else {
-        "▤ unified [s]"
+    // Narrow, the two toggles keep their glyph and key and lose their words:
+    // the words are in the help, and the file's name is in no other place.
+    let narrow = area.width < 90;
+    let split_label = match (app.split, narrow) {
+        (true, false) => "▥ split [s]",
+        (false, false) => "▤ unified [s]",
+        (true, true) => "▥ [s]",
+        (false, true) => "▤ [s]",
     };
-    let ws_label = if app.ws {
-        "● ignore ws [w]"
-    } else {
-        "○ ignore ws [w]"
+    let ws_label = match (app.ws, narrow) {
+        (true, false) => "● ignore ws [w]",
+        (false, false) => "○ ignore ws [w]",
+        (true, true) => "● [w]",
+        (false, true) => "○ [w]",
     };
     let ws_x = put_right(
         buf,
@@ -586,7 +596,7 @@ fn draw_unified_row(
     );
     let base = Style::default().bg(bg);
     if r.kind.is_note() {
-        draw_note(buf, area.x + 12, y, area.right(), r, base);
+        draw_note(buf, area.x + NOTE_X, y, area.right(), r, base);
         return;
     }
     // two numbering columns: original file and new file
@@ -863,7 +873,7 @@ fn draw_split_row(
         fill(buf, full, row_bg(r.kind));
         draw_note(
             buf,
-            area.x + 6,
+            area.x + NOTE_X,
             y,
             area.right(),
             r,
