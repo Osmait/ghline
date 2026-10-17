@@ -2743,3 +2743,98 @@ mod file_changes {
         );
     }
 }
+
+mod diff_loading {
+    use super::*;
+    use crate::data::{Change, DiffFile, FileChange, Hunk};
+
+    fn hunk() -> Hunk {
+        Hunk {
+            hdr: "@@ -1,1 +1,2 @@".into(),
+            lines: vec![(' ', "a".into()), ('+', "b".into())],
+        }
+    }
+
+    /// The fixture's first PR with its file list emptied, as it is when `d`
+    /// is pressed on the list before the detail was ever opened.
+    fn bare() -> (App, String, i64) {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        for it in app.lists.values_mut().flatten().filter(|i| i.num == num) {
+            if let Some(pr) = it.as_pr_mut() {
+                pr.file_list.clear();
+            }
+        }
+        (app, repo, num)
+    }
+
+    #[test]
+    fn opening_the_diff_from_the_list_asks_for_the_file_list_too() {
+        let (mut app, tape) = recording();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.detail_state.remove(&(repo, num));
+        // what the fixture holds counts as fetched, so only the diff is asked
+        app.accounts_state = Load::Ready;
+        app.repos_state.insert(app.login().to_string(), Load::Ready);
+        app.lists_state
+            .insert((app.repo_key(), app.tab), Load::Ready);
+        ch(&mut app, 'd');
+        app.ensure();
+        let asked = tape.0.borrow();
+        assert!(asked.iter().any(|r| matches!(r, Request::PrDetail { .. })));
+        assert!(asked.iter().any(|r| matches!(r, Request::PrDiff { .. })));
+    }
+
+    #[test]
+    fn a_diff_that_arrives_before_the_file_list_still_fills_the_tree() {
+        let (mut app, repo, num) = bare();
+        app.apply(Response::PrDiff {
+            repo: repo.clone(),
+            num,
+            result: Ok(vec![DiffFile {
+                path: "src/a.rs".into(),
+                from: None,
+                hunks: vec![hunk()],
+            }]),
+        });
+        let f = app
+            .current()
+            .and_then(|c| c.as_pr())
+            .map(|p| p.file_list.clone())
+            .unwrap();
+        assert_eq!(f.len(), 1);
+        assert_eq!((f[0].add.as_str(), f[0].del.as_str()), ("+1", "-0"));
+
+        // and the list that comes after keeps those hunks
+        app.apply(Response::PrDetail {
+            repo,
+            num,
+            result: Ok((
+                String::new(),
+                vec![FileChange {
+                    path: "src/a.rs".into(),
+                    add: "+1".into(),
+                    del: "-0".into(),
+                    change: Change::Added,
+                    ..FileChange::default()
+                }],
+                Vec::new(),
+            )),
+        });
+        let f = app
+            .current()
+            .and_then(|c| c.as_pr())
+            .map(|p| p.file_list.clone())
+            .unwrap();
+        assert_eq!(f[0].hunks.len(), 1, "the hunks survived the list");
+        assert_eq!(
+            f[0].change,
+            Change::Added,
+            "and the list's word on the kind won"
+        );
+    }
+}
