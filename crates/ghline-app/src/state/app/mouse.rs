@@ -100,6 +100,7 @@ impl App {
                         | Target::Note
                         | Target::Review
                         | Target::Help
+                        | Target::FinderSource(_)
                 )
             )
         {
@@ -133,6 +134,11 @@ impl App {
                 }
             }
             Target::Note | Target::Help => {}
+            Target::FinderSource(i) => {
+                if let Some(s) = crate::data::Source::ALL.get(i) {
+                    self.set_finder_source(*s);
+                }
+            }
             Target::Review => {
                 if let Some(i) = index
                     && let Some(v) = crate::data::Verdict::ALL.get(i)
@@ -255,7 +261,7 @@ impl App {
                 self.dispatch_sel = step_sel(self.dispatch_sel, d, self.dispatch_dests().len());
             }
             // a tab bar is one row tall; there is nothing to scroll through
-            Target::Tab(_) => {}
+            Target::Tab(_) | Target::FinderSource(_) => {}
         }
     }
 }

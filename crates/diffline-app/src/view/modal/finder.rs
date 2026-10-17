@@ -25,13 +25,14 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &mut App) {
     let base = Style::default().bg(theme::panel());
 
     let mut x = m.x + 2;
-    for t in FinderTab::ALL {
+    for (i, t) in FinderTab::ALL.into_iter().enumerate() {
         let on = t == app.finder_tab;
         let style = if on {
             pill(theme::yellow(), theme::panel())
         } else {
             base.fg(theme::dim())
         };
+        let from = x;
         x = put(
             buf,
             x,
@@ -40,6 +41,16 @@ pub(crate) fn finder(buf: &mut Buffer, area: Rect, app: &mut App) {
             &format!(" {} ", t.label()),
             style,
         );
+        // each tab a target of its own, as tab is: a click picks it
+        app.hits.push(Region::plain(
+            Target::FinderTab(i),
+            Rect {
+                x: from,
+                y: m.y + 1,
+                width: x.saturating_sub(from),
+                height: 1,
+            },
+        ));
         x += 1;
     }
     put_right(

@@ -88,7 +88,12 @@ impl App {
         // While one is up it owns the mouse as it owns the keyboard: acting
         // on a pane it covers would move things under a box the reader is
         // still looking at.
-        if self.modal.is_some() && !matches!(hit.map(|r| r.target), Some(Target::Modal)) {
+        if self.modal.is_some()
+            && !matches!(
+                hit.map(|r| r.target),
+                Some(Target::Modal | Target::FinderTab(_))
+            )
+        {
             self.close_modal();
             return;
         }
@@ -110,6 +115,12 @@ impl App {
                 }
             }
             Target::QueueTab => self.toggle_queue_pane(),
+            Target::FinderTab(i) => {
+                if let Some(t) = crate::app::FinderTab::ALL.get(i) {
+                    self.finder_tab = *t;
+                    self.sel = 0;
+                }
+            }
             Target::Modal => {
                 if let Some(i) = index {
                     self.sel = i;
@@ -635,6 +646,26 @@ mod tests {
             a.on_mouse(ev(Motion::ScrollLeft, x, y));
         }
         assert_eq!(a.hscroll, 0);
+    }
+
+    #[test]
+    fn a_click_on_a_finder_tab_switches_to_it() {
+        let mut a = app();
+        a.modal = Some(crate::app::Modal::Finder);
+        draw_wide(&mut a);
+        let tab = a
+            .hits
+            .iter()
+            .find(|r| r.target == Target::FinderTab(2))
+            .copied()
+            .expect("the third tab");
+        a.on_mouse(ev(Motion::Down(Button::Left), tab.area.x + 1, tab.area.y));
+        assert_eq!(a.finder_tab, crate::app::FinderTab::ALL[2]);
+        assert_eq!(
+            a.modal,
+            Some(crate::app::Modal::Finder),
+            "and the finder stays"
+        );
     }
 
     #[test]

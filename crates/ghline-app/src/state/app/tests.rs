@@ -965,6 +965,19 @@ mod mouse {
     }
 
     #[test]
+    fn a_click_on_a_finder_source_searches_there() {
+        let mut app = seeded();
+        app.open_finder();
+        render(&mut app);
+        let first = app.finder_source;
+        let r = region(&app, Target::FinderSource(1));
+        click_at(&mut app, r.area.x, r.area.y);
+        assert_eq!(app.finder_source, crate::data::Source::ALL[1]);
+        assert_ne!(app.finder_source, first);
+        assert!(app.finder_open, "and the finder stays");
+    }
+
+    #[test]
     fn a_click_inside_the_help_keeps_it_open() {
         let mut app = seeded();
         ch(&mut app, '?');
