@@ -1,9 +1,11 @@
 //! The application error type.
 //!
-//! A purpose-built enum is preferred over `Box<dyn Error>` or `String` so that
+//! A purpose-built enum is used instead of `Box<dyn Error>` or `String` so that
 //! callers can tell the cases apart: a missing program is not fixed the same
 //! way as a repository you cannot read. It implements `Display` and
 //! `std::error::Error`, so it works with `?` and the usual tooling.
+//!
+//! (This line exists only to be commented on by a throwaway review.)
 //!
 //! Three programs are driven through this: `gh`, `git` and `herdr`. Every
 //! case therefore names which one it was — a type shared by three callers
@@ -14,7 +16,7 @@ use std::io;
 
 /// A program we ran did not give us what we asked for.
 ///
-/// Four cases because they are fixed four different ways, and the reader is
+/// Four variants because they are fixed four different ways, and the reader is
 /// the one doing the fixing: a `Spawn` is an install, a `Command` is the
 /// program's own complaint and belongs to them, and `Json` or `Field` mean
 /// the output moved under us and belongs to this crate.
