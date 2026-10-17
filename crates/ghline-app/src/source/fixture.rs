@@ -303,10 +303,14 @@ pub fn prs(repo: usize) -> Vec<Item> {
                     Review {
                         author: "noa-example".into(),
                         state: ReviewState::ChangesRequested,
+                        body: "The clamp is right; the constant should not be.".into(),
+                        when: "2h ago".into(),
                     },
                     Review {
                         author: "iris-example".into(),
                         state: ReviewState::Approved,
+                        body: String::new(),
+                        when: "3h ago".into(),
                     },
                 ];
                 // On the first file the diff opens on: one thread still being

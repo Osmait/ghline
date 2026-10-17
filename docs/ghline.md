@@ -221,6 +221,12 @@ is read beside its code rather than found again after reading it:
 They arrive with the diff, from `reviewThreads` in GitHub's GraphQL API; when
 that fails the diff is still there, and says the comments are not.
 
+The rest of what was said is in the PR's detail, beside its description: each
+review with what its reviewer wrote under the verdict, and the conversation —
+comments on the pull request as a whole — rendered as Markdown. A reply to a
+review thread is filed by GitHub as an empty "commented" review of its own;
+those are left out of the list, since what they said is in the diff.
+
 Lines are coloured as the file explorer colours code, and on a line that was
 edited rather than replaced the words that changed are reversed, as git's
 `diff-highlight` does. A theme that cannot tint added and deleted lines — the
