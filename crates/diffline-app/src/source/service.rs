@@ -37,6 +37,12 @@ pub enum Request {
         path: String,
         opts: DiffOpts,
     },
+    /// Every file's diff in the scope, for a search across all of them.
+    Corpus {
+        repo: String,
+        scope: Scope,
+        opts: DiffOpts,
+    },
     /// Who last touched each line.
     Blame { repo: String, path: String },
     /// The recent commits, for the history picker.
@@ -79,6 +85,11 @@ pub enum Response {
         opts: DiffOpts,
         files: Res<Vec<ChangedFile>>,
         diff: Option<Res<HighlightedRows>>,
+    },
+    Corpus {
+        scope: Scope,
+        opts: DiffOpts,
+        result: Res<Vec<(String, Vec<Row>)>>,
     },
     Blame {
         path: String,
@@ -190,6 +201,15 @@ fn handle(req: Request) -> Response {
                     (rows, spans)
                 });
             Response::Diff { path, opts, result }
+        }
+
+        Request::Corpus { repo, scope, opts } => {
+            let result = vcs(&repo).scope_diff(&repo, &scope, opts);
+            Response::Corpus {
+                scope,
+                opts,
+                result,
+            }
         }
 
         Request::Refresh {
