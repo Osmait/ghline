@@ -1131,12 +1131,18 @@ mod tests {
     fn an_untinted_theme_keeps_an_added_line_all_green() {
         // The terminal theme has no ground for an addition, so its green ink
         // is what says "added" — syntax colour would take it away.
+        //
+        // Measured against the sign's own ink rather than `theme::green()`:
+        // the theme is process-wide, other tests switch it, and a colour read
+        // a moment later can be another theme's green.
         let c = cells(&edit(), false);
+        let sign = c.iter().find(|c| c.0 == "+").map(|c| c.1);
         let text: Vec<_> = c.iter().filter(|c| c.0.trim() != "").collect();
-        assert!(text.iter().all(|c| c.1 == Some(theme::green())), "{c:?}");
-        // a tinted one colours the keyword
+        assert!(text.iter().all(|c| Some(c.1) == sign), "{c:?}");
+        // a tinted one colours the keyword apart from the sign
         let c = cells(&edit(), true);
-        assert!(c.iter().any(|c| c.0 == "l" && c.1 != Some(theme::green())));
+        let sign = c.iter().find(|c| c.0 == "+").map(|c| c.1);
+        assert!(c.iter().any(|c| c.0 == "l" && Some(c.1) != sign));
     }
 
     #[test]
