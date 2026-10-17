@@ -144,6 +144,11 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     app.hits
         .push(Region::rows(Target::Pane(Pane::Diff), body, 1, scroll, len));
 
+    // The code's own columns, for `$` and the stop of `l`: the two number
+    // gutters, the blame column when it is on, the sign and its space.
+    let blame_cols = if app.blame_on { 30 } else { 0 };
+    app.code_cols = area.right().saturating_sub(body.x + 15 + blame_cols) as usize;
+
     // Everything mutable is done with; from here the borrows are shared and
     // nothing is copied.
     let app = &*app;
@@ -280,6 +285,8 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
     // the right half the new one — the same reading as the gutters — so a
     // click has to know which side it struck.
     let mut placed: Vec<(Rect, usize)> = Vec::new();
+    // each half's code starts after its number and a space
+    app.code_cols = (body.width / 2).saturating_sub(7) as usize;
     // Everything mutable is done with until the regions go in at the bottom;
     // from here the borrows are shared and nothing is copied.
     let rows = app.diff_rows();

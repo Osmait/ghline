@@ -227,9 +227,9 @@ pub struct App {
     /// Whether the file tree is on screen. Open to begin with: which files
     /// changed is the first question a review asks.
     /// The comment being drafted is about the file, not about any line in
-    /// it. Set when `c` is pressed with the tree in focus.
+    /// it. Set when a note is started with the tree in focus.
     /// Side by side rather than one column: old on the left, new on the
-    /// right. `s` switches.
+    /// right. `␣v` switches.
     pub split: bool,
     pub about_file: bool,
     pub tree_shown: bool,
@@ -271,6 +271,9 @@ pub struct App {
     /// and the `z` commands are about the window, so they have to know how
     /// big it is, and only the render does.
     pub view_height: usize,
+    /// How many columns of code the diff shows a line in, which only the
+    /// render knows; `$` and the right-hand stop of `l` are worked out from it.
+    pub code_cols: usize,
     /// Where the last frame put things. Rebuilt every frame and consulted
     /// newest-first, which is what makes a modal shadow the panes under it
     /// without anything having to say so.
@@ -359,6 +362,7 @@ impl App {
             count: None,
             last_search: String::new(),
             view_height: 20,
+            code_cols: 0,
             hits: Vec::new(),
             last_click: None,
         }
@@ -485,6 +489,14 @@ impl App {
     /// The cap on how far right the code can scroll: past this there is
     /// nothing to see, and a pane of blank columns reads as a broken program
     /// rather than as the end of the text.
+    /// The furthest the code can be scrolled right: far enough that the end
+    /// of the longest line sits at the pane's right edge, and no further — past
+    /// it is only blank columns, and scrolling to the line's own width used to
+    /// leave every column blank.
+    pub fn max_hscroll(&self) -> usize {
+        self.longest_line().saturating_sub(self.code_cols.max(1))
+    }
+
     pub fn longest_line(&self) -> usize {
         use unicode_width::UnicodeWidthStr;
         self.diff_rows()

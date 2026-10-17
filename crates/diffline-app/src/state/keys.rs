@@ -614,6 +614,11 @@ impl Map {
             .min_by_key(|s| (s.chars().count(), s.clone()))
     }
 
+    /// `key_for`, written as the status bar writes keys: the leader as `␣`.
+    pub fn key_label(&self, action: Action) -> Option<String> {
+        self.key_for(action).map(|k| k.replace("<leader>", "␣"))
+    }
+
     /// Every binding, sorted for the help.
     pub fn listing(&self) -> Vec<(String, Action)> {
         let mut v: Vec<(String, Action)> = self.binds.iter().map(|(c, a)| (c.spec(), *a)).collect();
