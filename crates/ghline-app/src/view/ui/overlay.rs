@@ -18,7 +18,14 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let rows = app.accounts.len() as u16 * 2;
-    let modal = centered(area, Size::new(66, rows + 7));
+    // as tall as the accounts, but never past the screen: the rest scroll
+    let modal = centered(
+        area,
+        Size::new(66, (rows + 7).min(area.height.saturating_sub(2))),
+    );
+    let fit = (modal.bottom().saturating_sub(3).saturating_sub(modal.y + 3) / 2).max(1) as usize;
+    let mut scroll = 0;
+    crate::tui::scroll_into_view(&mut scroll, app.acc_sel, fit, app.accounts.len());
     frame(buf, modal, theme::cyan());
 
     let base = Style::default().bg(theme::panel());
@@ -51,12 +58,19 @@ pub fn accounts(buf: &mut Buffer, area: Rect, app: &mut App) {
             height: modal.bottom().saturating_sub(modal.y + 3),
         },
         2,
-        0,
+        scroll,
         app.accounts.len(),
     ));
 
-    for (i, a) in app.accounts.iter().enumerate() {
-        let y = modal.y + 3 + i as u16 * 2;
+    for (row, (i, a)) in app
+        .accounts
+        .iter()
+        .enumerate()
+        .skip(scroll)
+        .take(fit)
+        .enumerate()
+    {
+        let y = modal.y + 3 + row as u16 * 2;
         let sel = i == app.acc_sel;
         let bg = if sel { theme::sel() } else { theme::panel() };
         fill(
@@ -134,16 +148,32 @@ pub fn themes(buf: &mut Buffer, area: Rect, app: &mut App) {
     let body = Dialog::new("THEME")
         .hint("j/k previews · enter · esc")
         .accent(theme::purple())
-        .size(Size::new(60, all.len() as u16 * 2 + 7))
+        .size(Size::new(
+            60,
+            (all.len() as u16 * 2 + 7).min(area.height.saturating_sub(2)),
+        ))
         .open(buf, area);
 
     // The box as a whole first, so a click on its chrome is absorbed rather
-    // than falling through to the pane behind it; the rows go on top.
+    // than falling through to the pane behind it; the rows go on top. Scrolled
+    // to the selection, since a themes directory can hold more than fit.
     app.hits.push(Region::plain(Target::Themes, body.outer));
-    app.hits
-        .push(Region::rows(Target::Themes, body.inner, 2, 0, all.len()));
+    let mut scroll = 0;
+    crate::tui::scroll_into_view(
+        &mut scroll,
+        app.theme_sel,
+        (body.inner.height / 2) as usize,
+        all.len(),
+    );
+    app.hits.push(Region::rows(
+        Target::Themes,
+        body.inner,
+        2,
+        scroll,
+        all.len(),
+    ));
 
-    for slot in body.rows(buf, all.len(), 2, app.theme_sel, 0) {
+    for slot in body.rows(buf, all.len(), 2, app.theme_sel, scroll) {
         let Some(t) = all.get(slot.index) else {
             continue;
         };
@@ -406,7 +436,12 @@ pub fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let per_col = HELP.len().div_ceil(2) as u16;
-    let modal = centered(area, Size::new(79, per_col + 5));
+    // no taller than the screen: what does not fit scrolls, rather than being
+    // dropped off the bottom as it was
+    let modal = centered(
+        area,
+        Size::new(79, (per_col + 5).min(area.height.saturating_sub(2))),
+    );
     frame(buf, modal, theme::yellow());
     // a click inside the help is a click on the help, not a click away
     app.hits.push(Region::plain(Target::Help, modal));
@@ -429,15 +464,36 @@ pub fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
     rule(buf, modal, modal.y + 2, theme::yellow());
 
+    let room = modal.bottom().saturating_sub(1).saturating_sub(modal.y + 3);
+    app.help_scroll = app.help_scroll.min(per_col.saturating_sub(room) as usize);
+    let scroll = app.help_scroll as u16;
+    if per_col > room {
+        let where_ = format!(
+            " {}–{} of {} · j/k ",
+            scroll + 1,
+            (scroll + room).min(per_col),
+            per_col
+        );
+        put_right(
+            buf,
+            modal.right() - 2,
+            modal.y + 2,
+            &where_,
+            base.fg(theme::dimmer()),
+        );
+    }
+
     let col_w = (modal.width - 4) / 2;
     for (i, (k, d)) in HELP.iter().enumerate() {
         let col = (i as u16) / per_col;
-        let row = (i as u16) % per_col;
-        let x = modal.x + 2 + col * col_w;
-        let y = modal.y + 3 + row;
-        if y >= modal.bottom() - 1 {
+        let Some(row) = ((i as u16) % per_col).checked_sub(scroll) else {
+            continue;
+        };
+        if row >= room {
             continue;
         }
+        let x = modal.x + 2 + col * col_w;
+        let y = modal.y + 3 + row;
         let max = if col == 0 {
             x + col_w
         } else {
