@@ -22,10 +22,12 @@ use crate::tui::{fill, hline, put, put_right, put_trunc, scroll_into_view, skel_
 /// and there is no horizontal scroll here to reveal the rest.
 /// What one line of code needs to draw itself, which is more than a signature
 /// wants to carry loose.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Code<'a> {
     text: &'a str,
     spans: Option<&'a Vec<crate::shared::syntax::Span>>,
+    /// The stretch of an edited line that changed, drawn reversed.
+    word: Option<std::ops::Range<usize>>,
     plain: Style,
     /// Columns the pane is scrolled right by.
     skip: usize,
@@ -136,6 +138,8 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     let visual = app.visual();
     let empty_spans = Vec::new();
     let spans = app.spans.get(app.path()).unwrap_or(&empty_spans);
+    let empty_words = Vec::new();
+    let words = app.words.get(app.path()).unwrap_or(&empty_words);
     let empty_blame = Vec::new();
     let blame = app.blame_lines().unwrap_or(&empty_blame);
     let blame_w: u16 = if app.blame_on { 30 } else { 0 };
@@ -229,6 +233,7 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
             Code {
                 text: &row.text,
                 spans: coloured(row.kind, spans.get(i), tints()),
+                word: words.get(i).cloned().flatten(),
                 plain: base.fg(fg),
                 skip: app.hscroll,
             },
@@ -269,6 +274,8 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
     let visual = app.visual();
     let empty_spans = Vec::new();
     let spans = app.spans.get(app.path()).unwrap_or(&empty_spans);
+    let empty_words = Vec::new();
+    let words = app.words.get(app.path()).unwrap_or(&empty_words);
     let focused = app.pane == Pane::Diff;
 
     // Half each, and a rule down the middle so the eye knows which side it is
@@ -400,6 +407,7 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
                 Code {
                     text: &row.text,
                     spans: coloured(row.kind, spans.get(i), tints()),
+                    word: words.get(i).cloned().flatten(),
                     plain: base.fg(fg),
                     skip: app.hscroll,
                 },
@@ -441,6 +449,7 @@ fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
     let Code {
         text,
         spans,
+        word,
         plain,
         skip,
     } = code;
@@ -448,11 +457,12 @@ fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
     // bytes from the start of the whole line, not of the visible part, because
     // that is what the colour spans are written in.
     let start = skip_cols(text, skip);
+    let spans: &[crate::shared::syntax::Span] = spans.map_or(&[], Vec::as_slice);
 
-    let Some(spans) = spans.filter(|s| !s.is_empty()) else {
+    if spans.is_empty() && word.is_none() {
         put_trunc(buf, x, y, max, &text[start..], plain);
         return;
-    };
+    }
 
     // One column is held back for the mark when there is more than fits.
     let room = max.saturating_sub(x) as usize;
@@ -464,35 +474,35 @@ fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
         max
     };
 
-    let mut cx = x;
-    // Starting at `start` rather than 0 is what drops the scrolled-off spans:
-    // one that ends before it collapses to an empty range below.
-    let mut at = start;
+    // Every byte the style can change at, in order and clipped to what is on
+    // screen; between two of them it cannot, so each stretch is one `put`.
+    // Starting at `start` rather than 0 is what drops the scrolled-off spans.
+    let mut marks = vec![start, end];
     for s in spans {
-        if s.from >= end {
-            break;
-        }
-        // Clamped rather than trusted: a span that started before the cursor
-        // would otherwise be drawn twice, which reads as doubled text.
-        let (from, to) = (s.from.max(at), s.to.min(end));
-        if to <= from {
-            continue;
-        }
-        if from > at {
-            cx = put(buf, cx, y, limit, &text[at..from], plain);
-        }
-        cx = put(
-            buf,
-            cx,
-            y,
-            limit,
-            &text[from..to],
-            plain.fg(kind_color(s.kind)),
-        );
-        at = to;
+        marks.extend([s.from, s.to]);
     }
-    if at < end {
-        cx = put(buf, cx, y, limit, &text[at..end], plain);
+    if let Some(w) = &word {
+        marks.extend([w.start, w.end]);
+    }
+    marks.retain(|m| (start..=end).contains(m) && text.is_char_boundary(*m));
+    marks.sort_unstable();
+    marks.dedup();
+
+    let mut cx = x;
+    for pair in marks.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let mut style = spans
+            .iter()
+            .find(|s| s.from <= from && to <= s.to)
+            .map_or(plain, |s| plain.fg(kind_color(s.kind)));
+        // reversed, as git's diff-highlight does: it reads in every theme
+        if word
+            .as_ref()
+            .is_some_and(|w| w.start <= from && to <= w.end)
+        {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
+        cx = put(buf, cx, y, limit, &text[from..to], style);
     }
     if cut.is_some() {
         put(buf, cx, y, max, "…", plain.fg(theme::dimmer()));
@@ -555,6 +565,26 @@ fn kind_color(kind: crate::shared::syntax::Kind) -> ratatui::style::Color {
 mod tests {
     use super::*;
     use crate::model::{ChangedFile, Kind, Row, Scope, Status};
+
+    #[test]
+    fn the_word_that_changed_is_drawn_reversed() {
+        use ratatui::buffer::Buffer;
+        let mut buf = Buffer::empty(Rect::new(0, 0, 30, 1));
+        let code = Code {
+            text: "let n = width;",
+            spans: None,
+            word: Some(8..13),
+            plain: Style::default(),
+            skip: 0,
+        };
+        draw_code(&mut buf, 0, 0, 30, code);
+        let reversed: String = (0..30)
+            .filter_map(|x| buf.cell((x, 0)))
+            .filter(|c| c.style().add_modifier.contains(Modifier::REVERSED))
+            .map(|c| c.symbol().to_string())
+            .collect();
+        assert_eq!(reversed, "width");
+    }
 
     #[test]
     fn an_untinted_theme_keeps_syntax_colour_off_added_and_deleted_lines() {

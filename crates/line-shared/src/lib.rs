@@ -28,7 +28,7 @@ pub mod log;
 pub mod mux;
 pub mod nav;
 pub mod settings;
-pub use source_text::{syntax, text};
+pub use source_text::{syntax, text, words};
 pub mod worker;
 
 #[cfg(test)]

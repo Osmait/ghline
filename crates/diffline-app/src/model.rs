@@ -198,6 +198,38 @@ pub struct Row {
     pub text: String,
 }
 
+/// Which words changed on each edited row, by byte range in its text.
+///
+/// A run of deletions followed straight away by a run of additions is an
+/// edit, and its lines are paired off in order — the first deleted with the
+/// first added — the way a reader lines them up. The rest of a longer run was
+/// replaced outright and has nothing to compare with; so has every other row.
+pub fn changed_words(rows: &[Row]) -> Vec<Option<std::ops::Range<usize>>> {
+    let run = |from: usize, kind: Kind| {
+        rows.get(from..)
+            .map_or(0, |r| r.iter().take_while(|r| r.kind == kind).count())
+    };
+    let mut out = vec![None; rows.len()];
+    let mut i = 0;
+    while i < rows.len() {
+        let dels = run(i, Kind::Deleted);
+        let adds = run(i + dels, Kind::Added);
+        if dels == 0 || adds == 0 {
+            i += dels.max(1);
+            continue;
+        }
+        for k in 0..dels.min(adds) {
+            let (d, a) = (i + k, i + dels + k);
+            if let Some((old, new)) = crate::shared::words::changed(&rows[d].text, &rows[a].text) {
+                out[d] = Some(old);
+                out[a] = Some(new);
+            }
+        }
+        i += dels + adds;
+    }
+    out
+}
+
 impl Row {
     /// The sign column: what `git diff` would print in front of this line.
     pub fn sign(&self) -> &'static str {
@@ -333,6 +365,33 @@ pub fn pair_rows(rows: &[Row]) -> Vec<crate::tui::diff::Pair> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn edit_row(kind: Kind, text: &str) -> Row {
+        Row {
+            kind,
+            old: None,
+            new: None,
+            text: text.into(),
+        }
+    }
+
+    #[test]
+    fn an_edited_line_is_paired_with_its_replacement_and_marked() {
+        let rows = [
+            edit_row(Kind::Context, "fn f() {"),
+            edit_row(Kind::Deleted, "    let n = total;"),
+            edit_row(Kind::Added, "    let n = width;"),
+            edit_row(Kind::Added, "    debug_assert!(n > 0);"),
+        ];
+        let w = changed_words(&rows);
+        assert_eq!(w[0], None);
+        assert_eq!(w[1].clone().map(|r| &rows[1].text[r]), Some("total"));
+        assert_eq!(w[2].clone().map(|r| &rows[2].text[r]), Some("width"));
+        assert_eq!(
+            w[3], None,
+            "the extra added line has nothing to compare with"
+        );
+    }
 
     fn row(kind: Kind, old: Option<u32>, new: Option<u32>) -> Row {
         Row {
