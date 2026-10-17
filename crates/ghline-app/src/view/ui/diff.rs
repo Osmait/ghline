@@ -348,24 +348,32 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         &meta,
         base.fg(theme::dimmer()),
     );
-    // cut from the left when it must be cut: the name is at the end, and
-    // the name is what says which file this is
-    let cols = (meta_x.saturating_sub(1).saturating_sub(area.x + 1) as usize).saturating_sub(tag_w);
+    // Both are cut from the left when they must be cut: a name is at the end,
+    // and the name is what says which file this is. The path keeps at least
+    // two thirds of the room, so a long old path cannot push it to a `…`.
+    let free = meta_x.saturating_sub(1).saturating_sub(area.x + 1) as usize;
+    let path_cols = if path.width() + tag_w <= free {
+        path.width()
+    } else {
+        path.width()
+            .min(free.saturating_sub(tag_w).max(free * 2 / 3))
+    };
     let px = put_trunc(
         buf,
         area.x + 1,
         area.y,
         meta_x.saturating_sub(1),
-        &tail(&path, cols),
+        &tail(&path, path_cols),
         base.fg(theme::fg()),
     );
     if let Some((tag, color)) = tag {
+        let left = meta_x.saturating_sub(1).saturating_sub(px + 2) as usize;
         put_trunc(
             buf,
             px + 2,
             area.y,
             meta_x.saturating_sub(1),
-            &tag,
+            &tail_tag(&tag, left),
             base.fg(color),
         );
     }
@@ -395,9 +403,31 @@ fn change_tag(f: &crate::data::FileChange) -> Option<(String, Color)> {
     match (f.change, &f.from) {
         (Change::Added, _) => Some(("new file".into(), theme::green())),
         (Change::Deleted, _) => Some(("deleted".into(), theme::red())),
-        (Change::Renamed, Some(old)) => Some((format!("← {old}"), theme::yellow())),
+        (Change::Renamed, Some(old)) => {
+            Some((format!("← {}", moved_from(&f.path, old)), theme::yellow()))
+        }
         (Change::Renamed, None) => Some(("renamed".into(), theme::yellow())),
         (Change::Modified, _) => None,
+    }
+}
+
+/// What to say a renamed file was: its old name alone when it stayed in the
+/// same folder — the folder is in the path beside it — and its whole old
+/// path when it moved.
+fn moved_from<'a>(path: &str, old: &'a str) -> &'a str {
+    let dir = |p: &str| p.rfind('/').map_or("", |i| &p[..i]).to_string();
+    if dir(path) == dir(old) {
+        old.rsplit('/').next().unwrap_or(old)
+    } else {
+        old
+    }
+}
+
+/// A tag cut to `cols`, keeping its arrow and the end of what follows it.
+fn tail_tag(tag: &str, cols: usize) -> String {
+    match tag.strip_prefix("← ") {
+        Some(rest) if tag.width() > cols => format!("← {}", tail(rest, cols.saturating_sub(2))),
+        _ => tag.to_string(),
     }
 }
 
@@ -993,5 +1023,25 @@ mod tests {
             .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
             .collect();
         assert_eq!(shown, "  …456789ab…");
+    }
+
+    #[test]
+    fn a_rename_within_its_folder_names_only_the_old_file() {
+        assert_eq!(
+            moved_from("web/proxy.ts", "web/middleware.ts"),
+            "middleware.ts"
+        );
+        assert_eq!(moved_from("web/proxy.ts", "old/proxy.ts"), "old/proxy.ts");
+        assert_eq!(moved_from("proxy.ts", "middleware.ts"), "middleware.ts");
+    }
+
+    #[test]
+    fn a_rename_tag_too_long_keeps_its_arrow_and_its_end() {
+        assert_eq!(tail_tag("← some/deep/old/name.rs", 12), "← …d/name.rs");
+        assert_eq!(
+            tail_tag("deleted", 3),
+            "deleted",
+            "a word tag is not cut here"
+        );
     }
 }
