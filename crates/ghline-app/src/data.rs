@@ -313,6 +313,19 @@ pub struct Thread {
     pub side: DiffSide,
     pub resolved: bool,
     pub comments: Vec<ThreadComment>,
+    /// A note of the reader's own, not yet sent: drawn where a thread is, as
+    /// what it will become, and marked as not having been said yet.
+    pub pending: bool,
+}
+
+/// A note the reader has written against a line and not yet sent. Sent with
+/// the rest as one review, which is how GitHub takes them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Draft {
+    pub path: String,
+    pub line: u32,
+    pub side: DiffSide,
+    pub body: String,
 }
 
 /// One file of a unified diff, as `gh pr diff` gives it.
@@ -756,6 +769,8 @@ pub const HELP: &[(&str, &str)] = &[
     ("( / )", "previous / next comment"),
     ("C", "show / hide comments"),
     ("v", "one commit of the PR"),
+    ("i", "a note on this line"),
+    ("X", "drop the note here"),
     ("tab", "next pane"),
     ("m", "merge the pull request"),
     ("c", "close / reopen the PR"),

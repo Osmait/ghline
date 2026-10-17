@@ -36,7 +36,15 @@ pub fn annotate(
     threads: &[&Thread],
     notes: Notes,
 ) -> (Vec<DiffRow>, Vec<Option<usize>>) {
-    if !notes.shown || threads.is_empty() {
+    // Hiding comments hides what others said. The reader's own drafts stay:
+    // they are unsent work, and a note that cannot be seen is one that is
+    // forgotten and never sent.
+    let threads: Vec<&Thread> = threads
+        .iter()
+        .copied()
+        .filter(|t| notes.shown || t.pending)
+        .collect();
+    if threads.is_empty() {
         let map = (0..base.len()).map(Some).collect();
         return (base, map);
     }
@@ -94,6 +102,17 @@ fn note(kind: DiffKind, text: String) -> DiffRow {
 /// One thread as rows.
 fn thread_rows(t: &Thread, stale: bool, width: usize) -> Vec<DiffRow> {
     let lead = if stale { OUTDATED } else { "" };
+    if t.pending {
+        let mut out = vec![note(DiffKind::NoteHead, super::review::DRAFT.to_string())];
+        for c in &t.comments {
+            out.extend(
+                body_lines(&c.body, width)
+                    .into_iter()
+                    .map(|l| note(DiffKind::Note, l)),
+            );
+        }
+        return out;
+    }
     if t.resolved {
         let (who, first) = t.comments.first().map_or(("", ""), |c| {
             (c.author.as_str(), c.body.lines().next().unwrap_or(""))
@@ -166,6 +185,7 @@ mod tests {
             line,
             side,
             resolved,
+            pending: false,
             comments: vec![
                 ThreadComment {
                     author: "ada".into(),

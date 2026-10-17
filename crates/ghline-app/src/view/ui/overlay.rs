@@ -1,5 +1,6 @@
 //! Modals: the account picker (`a`), the theme picker (`t`), the commit
-//! picker (`v` in a diff) and the keybinding help (`?`).
+//! picker (`v` in a diff), the note editor (`i` in a diff) and the
+//! keybinding help (`?`).
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Rect, Size};
@@ -247,6 +248,59 @@ pub fn commits(buf: &mut Buffer, area: Rect, app: &mut App) {
             &second,
             s.fg(theme::dimmer()),
         );
+    }
+}
+
+/// The note editor: where the note goes, then what it says so far, folded to
+/// the box and ending in the cursor.
+pub fn note(buf: &mut Buffer, area: Rect, app: &mut App) {
+    let Some(at) = app.note_open.clone() else {
+        return;
+    };
+    let width: u16 = 76;
+    let text_w = width.saturating_sub(6) as usize;
+    let mut lines: Vec<String> = Vec::new();
+    for para in app.note_text.split('\n') {
+        let folded = crate::tui::wrap(para, text_w);
+        if folded.is_empty() {
+            lines.push(String::new());
+        } else {
+            lines.extend(folded);
+        }
+    }
+    let tall = (lines.len() as u16 + 8).clamp(10, area.height.saturating_sub(2));
+    let body = Dialog::new("NOTE")
+        .hint("enter keep · ^j new line · esc")
+        .accent(theme::orange())
+        .size(Size::new(width, tall))
+        .open(buf, area);
+    app.hits.push(Region::plain(Target::Note, body.outer));
+
+    let base = Style::default().bg(theme::panel());
+    let side = match at.side {
+        crate::data::DiffSide::Left => "  · the old side",
+        crate::data::DiffSide::Right => "",
+    };
+    let x = body.inner.x + 2;
+    let max = body.inner.right().saturating_sub(1);
+    put_trunc(
+        buf,
+        x,
+        body.inner.y,
+        max,
+        &format!("{}:{}{side}", at.path, at.line),
+        base.fg(theme::dimmer()),
+    );
+    // the last lines, if there are more than the box holds: the end is where
+    // the typing is
+    let room = body.inner.height.saturating_sub(2) as usize;
+    let skip = lines.len().saturating_sub(room);
+    let last = lines.len().saturating_sub(1);
+    for (y, (i, line)) in (body.inner.y + 2..).zip(lines.iter().enumerate().skip(skip)) {
+        let cx = put_trunc(buf, x, y, max, line, base.fg(theme::bright()));
+        if i == last {
+            put(buf, cx, y, max, "█", base.fg(theme::orange()));
+        }
     }
 }
 

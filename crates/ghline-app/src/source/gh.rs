@@ -759,6 +759,7 @@ fn threads_of(v: &Value) -> Vec<Thread> {
                 .get("isResolved")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            pending: false,
             comments: t
                 .pointer("/comments/nodes")
                 .and_then(Value::as_array)

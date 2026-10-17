@@ -632,6 +632,11 @@ impl App {
             self.dispatch_open = false;
             return;
         }
+        if self.note_open.is_some() {
+            self.note_open = None;
+            self.note_text.clear();
+            return;
+        }
 
         if self.themes_open {
             crate::tui::theme::set(self.theme_before);
@@ -818,6 +823,11 @@ impl App {
             return;
         }
 
+        if self.note_open.is_some() {
+            self.note_key(press);
+            return;
+        }
+
         if self.dispatch_open {
             self.dispatch_key(press);
             return;
@@ -939,6 +949,8 @@ impl App {
                 }
             }
             Key::Char('v') if self.view == View::Diff => self.open_commits(),
+            Key::Char('i') if self.pane == Pane::DiffBody => self.open_note(),
+            Key::Char('X') if self.pane == Pane::DiffBody => self.delete_note(),
             Key::Char(')') if self.view == View::Diff => self.step_thread(true),
             Key::Char('(') if self.view == View::Diff => self.step_thread(false),
             // capital, because `c` already closes the pull request
