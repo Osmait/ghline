@@ -89,7 +89,13 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
             } else {
                 ""
             };
-            format!("j/k scroll · ^d/^u page · h repos{right} · esc back{pr_keys}")
+            // `h` reaches the repositories only while their pane is there
+            let repos = if app.panes().contains(&Pane::Repos) {
+                " · h repos"
+            } else {
+                ""
+            };
+            format!("j/k scroll · ^d/^u page{repos}{right} · esc back{pr_keys}")
         }
         Pane::Checks => format!("j/k check · enter logs · h body · esc back{pr_keys}"),
         Pane::Agents => "j/k agent · 1-5 tabs · / filter · r refresh".to_string(),
@@ -102,7 +108,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
                 .to_string()
         }
         Pane::DiffBody => {
-            "j/k line · i note · {/} hunk · J/K file · (/) comment · v commits · / search · H/L pan"
+            "j/k line · i note · X drop · R review · {/} hunk · J/K file · (/) comment · C comments · / search"
                 .to_string()
         }
     };
