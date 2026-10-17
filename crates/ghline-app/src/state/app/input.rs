@@ -566,10 +566,52 @@ impl App {
 
     /// Half a page or a whole one, on the panes that scroll.
     fn page_by(&mut self, pages: i64) {
-        let h = self.detail_height.max(1) as i64;
-        match self.pane {
-            Pane::Body | Pane::Log | Pane::DiffBody => self.move_by(pages * h),
-            _ => self.move_by(pages * (h / 2).max(1)),
+        self.move_by(pages * self.page_len());
+    }
+
+    /// A page of the focused pane: the list's own rows on the list, the text
+    /// pane's height elsewhere. PgDn moves this far and `^d` half of it — a
+    /// list used to move half on both.
+    fn page_len(&self) -> i64 {
+        let rows = if self.pane == Pane::List && self.list_rows > 0 {
+            self.list_rows
+        } else {
+            self.detail_height
+        };
+        i64::from(rows.max(1))
+    }
+
+    /// `O` in the logs: every job folded while any is open, every job open
+    /// once they all are — what `O` does to the diff's folders.
+    pub(super) fn fold_all_jobs(&mut self) {
+        let tree = self.flat_tree();
+        let at = tree.get(self.tree_sel_idx(tree.len())).map(|n| n.ji);
+        let jobs = self.jobs().len();
+        if self.collapsed.len() < jobs {
+            self.collapsed = (0..jobs).collect();
+        } else {
+            self.collapsed.clear();
+        }
+        // the cursor stays on its job, which a fold may have moved
+        if let Some(ji) = at {
+            self.tree_sel = self.tree_index_for_job(ji);
+        }
+    }
+
+    /// `O` in the explorer: every folder opened while any is shut, every one
+    /// shut once they are all open.
+    pub(super) fn fold_all_dirs(&mut self) {
+        let dirs: Vec<String> = self
+            .repo_tree()
+            .iter()
+            .filter(|e| e.is_dir)
+            .map(|e| e.path.clone())
+            .collect();
+        if dirs.iter().all(|d| self.fs_open.contains(d)) {
+            self.fs_open.clear();
+            self.fs_sel = 0;
+        } else {
+            self.fs_open.extend(dirs);
         }
     }
 
@@ -722,6 +764,10 @@ impl App {
             "issues" | "prs" | "actions" | "files" | "agents" => {
                 self.pick_tab(TABS.iter().position(|t| t.id == c).unwrap_or(0));
             }
+            // a run's logs, for what has one; an issue has none to open
+            "logs" if self.jobs().is_empty() => {
+                self.flash_ok("this has no run to read the logs of");
+            }
             "logs" => {
                 self.view = View::Logs;
                 self.pane = Pane::Tree;
@@ -737,6 +783,10 @@ impl App {
             }
             "commits" if self.view == View::Diff => self.open_commits(),
             "comments" if self.view == View::Diff => self.diff_notes = !self.diff_notes,
+            // said rather than ignored: the command was right, the place not
+            "split" | "ws" | "commits" | "comments" => {
+                self.flash_ok(format!(":{c} is the diff's — open it with :diff"));
+            }
             "review" if self.view == View::Diff || self.actionable_pr() => self.open_review(),
             "send" => self.open_dispatch(),
             "refresh" => self.refresh(),
@@ -752,6 +802,9 @@ impl App {
             }
             _ => {}
         }
+        // a command can change the view, as `:q` does; the focus must be on a
+        // pane the new view has, as a key's change of view ensures
+        self.settle_pane();
         self.cmd = None;
         self.cmd_text.clear();
     }
@@ -799,7 +852,7 @@ impl App {
         // half a page up/down in the focused pane, vim style — on every pane:
         // a list moves its selection, a text pane its scroll
         if free && press.ctrl {
-            let half = (self.detail_height / 2).max(1) as i64;
+            let half = (self.page_len() / 2).max(1);
             match press.key {
                 Key::Char('d') => return self.move_by(half),
                 Key::Char('u') => return self.move_by(-half),
@@ -1060,6 +1113,8 @@ impl App {
             Key::Char('E') => self.open_in_editor(),
             Key::Char('o') if self.pane == Pane::Files => self.toggle_cursor_folder(),
             Key::Char('O') if self.pane == Pane::Files => self.toggle_all_folders(),
+            Key::Char('O') if self.pane == Pane::FileTree => self.fold_all_dirs(),
+            Key::Char('O') if self.view == View::Logs => self.fold_all_jobs(),
             Key::Char('o') if self.pane == Pane::FileTree => {
                 if let Some((true, path)) = self.fs_current().map(|e| (e.is_dir, e.path.clone()))
                     && !self.fs_open.remove(&path)

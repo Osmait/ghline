@@ -450,6 +450,8 @@ fn unknown_commands_are_ignored_without_leaving_the_prompt_open() {
 fn commands_reach_every_view() {
     for (cmd, view) in [("issues", View::List), ("logs", View::Logs)] {
         let mut app = seeded();
+        // the actions tab, whose rows are runs with logs to open
+        ch(&mut app, '3');
         ch(&mut app, ':');
         for c in cmd.chars() {
             ch(&mut app, c);
