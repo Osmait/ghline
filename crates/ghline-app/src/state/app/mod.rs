@@ -338,6 +338,8 @@ pub struct App {
     /// The diff's file tree's own scroll: it shared `repo_scroll` with the
     /// sidebar, which came back scrolled to wherever the tree had been.
     pub files_scroll: usize,
+    /// How far down the help is scrolled, in its lines.
+    pub help_scroll: usize,
     /// For each row the file view drew, the source line it is part of —
     /// a long line wraps over several — so a click can pick a line.
     pub file_view_lines: Vec<usize>,
@@ -528,6 +530,7 @@ impl App {
             should_quit: false,
             repo_scroll: 0,
             files_scroll: 0,
+            help_scroll: 0,
             file_view_lines: Vec::new(),
             item_scroll: 0,
             tree_scroll: 0,
