@@ -348,6 +348,18 @@ pub fn review(buf: &mut Buffer, area: Rect, app: &mut App) {
     put_trunc(buf, x, y, max, &summary, base.fg(theme::dim()));
     y += 2;
 
+    app.hits.push(Region::rows(
+        Target::Review,
+        Rect {
+            x: body.inner.x,
+            y,
+            width: body.inner.width,
+            height: Verdict::ALL.len() as u16,
+        },
+        1,
+        0,
+        Verdict::ALL.len(),
+    ));
     for v in Verdict::ALL {
         let on = v == app.review_verdict;
         let color = match v {
@@ -390,12 +402,14 @@ pub fn review(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
 }
 
-pub fn help(buf: &mut Buffer, area: Rect) {
+pub fn help(buf: &mut Buffer, area: Rect, app: &mut App) {
     scrim(buf, area);
 
     let per_col = HELP.len().div_ceil(2) as u16;
     let modal = centered(area, Size::new(79, per_col + 5));
     frame(buf, modal, theme::yellow());
+    // a click inside the help is a click on the help, not a click away
+    app.hits.push(Region::plain(Target::Help, modal));
 
     let base = Style::default().bg(theme::panel());
     put(

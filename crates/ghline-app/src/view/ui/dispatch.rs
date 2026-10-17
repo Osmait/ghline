@@ -43,6 +43,10 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let height = (dests.len() as u16 * 2 + 11).min(area.height.saturating_sub(4));
     let modal = centered(area, Size::new(width, height));
     frame(buf, modal, theme::cyan());
+    // The box as a whole first, so a click on its chrome — the note being
+    // typed, the header — is absorbed rather than closing it and losing the
+    // note; the rows go on top.
+    app.hits.push(Region::plain(Target::Dispatch, modal));
 
     let base = Style::default().bg(theme::panel());
     let max = modal.right() - 2;

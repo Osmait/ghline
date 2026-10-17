@@ -23,6 +23,10 @@ pub enum Target {
     /// The note editor: clicking inside it keeps it open, and does nothing
     /// else — the keyboard is how a note is written.
     Note,
+    /// The review dialog's verdicts, one a row.
+    Review,
+    /// The help: a click inside it keeps it open.
+    Help,
 }
 
 pub type Region = crate::tui::hit::Region<Target>;

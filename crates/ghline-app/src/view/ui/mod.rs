@@ -122,7 +122,7 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
         overlay::review(buf, area, app);
     }
     if app.help_open {
-        overlay::help(buf, area);
+        overlay::help(buf, area, app);
     }
     if let Some(prompt) = app.prompt.clone() {
         confirm::draw(buf, area, app, &prompt);
