@@ -536,7 +536,13 @@ impl App {
                 self.file_sel = 0;
                 self.file_scroll = 0;
             }
-            Pane::Body | Pane::Log | Pane::DiffBody | Pane::FileView => {}
+            Pane::DiffBody => self.diff_cursor = i,
+            Pane::FileView => {
+                if let Some(line) = self.file_view_lines.get(i) {
+                    self.file_sel = *line;
+                }
+            }
+            Pane::Body | Pane::Log => {}
         }
     }
 
@@ -554,6 +560,17 @@ impl App {
         match self.pane {
             Pane::Body | Pane::Log | Pane::DiffBody => self.move_by(pages * h),
             _ => self.move_by(pages * (h / 2).max(1)),
+        }
+    }
+
+    /// `o` in the logs, or a double click on a job: its steps fold or open.
+    pub(super) fn fold_job(&mut self) {
+        let tree = self.flat_tree();
+        if let Some(node) = tree.get(self.tree_sel_idx(tree.len())) {
+            let ji = node.ji;
+            if !self.collapsed.remove(&ji) {
+                self.collapsed.insert(ji);
+            }
         }
     }
 
@@ -608,7 +625,9 @@ impl App {
                 None => {}
             },
             // an agent is a leaf: there is no deeper view of one here
-            Pane::Agents | Pane::Log | Pane::DiffBody | Pane::FileView => {}
+            // enter on a line of the diff is a note on it, as a double click is
+            Pane::DiffBody => self.open_note(),
+            Pane::Agents | Pane::Log | Pane::FileView => {}
         }
     }
 
@@ -681,21 +700,36 @@ impl App {
         }
     }
 
-    fn run_cmd(&mut self, raw: &str) {
+    pub(super) fn run_cmd(&mut self, raw: &str) {
         let c = raw.trim().trim_start_matches(':').to_string();
         match c.as_str() {
             "account" | "accounts" => {
                 self.accounts_open = true;
                 self.acc_sel = self.acc;
             }
-            "issues" | "prs" | "actions" => {
+            // every tab by its id: `:files` was the diff, though the tab of
+            // that name is the repository's files
+            "issues" | "prs" | "actions" | "files" | "agents" => {
                 self.pick_tab(TABS.iter().position(|t| t.id == c).unwrap_or(0));
             }
             "logs" => {
                 self.view = View::Logs;
                 self.pane = Pane::Tree;
             }
-            "diff" | "files" => self.open_diff(),
+            "diff" => self.open_diff(),
+            // what the diff's own keys do, under the same conditions: each is
+            // a word for a key, not a second way round its rules
+            "split" if self.view == View::Diff => self.toggle_split(),
+            "ws" if self.view == View::Diff => {
+                self.ws = !self.ws;
+                self.diff_scroll = 0;
+                self.diff_cursor = 0;
+            }
+            "commits" if self.view == View::Diff => self.open_commits(),
+            "comments" if self.view == View::Diff => self.diff_notes = !self.diff_notes,
+            "review" if self.view == View::Diff || self.actionable_pr() => self.open_review(),
+            "send" => self.open_dispatch(),
+            "refresh" => self.refresh(),
             "theme" | "themes" => self.open_themes(),
             "sidebar" | "repos" => self.toggle_sidebar(),
             "find" | "search" => self.open_finder(),
@@ -731,37 +765,36 @@ impl App {
             self.wants_redraw = true;
             return;
         }
-        if press.ctrl && press.key == Key::Char('b') {
+        // Actually quitting the program (the design lives in a browser). `^c`
+        // only: `^d` used to quit too, on every pane but the four that page,
+        // while the help said it paged everywhere.
+        if press.ctrl && press.key == Key::Char('c') {
+            self.should_quit = true;
+            return;
+        }
+
+        // The rest of the global chords wait while a modal or a question is
+        // up: those own the keyboard, and `^p` opened the finder over a note
+        // being written, `^b` folded the sidebar behind a confirmation.
+        let free = !self.modal_open() && self.prompt.is_none() && self.cmd.is_none();
+        if free && press.ctrl && press.key == Key::Char('b') {
             self.toggle_sidebar();
             return;
         }
-        if press.ctrl && press.key == Key::Char('p') && !self.finder_open {
+        if free && press.ctrl && press.key == Key::Char('p') {
             self.open_finder();
             return;
         }
 
-        // half a page up/down in the focused pane, vim style. Every pane whose
-        // footer offers `^d/^u` has to be named here: one that is not falls
-        // through to the quit below, and `^d` in the diff once closed the
-        // program instead of paging it.
-        if press.ctrl
-            && matches!(
-                self.pane,
-                Pane::Body | Pane::Log | Pane::DiffBody | Pane::FileView
-            )
-        {
+        // half a page up/down in the focused pane, vim style — on every pane:
+        // a list moves its selection, a text pane its scroll
+        if free && press.ctrl {
             let half = (self.detail_height / 2).max(1) as i64;
             match press.key {
                 Key::Char('d') => return self.move_by(half),
                 Key::Char('u') => return self.move_by(-half),
                 _ => {}
             }
-        }
-
-        // Actually quitting the program (the design lives in a browser).
-        if press.ctrl && matches!(press.key, Key::Char('c' | 'd')) {
-            self.should_quit = true;
-            return;
         }
 
         // A pending confirmation swallows every key.
@@ -1012,15 +1045,7 @@ impl App {
                     self.fs_open.insert(path);
                 }
             }
-            Key::Char('o') if self.view == View::Logs => {
-                let tree = self.flat_tree();
-                if let Some(node) = tree.get(self.tree_sel_idx(tree.len())) {
-                    let ji = node.ji;
-                    if !self.collapsed.remove(&ji) {
-                        self.collapsed.insert(ji);
-                    }
-                }
-            }
+            Key::Char('o') if self.view == View::Logs => self.fold_job(),
             Key::Char('e') if self.view == View::Logs => {
                 if let Some(i) = self
                     .log_lines()

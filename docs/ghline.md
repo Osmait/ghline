@@ -342,11 +342,18 @@ A click is `h`/`l` then `j`/`k`: it focuses the pane it landed on and selects
 the row under the pointer. A double click is `enter`. The wheel is `j`/`k`, on
 whatever the pointer is over — reaching for a pane to read it is not a decision
 to work in it, so scrolling never takes the focus. Tabs are clickable, and so
-are the rows of the finder, the theme picker and the account switcher; clicking
-away from one closes it, on the same terms as `esc`.
+are the rows of the finder, the theme picker, the account switcher, the commit
+picker, the agent picker and the review dialog's verdicts; clicking away from
+one closes it, on the same terms as `esc`, and a click on its own frame or in
+the help keeps it open.
+
+In the diff a click puts the cursor on the line under it, a double click opens
+a note there as `i` does, and a sideways wheel pans long lines as `H`/`L` do. A
+double click on a folder of the diff's files, or on a job of the logs, folds it.
 
 A confirmation ignores the mouse entirely. "Merge this?" wants a deliberate
-answer, and a stray click is not one.
+answer, and a stray click is not one — nor does the wheel scroll what is behind
+it, or behind any modal.
 
 Only the renderer knows where anything ended up, so each pane records the
 rectangle it drew and enough to turn a row back into an index (`crates/tui-kit/src/hit.rs`).

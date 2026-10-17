@@ -889,6 +889,100 @@ mod mouse {
         app.on_mouse(event(what, col, row));
     }
 
+    // --- the diff, its dialogs and the rest found missing ---
+
+    /// The fixture's PR diff, drawn, with the diff pane focused.
+    fn in_the_diff() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        render(&mut app);
+        app
+    }
+
+    #[test]
+    fn a_click_on_a_line_of_the_diff_puts_the_cursor_there() {
+        let mut app = in_the_diff();
+        click_row(&mut app, Target::Pane(Pane::DiffBody), 3);
+        assert_eq!(app.diff_cursor, 3);
+    }
+
+    #[test]
+    fn a_double_click_on_a_line_of_the_diff_opens_a_note_on_it() {
+        let mut app = in_the_diff();
+        ch(&mut app, 'C'); // the file's own rows, no threads in between
+        render(&mut app);
+        let r = region(&app, Target::Pane(Pane::DiffBody));
+        let (x, y) = (r.area.x + 1, r.area.y + 3);
+        let now = Instant::now();
+        app.on_mouse_at(event(Motion::Down(Button::Left), x, y), now);
+        app.on_mouse_at(event(Motion::Down(Button::Left), x, y), now);
+        assert!(app.note_open.is_some());
+    }
+
+    #[test]
+    fn a_sideways_wheel_over_the_diff_pans_it() {
+        let mut app = in_the_diff();
+        let r = region(&app, Target::Pane(Pane::DiffBody));
+        app.on_mouse(event(Motion::ScrollRight, r.area.x + 2, r.area.y + 1));
+        assert!(app.diff_pan > 0);
+    }
+
+    #[test]
+    fn a_verdict_can_be_clicked() {
+        let mut app = in_the_diff();
+        ch(&mut app, 'R');
+        render(&mut app);
+        click_row(&mut app, Target::Review, 2);
+        assert_eq!(app.review_verdict, crate::data::Verdict::RequestChanges);
+        assert!(app.review_open, "choosing is not sending");
+    }
+
+    #[test]
+    fn the_wheel_does_not_scroll_what_lies_behind_a_question() {
+        let mut app = in_the_diff();
+        let r = region(&app, Target::Pane(Pane::DiffBody));
+        app.prompt = Some(crate::actions::Prompt::Close);
+        wheel(&mut app, r.area.x + 2, r.area.y + 1, true);
+        assert_eq!(app.diff_cursor, 0);
+    }
+
+    #[test]
+    fn a_click_inside_the_help_keeps_it_open() {
+        let mut app = seeded();
+        ch(&mut app, '?');
+        render(&mut app);
+        let r = region(&app, Target::Help);
+        click_at(&mut app, r.area.x + 3, r.area.y + 3);
+        assert!(app.help_open);
+    }
+
+    #[test]
+    fn a_click_on_the_agent_pickers_frame_keeps_the_note_typed_there() {
+        let mut app = seeded();
+        app.dispatch_open = true;
+        app.dispatch_note = "only the parser".into();
+        render(&mut app);
+        let r = region(&app, Target::Dispatch);
+        click_at(&mut app, r.area.x + 2, r.area.y);
+        assert!(app.dispatch_open);
+        assert_eq!(app.dispatch_note, "only the parser");
+    }
+
+    #[test]
+    fn the_diffs_file_tree_scrolls_apart_from_the_sidebar() {
+        let mut app = in_the_diff();
+        app.files_scroll = 0;
+        app.repo_scroll = 7;
+        render(&mut app);
+        assert_eq!(
+            app.repo_scroll, 7,
+            "the tree left the sidebar's scroll alone"
+        );
+    }
+
     // --- focus and selection ---
 
     #[test]
@@ -2308,6 +2402,42 @@ mod residue {
         app.pane = Pane::FileView;
         app.on_key(Press::ctrl(Key::Char('d')));
         assert!(!app.should_quit);
+    }
+
+    #[test]
+    fn ctrl_d_pages_a_list_rather_than_quitting() {
+        let mut app = seeded();
+        app.pane = Pane::List;
+        app.on_key(Press::ctrl(Key::Char('d')));
+        assert!(!app.should_quit);
+        app.on_key(Press::ctrl(Key::Char('c')));
+        assert!(app.should_quit, "ctrl-c is the way out");
+    }
+
+    #[test]
+    fn ctrl_p_waits_while_a_note_is_being_written() {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        ch(&mut app, 'C');
+        for _ in 0..3 {
+            ch(&mut app, 'j');
+        }
+        ch(&mut app, 'i');
+        assert!(app.note_open.is_some());
+        app.on_key(Press::ctrl(Key::Char('p')));
+        assert!(!app.finder_open, "the finder does not open over the note");
+    }
+
+    #[test]
+    fn colon_files_is_the_files_tab_and_colon_diff_the_diff() {
+        let mut app = seeded();
+        app.cmd = Some(Cmd::Colon);
+        app.run_cmd("files");
+        assert_eq!(app.tab, crate::data::FILES_TAB);
+        assert_ne!(app.view, View::Diff);
     }
 
     #[test]
