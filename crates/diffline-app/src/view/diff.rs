@@ -228,7 +228,7 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
             end,
             Code {
                 text: &row.text,
-                spans: spans.get(i),
+                spans: coloured(row.kind, spans.get(i), tints()),
                 plain: base.fg(fg),
                 skip: app.hscroll,
             },
@@ -399,7 +399,7 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
                 end,
                 Code {
                     text: &row.text,
-                    spans: spans.get(i),
+                    spans: coloured(row.kind, spans.get(i), tints()),
                     plain: base.fg(fg),
                     skip: app.hscroll,
                 },
@@ -412,6 +412,28 @@ fn draw_split(buf: &mut Buffer, body: Rect, app: &mut App) {
     for (slot, i) in placed {
         app.hits
             .push(Region::rows(Target::Pane(Pane::Diff), slot, 1, i, i + 1));
+    }
+}
+
+/// Whether the theme in force gives added and deleted lines a ground.
+fn tints() -> bool {
+    theme::diff_add_bg() != theme::bg()
+}
+
+/// A row's syntax colours, when it may have them.
+///
+/// Context lines always do. Added and deleted ones only when the theme gives
+/// them a ground of their own: the terminal theme cannot, and there their
+/// green and red ink is all that tells an addition from a deletion — a
+/// keyword coloured purple on a deleted line read as the same line added.
+fn coloured(
+    kind: Kind,
+    spans: Option<&Vec<crate::shared::syntax::Span>>,
+    tinted: bool,
+) -> Option<&Vec<crate::shared::syntax::Span>> {
+    match kind {
+        Kind::Added | Kind::Deleted if !tinted => None,
+        _ => spans,
     }
 }
 
@@ -533,6 +555,22 @@ fn kind_color(kind: crate::shared::syntax::Kind) -> ratatui::style::Color {
 mod tests {
     use super::*;
     use crate::model::{ChangedFile, Kind, Row, Scope, Status};
+
+    #[test]
+    fn an_untinted_theme_keeps_syntax_colour_off_added_and_deleted_lines() {
+        let spans = vec![crate::shared::syntax::Span {
+            from: 0,
+            to: 3,
+            kind: crate::shared::syntax::Kind::Keyword,
+        }];
+        assert!(coloured(Kind::Added, Some(&spans), false).is_none());
+        assert!(coloured(Kind::Deleted, Some(&spans), false).is_none());
+        assert!(coloured(Kind::Context, Some(&spans), false).is_some());
+        assert!(
+            coloured(Kind::Added, Some(&spans), true).is_some(),
+            "a tinted one keeps it"
+        );
+    }
     use crate::tui::probe;
     use crate::view::draw;
     use ratatui::Terminal;
