@@ -255,10 +255,11 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         .current()
         .map(crate::data::Item::branch)
         .unwrap_or_default();
+    let noun = if hunks == 1 { "hunk" } else { "hunks" };
     let meta = if branch.is_empty() {
-        format!("{hunks} hunks")
+        format!("{hunks} {noun}")
     } else {
-        format!("{hunks} hunks · {branch} → main")
+        format!("{hunks} {noun} · {branch} → main")
     };
     let meta_x = put_right(
         buf,

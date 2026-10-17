@@ -4,7 +4,7 @@ expression: "frame(\"<enter>d\")"
 ---
  gh  │  ● ada-example (personal) [a]  │  ada-example / tuikit › Pull Requests › #217 › diff                                                  gh · live  ?  help 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- FILES CHANGED                        │ src/layout/solver.rs                                 1 hunks · fix/sidebar-clamp → main  ▤ unified [s]  ○ ignore ws [w] 
+ FILES CHANGED                        │ src/layout/solver.rs                                  1 hunk · fix/sidebar-clamp → main  ▤ unified [s]  ○ ignore ws [w] 
 ──────────────────────────────────────│─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ src/layout/solver.rs        +64 -18 │              @@ -18,7 +18,9 @@ fn solve(area: Rect) -> Layout {                                                         
   src/layout/mod.rs            +12 -4 │    18    18        let total = area.width;                                                                              
