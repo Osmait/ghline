@@ -11,7 +11,7 @@ use crate::app::files::Entry;
 use crate::app::hit::{Region, Target};
 use crate::app::prepared::{Prepared, SIGN, code, split_rows};
 use crate::app::{App, Pane};
-use crate::data::DiffKind;
+use crate::data::{Change, DiffKind};
 use crate::shared::icons::{file as icon_file, folder};
 use crate::shared::syntax::Span;
 use crate::tui::diff::Pair;
@@ -254,13 +254,26 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
             x = put(buf, x, y, area.right(), icon, base.fg(color));
             x = put(buf, x, y, area.right(), " ", base);
         }
-        let (label, fg) = match r.entry {
-            Entry::Dir(_) => (format!("{}/", r.label), theme::cyan_soft()),
-            // the file on show stays lit while the cursor is elsewhere
-            Entry::File(i) if selected || i == shown => (r.label.clone(), theme::bright()),
-            Entry::File(_) => (r.label.clone(), theme::fg()),
+        let (label, style) = match r.entry {
+            Entry::Dir(_) => (format!("{}/", r.label), base.fg(theme::cyan_soft())),
+            Entry::File(i) => {
+                let lit = selected || i == shown;
+                let change = app
+                    .diff_files()
+                    .get(i)
+                    .map_or(Change::Modified, |f| f.change);
+                // what happened to it outranks being lit; being lit then shows
+                // as weight, so the file on show still stands out
+                let style = match change_style(change, base) {
+                    Some(s) if lit => s.add_modifier(Modifier::BOLD),
+                    Some(s) => s,
+                    None if lit => base.fg(theme::bright()),
+                    None => base.fg(theme::fg()),
+                };
+                (r.label.clone(), style)
+            }
         };
-        put_trunc(buf, x, y, right.saturating_sub(1), &label, base.fg(fg));
+        put_trunc(buf, x, y, right.saturating_sub(1), &label, style);
     }
 }
 
@@ -307,16 +320,27 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
     let prep = app.prepared();
     let rows = &prep.rows;
     let hunks = rows.iter().filter(|r| r.kind == DiffKind::Hdr).count();
-    let branch = app
+    let onto = app
         .current()
-        .map(crate::data::Item::branch)
+        .map(crate::data::Item::onto)
         .unwrap_or_default();
     let noun = if hunks == 1 { "hunk" } else { "hunks" };
-    let meta = if branch.is_empty() {
-        format!("{hunks} {noun}")
-    } else {
-        format!("{hunks} {noun} · {branch} → main")
-    };
+    let (path, tag) = app.diff_file().map_or_else(
+        || (String::new(), None),
+        |f| (f.path.clone(), change_tag(f)),
+    );
+    // The file is what this header is for. The branches are the same for
+    // every file and already in the detail, so they are the first thing to
+    // go when the two do not fit together.
+    let room = split_x.saturating_sub(2).saturating_sub(area.x + 1) as usize;
+    let tag_w = tag.as_ref().map_or(0, |(t, _)| t.width() + 2);
+    let short = format!("{hunks} {noun}");
+    let meta =
+        if onto.is_empty() || path.width() + tag_w + 2 + short.width() + 3 + onto.width() > room {
+            short
+        } else {
+            format!("{short} · {onto}")
+        };
     let meta_x = put_right(
         buf,
         split_x.saturating_sub(2),
@@ -324,15 +348,27 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         &meta,
         base.fg(theme::dimmer()),
     );
-    let path = app.diff_file().map(|f| f.path.clone()).unwrap_or_default();
-    put_trunc(
+    // cut from the left when it must be cut: the name is at the end, and
+    // the name is what says which file this is
+    let cols = (meta_x.saturating_sub(1).saturating_sub(area.x + 1) as usize).saturating_sub(tag_w);
+    let px = put_trunc(
         buf,
         area.x + 1,
         area.y,
         meta_x.saturating_sub(1),
-        &path,
+        &tail(&path, cols),
         base.fg(theme::fg()),
     );
+    if let Some((tag, color)) = tag {
+        put_trunc(
+            buf,
+            px + 2,
+            area.y,
+            meta_x.saturating_sub(1),
+            &tag,
+            base.fg(color),
+        );
+    }
     hline(buf, area.x, area.y + 1, area.width, theme::border_soft());
 
     let view = Rect {
@@ -352,6 +388,30 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
     let split = app.split;
     unified_or_split(buf, view, app, &prep, split);
+}
+
+/// What the header says beside a file that was not simply modified.
+fn change_tag(f: &crate::data::FileChange) -> Option<(String, Color)> {
+    match (f.change, &f.from) {
+        (Change::Added, _) => Some(("new file".into(), theme::green())),
+        (Change::Deleted, _) => Some(("deleted".into(), theme::red())),
+        (Change::Renamed, Some(old)) => Some((format!("← {old}"), theme::yellow())),
+        (Change::Renamed, None) => Some(("renamed".into(), theme::yellow())),
+        (Change::Modified, _) => None,
+    }
+}
+
+/// The colour and style a file's name takes in the tree for what happened to
+/// it, when that was more than an edit.
+fn change_style(change: Change, base: Style) -> Option<Style> {
+    match change {
+        Change::Added => Some(base.fg(theme::green())),
+        // struck through as well as red: a deleted file is read for what it
+        // took away, and red alone is also what a big deletion count is
+        Change::Deleted => Some(base.fg(theme::red()).add_modifier(Modifier::CROSSED_OUT)),
+        Change::Renamed => Some(base.fg(theme::yellow())),
+        Change::Modified => None,
+    }
 }
 
 /// Empty state: either the file has no textual changes, or the diff has not
@@ -381,9 +441,16 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
     let (title, sub) = if let Some(e) = st.error() {
         ("diff unavailable".to_string(), e.to_string())
     } else if binary {
+        // The mode this used to print was made up: `gh` does not send it.
+        let why = match (f.change, &f.from) {
+            (Change::Renamed, Some(old)) => format!("renamed from {old}, contents unchanged"),
+            (Change::Renamed, None) => "renamed, contents unchanged".to_string(),
+            (Change::Added | Change::Deleted, _) => "an empty file".to_string(),
+            (Change::Modified, _) => "binary, or only its mode changed".to_string(),
+        };
         (
             "no textual changes".to_string(),
-            format!("{} · 0 hunks · mode 100644", f.path),
+            format!("{} · {why}", f.path),
         )
     } else {
         (
@@ -579,6 +646,25 @@ fn draw_line_tinted(
     if cut.is_some() {
         put(buf, cx, y, max, "…", base.fg(theme::dimmer()));
     }
+}
+
+/// The end of `path` that fits in `cols` columns, behind a `…` when some of
+/// it had to go.
+fn tail(path: &str, cols: usize) -> String {
+    if path.width() <= cols || cols == 0 {
+        return path.to_string();
+    }
+    let mut used = 1; // the `…`
+    let mut start = path.len();
+    for (i, c) in path.char_indices().rev() {
+        let w = c.width().unwrap_or(0);
+        if used + w > cols {
+            break;
+        }
+        used += w;
+        start = i;
+    }
+    format!("…{}", &path[start..])
 }
 
 /// The byte where `text` stops fitting in `cols` columns.
@@ -835,5 +921,14 @@ mod tests {
             .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
             .collect();
         assert_eq!(line, "  abcdefg…");
+    }
+
+    #[test]
+    fn a_path_too_long_for_the_header_keeps_its_name() {
+        assert_eq!(
+            tail(".github/workflows/backend.yaml", 16),
+            "…ws/backend.yaml"
+        );
+        assert_eq!(tail("short.rs", 16), "short.rs");
     }
 }

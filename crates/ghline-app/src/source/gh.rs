@@ -8,8 +8,8 @@ use std::process::Command;
 use serde_json::Value;
 
 use crate::data::{
-    Account, Comment, Detail, FileChange, Hunk, IssueDetail, Item, Job, Label, PrDetail, RawLog,
-    Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, TreeEntry,
+    Account, Change, Comment, Detail, DiffFile, FileChange, Hunk, IssueDetail, Item, Job, Label,
+    PrDetail, RawLog, Repo, Review, ReviewState, RunDetail, SearchHit, Status, Step, TreeEntry,
 };
 use crate::data::{Kind, LogKind};
 
@@ -358,7 +358,7 @@ pub fn prs(repo: &str) -> Res<Vec<Item>> {
         "--limit",
         "40",
         "--json",
-        "number,title,state,author,createdAt,headRefName,additions,deletions,changedFiles,isDraft,labels,statusCheckRollup",
+        "number,title,state,author,createdAt,headRefName,baseRefName,additions,deletions,changedFiles,isDraft,labels,statusCheckRollup",
     ])?;
 
     Ok(v.as_array()
@@ -393,6 +393,7 @@ pub fn prs(repo: &str) -> Res<Vec<Item>> {
                 del: format!("-{}", n(p, "deletions")),
                 files: n(p, "changedFiles") as u32,
                 branch: s(p, "headRefName"),
+                base: s(p, "baseRefName"),
                 workflow: arr(p, "statusCheckRollup")
                     .iter()
                     .map(|c| s(c, "workflowName"))
@@ -460,6 +461,8 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<(String, Vec<FileChange>, Vec<Revi
             path: s(f, "path"),
             add: format!("+{}", n(f, "additions")),
             del: format!("-{}", n(f, "deletions")),
+            change: Change::parse(&s(f, "changeType")),
+            from: None,
             hunks: Vec::new(), // they arrive separately, from `gh pr diff`
         })
         .collect();
@@ -648,13 +651,13 @@ pub fn run_log(repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>> {
 ///
 /// `gh pr diff` returns a standard unified diff; it is split into files by the
 /// `diff --git` headers and into hunks by the `@@` lines.
-pub fn pr_diff(repo: &str, num: i64) -> Res<Vec<(String, Vec<Hunk>)>> {
+pub fn pr_diff(repo: &str, num: i64) -> Res<Vec<DiffFile>> {
     let raw = run(&["pr", "diff", &num.to_string(), "-R", repo])?;
     Ok(parse_unified(&raw))
 }
 
-fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
-    let mut files: Vec<(String, Vec<Hunk>)> = Vec::new();
+fn parse_unified(raw: &str) -> Vec<DiffFile> {
+    let mut files: Vec<DiffFile> = Vec::new();
     let mut hunk: Option<Hunk> = None;
 
     for line in raw.lines() {
@@ -662,19 +665,32 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
             if let Some(h) = hunk.take()
                 && let Some(f) = files.last_mut()
             {
-                f.1.push(h);
+                f.hunks.push(h);
             }
             // `a/path b/path`; the second one is the new file's path
             let path = rest.split(" b/").nth(1).unwrap_or(rest).trim().to_string();
-            files.push((path, Vec::new()));
+            files.push(DiffFile {
+                path,
+                from: None,
+                hunks: Vec::new(),
+            });
             continue;
         }
         if files.is_empty() {
             continue;
         }
+        // only in the header, before the first hunk: inside one a deleted
+        // line could begin with the same words
+        if hunk.is_none()
+            && let Some(old) = line.strip_prefix("rename from ")
+            && let Some(f) = files.last_mut()
+        {
+            f.from = Some(old.to_string());
+            continue;
+        }
         if line.starts_with("@@") {
             if let (Some(h), Some(f)) = (hunk.take(), files.last_mut()) {
-                f.1.push(h);
+                f.hunks.push(h);
             }
             hunk = Some(Hunk {
                 hdr: crate::shared::text::expand_tabs(line).into_owned(),
@@ -701,7 +717,7 @@ fn parse_unified(raw: &str) -> Vec<(String, Vec<Hunk>)> {
     if let Some(h) = hunk
         && let Some(f) = files.last_mut()
     {
-        f.1.push(h);
+        f.hunks.push(h);
     }
     files
 }
@@ -859,7 +875,7 @@ const ALL_QUERY: &str = r#"query($q:String!){
       }
       ... on PullRequest {
         number title state isDraft createdAt
-        additions deletions changedFiles headRefName
+        additions deletions changedFiles headRefName baseRefName
         author{ login }
         repository{ nameWithOwner }
         labels(first:10){ nodes{ name color } }
@@ -1018,6 +1034,7 @@ pub fn all_prs(owner: &str) -> Res<Vec<Item>> {
                 del: format!("-{}", n(p, "deletions")),
                 files: n(p, "changedFiles") as u32,
                 branch: s(p, "headRefName"),
+                base: s(p, "baseRefName"),
                 workflow,
                 ..PrDetail::default()
             }));
@@ -1361,12 +1378,12 @@ diff --git a/src/two.rs b/src/two.rs
 ";
         let files = parse_unified(raw);
         assert_eq!(files.len(), 2);
-        assert_eq!(files[0].0, "src/one.rs");
-        assert_eq!(files[1].0, "src/two.rs");
+        assert_eq!(files[0].path, "src/one.rs");
+        assert_eq!(files[1].path, "src/two.rs");
 
         // the ---/+++ header lines must not be mistaken for content
-        assert_eq!(files[0].1.len(), 1);
-        let lines = &files[0].1[0].lines;
+        assert_eq!(files[0].hunks.len(), 1);
+        let lines = &files[0].hunks[0].lines;
         assert_eq!(lines.len(), 5);
         assert_eq!(lines[0], (' ', "fn main() {".to_string()));
         assert_eq!(lines[1], ('-', "    old();".to_string()));
@@ -1386,14 +1403,15 @@ diff --git a/src/two.rs b/src/two.rs
             "diff --git a/old.txt b/new.txt\nsimilarity index 100%\nrename from old.txt\n",
         );
         assert_eq!(renamed.len(), 1);
-        assert_eq!(renamed[0].0, "new.txt");
-        assert!(renamed[0].1.is_empty());
+        assert_eq!(renamed[0].path, "new.txt");
+        assert_eq!(renamed[0].from.as_deref(), Some("old.txt"));
+        assert!(renamed[0].hunks.is_empty());
 
         // the no-newline marker is not a diff line
         let marker = parse_unified(
             "diff --git a/a b/a\n@@ -1 +1 @@\n-a\n+b\n\\ No newline at end of file\n",
         );
-        assert_eq!(marker[0].1[0].lines.len(), 2);
+        assert_eq!(marker[0].hunks[0].lines.len(), 2);
     }
 
     #[test]
@@ -1402,7 +1420,7 @@ diff --git a/src/two.rs b/src/two.rs
         // truly empty line inside a hunk still counts as context
         let raw = "diff --git a/a b/a\n@@ -1,3 +1,3 @@\n a\n\n b\n";
         let files = parse_unified(raw);
-        let lines = &files[0].1[0].lines;
+        let lines = &files[0].hunks[0].lines;
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[1], (' ', String::new()));
     }

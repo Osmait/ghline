@@ -121,8 +121,8 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 y,
                 max,
                 &format!(
-                    "{} → main · {} {} across {} files",
-                    cur.branch(),
+                    "{} · {} {} across {} files",
+                    cur.onto(),
                     pr.map_or("", |p| p.add.as_str()),
                     pr.map_or("", |p| p.del.as_str()),
                     pr.map_or(0, |p| p.files)

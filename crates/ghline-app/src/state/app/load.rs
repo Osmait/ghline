@@ -526,8 +526,9 @@ impl App {
                     // match the hunks against the already-loaded file list
                     if let Some(it) = self.item_mut(&repo, 1, num) {
                         for f in it.as_pr_mut().into_iter().flat_map(|p| &mut p.file_list) {
-                            if let Some((_, hunks)) = files.iter().find(|(p, _)| *p == f.path) {
-                                f.hunks = hunks.clone();
+                            if let Some(d) = files.iter().find(|d| d.path == f.path) {
+                                f.hunks = d.hunks.clone();
+                                f.from = d.from.clone();
                             }
                         }
                     }

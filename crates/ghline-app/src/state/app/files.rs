@@ -378,6 +378,7 @@ mod tests {
             add: format!("+{add}"),
             del: format!("-{del}"),
             hunks: Vec::new(),
+            ..FileChange::default()
         }
     }
 
