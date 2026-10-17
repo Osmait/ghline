@@ -396,7 +396,7 @@ thing off if you would rather have it back.
 | `a` | switch account |
 | `t` | switch theme (`␣t` in diffline) |
 | `b` `^b` | hide / show the repository pane |
-| `[` `]` | previous / next repository |
+| `[` `]` | previous / next repository (from the list and the detail; the diff and the logs keep you where you are) |
 | `p` `^p` | the finder |
 | `o` | fold / unfold a job (in the logs) or a folder (in the diff's files) |
 | `O` | fold / unfold every folder (in the diff's files) |
