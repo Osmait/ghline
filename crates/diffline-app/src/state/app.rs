@@ -205,6 +205,8 @@ pub struct App {
     pub ignore_ws: bool,
     /// The theme on when the picker opened, which `esc` puts back.
     pub theme_before: crate::tui::theme::Theme,
+    /// How far down the help is scrolled, in its rows.
+    pub help_scroll: usize,
     pub blame_on: bool,
     pub blame: HashMap<String, Vec<String>>,
     pub blame_state: HashMap<String, Load>,
@@ -322,6 +324,7 @@ impl App {
             context: 3,
             ignore_ws: false,
             theme_before: crate::tui::theme::current(),
+            help_scroll: 0,
             blame_on: false,
             blame: HashMap::new(),
             blame_state: HashMap::new(),
