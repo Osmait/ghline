@@ -5,6 +5,8 @@
 //! it *fetches* in `load`, and how it *reacts* in `input`.
 
 #[cfg(test)]
+mod commands_test;
+#[cfg(test)]
 mod tests;
 
 pub mod diffnav;
@@ -394,6 +396,9 @@ pub struct App {
     pub detail_scroll: usize,
     /// True height of the scrollable pane, which only the render knows.
     pub detail_height: u16,
+    /// How many items the list shows at once, which only its render knows:
+    /// a page of the list is that many items, not the text pane's height.
+    pub list_rows: u16,
     /// Every agent herdr is running, and whether we have asked yet. Not keyed
     /// by repository: agents belong to the machine, not to a repo.
     pub agents: Vec<crate::shared::mux::Agent>,
@@ -560,6 +565,7 @@ impl App {
             diff_cursor: 0,
             detail_scroll: 0,
             detail_height: 10,
+            list_rows: 0,
             trees: HashMap::new(),
             trees_state: HashMap::new(),
             file_text: HashMap::new(),

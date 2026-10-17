@@ -177,6 +177,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     let visible = app.visible();
     let sel_pos = app.item_idx(visible.len());
     let rows = (area.height / 2) as usize;
+    app.list_rows = rows as u16;
     scroll_into_view(&mut app.item_scroll, sel_pos, rows, visible.len());
     let scroll = app.item_scroll;
     // registered even when the list is empty, so clicking a loading or empty
