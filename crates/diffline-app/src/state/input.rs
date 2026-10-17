@@ -1117,9 +1117,11 @@ impl App {
     pub fn on_key(&mut self, press: Press) {
         let ctrl = press.ctrl;
 
-        // `^l` means repaint everywhere else; it means it here too, and ahead
-        // of the pane keys since plain `l` moves right.
-        if ctrl && press.key == Key::Char('l') {
+        // `^l` repaints. Outside a modal it is the keymap's like any other
+        // key, `<C-l>` in the shipped one, so it can be rebound — it was
+        // caught here first, and a keys file naming it did nothing. A modal
+        // reads its own keys, so there it is caught here still.
+        if ctrl && press.key == Key::Char('l') && self.modal.is_some() {
             self.wants_redraw = true;
             return;
         }
@@ -2039,6 +2041,17 @@ mod tests {
         press(&mut a, Key::Esc);
         assert_eq!(current(), Theme::Default, "and esc undoes it");
         set(Theme::Default);
+    }
+
+    #[test]
+    fn ctrl_l_repaints_and_can_be_rebound() {
+        let mut a = app();
+        a.on_key(Press::ctrl(Key::Char('l')));
+        assert!(a.wants_redraw, "the shipped keymap repaints on it");
+        let mut b = app();
+        b.keys = crate::keys::Map::with("<C-l> = none\n");
+        b.on_key(Press::ctrl(Key::Char('l')));
+        assert!(!b.wants_redraw, "and a keys file can take it away");
     }
 
     #[test]
