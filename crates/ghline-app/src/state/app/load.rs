@@ -155,7 +155,10 @@ impl App {
         // all-repositories list that lives somewhere other than `key`.
         let key = self.item_repo_key();
 
-        // the diff is fetched whole: `gh pr diff` returns it in one go
+        // The diff is fetched whole: `gh pr diff` returns it in one go. It
+        // also needs the file list, which is the detail's: `d` on the list
+        // opens the diff without the detail ever having been shown, and the
+        // tree then stayed empty for good.
         if self.view == View::Diff {
             if let Some(cur) = self.current() {
                 let (num, kind) = (cur.num, cur.kind());
@@ -164,6 +167,17 @@ impl App {
                     .get(&(key.clone(), num))
                     .map(|s| *s == Load::Idle)
                     .unwrap_or(true);
+                let detail_idle = self
+                    .detail_state
+                    .get(&(key.clone(), num))
+                    .is_none_or(|s| *s == Load::Idle);
+                if kind == Kind::Pr && detail_idle {
+                    self.detail_state.insert((key.clone(), num), Load::Loading);
+                    self.ask(Request::PrDetail {
+                        repo: key.clone(),
+                        num,
+                    });
+                }
                 if kind == Kind::Pr && idle {
                     self.diff_state.insert((key.clone(), num), Load::Loading);
                     self.ask(Request::PrDiff { repo: key, num });
@@ -473,6 +487,15 @@ impl App {
                 {
                     it.body = body;
                     if let Some(pr) = it.as_pr_mut() {
+                        // The diff may have come first: its hunks are kept
+                        // rather than replaced by a list that has none.
+                        let mut files = files;
+                        for f in &mut files {
+                            if let Some(old) = pr.file_list.iter().find(|o| o.path == f.path) {
+                                f.hunks = old.hunks.clone();
+                                f.from = old.from.clone();
+                            }
+                        }
                         pr.file_list = files;
                         pr.reviews = reviews;
                     }
@@ -523,9 +546,14 @@ impl App {
             Response::PrDiff { repo, num, result } => match result {
                 Ok(files) => {
                     self.diff_state.insert((repo.clone(), num), Load::Ready);
-                    // match the hunks against the already-loaded file list
-                    if let Some(it) = self.item_mut(&repo, 1, num) {
-                        for f in it.as_pr_mut().into_iter().flat_map(|p| &mut p.file_list) {
+                    // match the hunks against the already-loaded file list, or
+                    // stand in for it when the diff got here first; the
+                    // detail fills in what only it knows when it arrives
+                    if let Some(pr) = self.item_mut(&repo, 1, num).and_then(Item::as_pr_mut) {
+                        if pr.file_list.is_empty() {
+                            pr.file_list = files.iter().map(from_diff).collect();
+                        }
+                        for f in &mut pr.file_list {
                             if let Some(d) = files.iter().find(|d| d.path == f.path) {
                                 f.hunks = d.hunks.clone();
                                 f.from = d.from.clone();
@@ -606,4 +634,32 @@ impl App {
 /// alone is unambiguous.
 fn is_it(item: &Item, repo: &str, num: i64) -> bool {
     item.num == num && (item.repo.is_empty() || item.repo == repo)
+}
+
+/// A file list entry made from the diff alone, for when the diff arrives
+/// before the detail that owns the list.
+///
+/// The counts are the diff's own lines, which is what `gh` counts too. What
+/// happened to the file is a guess the detail corrects: a rename the diff
+/// says outright, the rest a modification.
+fn from_diff(d: &crate::data::DiffFile) -> crate::data::FileChange {
+    let count = |sign: char| {
+        d.hunks
+            .iter()
+            .flat_map(|h| &h.lines)
+            .filter(|(s, _)| *s == sign)
+            .count()
+    };
+    crate::data::FileChange {
+        path: d.path.clone(),
+        add: format!("+{}", count('+')),
+        del: format!("-{}", count('-')),
+        change: if d.from.is_some() {
+            crate::data::Change::Renamed
+        } else {
+            crate::data::Change::Modified
+        },
+        from: d.from.clone(),
+        hunks: d.hunks.clone(),
+    }
 }
