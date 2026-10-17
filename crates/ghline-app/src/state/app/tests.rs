@@ -2643,12 +2643,15 @@ mod diff_nav {
         let mut app = reading();
         search(&mut app, "debug_assert");
         let first = app.diff_hit.expect("a hit");
+        assert!(app.prepared().rows[first.row].text.contains("debug_assert"));
         assert_eq!(shown(&app), "src/layout/mod.rs");
         assert_eq!(app.cmd, None, "enter leaves the prompt");
 
         ch(&mut app, 'n');
         assert_eq!(shown(&app), "src/layout/solver.rs");
-        assert_eq!(app.diff_hit.map(|h| h.row), Some(first.row));
+        let hit = app.diff_hit.expect("a hit");
+        let row = app.prepared().rows[hit.row].text.clone();
+        assert!(row.contains("debug_assert"), "landed on {row:?}");
         ch(&mut app, 'n');
         assert_eq!(shown(&app), "tests/layout.rs");
         ch(&mut app, 'n');
@@ -2857,5 +2860,98 @@ mod diff_loading {
             Change::Added,
             "and the list's word on the kind won"
         );
+    }
+}
+
+mod review_threads {
+    use super::*;
+    use crate::data::DiffKind;
+
+    /// The fixture's PR diff, open on `src/layout/mod.rs`, which carries an
+    /// open thread under line 19 and a resolved one under 21.
+    fn reading() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        app
+    }
+
+    fn heads(app: &mut App) -> Vec<String> {
+        app.prepared()
+            .rows
+            .iter()
+            .filter(|r| r.kind == DiffKind::NoteHead)
+            .map(|r| r.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn the_threads_are_in_the_diff_under_their_lines() {
+        let mut app = reading();
+        let rows = app.prepared().rows.clone();
+        let at = rows
+            .iter()
+            .position(|r| r.kind == DiffKind::NoteHead)
+            .unwrap();
+        assert_eq!(rows[at - 1].ln, "19", "under the line it is about");
+        assert_eq!(
+            heads(&mut app),
+            [
+                "noa-example · 2h ago",
+                "↳ ada-example · 1h ago",
+                "✓ iris-example: nit: blank line above"
+            ]
+        );
+    }
+
+    #[test]
+    fn capital_c_hides_the_comments_and_shows_them_again() {
+        let mut app = reading();
+        ch(&mut app, 'C');
+        assert!(heads(&mut app).is_empty());
+        ch(&mut app, 'C');
+        assert_eq!(heads(&mut app).len(), 3);
+    }
+
+    #[test]
+    fn a_paren_jumps_to_the_next_thread_across_files() {
+        let mut app = reading();
+        // from the start of mod.rs: the first thread, then the resolved one
+        app.detail_height = 4;
+        ch(&mut app, ')');
+        let first = app.diff_scroll;
+        ch(&mut app, ')');
+        assert!(app.diff_scroll > first);
+        ch(&mut app, ')');
+        assert!(app.flash.is_some(), "no more comments past the last");
+        ch(&mut app, '(');
+        assert!(app.diff_scroll < first + 10);
+    }
+
+    #[test]
+    fn the_search_reads_the_comments_too() {
+        let mut app = reading();
+        ch(&mut app, '/');
+        for c in "settings store".chars() {
+            ch(&mut app, c);
+        }
+        press(&mut app, Key::Enter);
+        let hit = app.diff_hit.expect("found in a reply");
+        assert_eq!(app.prepared().rows[hit.row].kind, DiffKind::Note);
+    }
+
+    #[test]
+    fn threads_that_arrive_late_land_in_the_diff_already_open() {
+        let mut app = reading();
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        let before = heads(&mut app).len();
+        app.apply(Response::PrThreads {
+            repo,
+            num,
+            result: Ok(Vec::new()),
+        });
+        assert_eq!(heads(&mut app).len(), 0, "the cache noticed: {before} → 0");
     }
 }

@@ -8,35 +8,35 @@ expression: "frame(\"?\")"
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▌ ⇅ #217   fix(layout): clamp the sidebar to a minimum width [bug]                                                                              open  ✗ checks  
 ▌          fix/sidebar-clamp · ada-example · +12/-3 · 4 files · 26m ago                                                                                         
-  ⇅ #214   feat(finder): rank by subsequence, not prefix [feature]                                                                              open  ✓ checks  
-           feat/fuzzy-rank · iris-exampl┌─────────────────────────────────────────────────────────────────────────────┐                                         
-  ⇅ #212   perf(render): reuse the cell │ KEYBINDINGS                                                    esc to close │                         open  ✓ checks  
-           perf/reuse-buffer · kai-examp├─────────────────────────────────────────────────────────────────────────────┤                                         
-  ⑂ #211   wip: split the reducer by vie│         j / k  move in the pane                  ?  this help               │                        draft  ○ checks  
-           wip/split-reducer · noa-examp│         h / l  pane left / right                :q  close overlay           │                                         
-  ⑃ #209   chore: drop the unused ansi c│         g / G  top / bottom                ^d / ^u  half page scroll        │                       merged  ✓ checks  
-           chore/deps · noa-example · +8│         1 2 3  Issues / PRs / Actions            d  diff of the PR files    │                                         
-  ⇅ #207   fix(logs): keep the filter ac│         enter  enter the pane                    s  split / unified diff    │                         open  ✓ checks  
-           fix/log-filter · eli-example │       esc / q  back one level                    w  ignore whitespace       │                                         
-  ⇅ #205   feat(diff): word-level highli│             a  switch account                { / }  previous / next hunk    │                         open  ◐ checks  
-           feat/word-diff · iris-example│             t  switch theme                  J / K  next / previous file    │                                         
-  ⇅ #202   docs: write down the key map │             b  hide / show repos             H / L  pan the diff            │                         open  ✓ checks  
-           docs/keymap · ada-example · +│         [ / ]  previous / next repo          n / N  next / previous match   │                                         
-  ⇅ #199   fix(finder): do not steal the│             p  find repos, issues, P…          tab  next pane               │                         open  ✗ checks  
-           fix/finder-esc · kai-example │             o  fold a job or a folder            m  merge the pull request  │                                         
-  ⇅ #196   test: golden frames for the n│             O  fold / open all                   c  close / reopen the PR   │                         open  ✓ checks  
-           test/narrow · noa-example · +│             /  filter / search diff              D  delete the branch       │                                         
-  ⇅ #193   refactor: move theming out of│             e  jump to first error           y / n  confirm / cancel        │                         open  ✓ checks  
-           refactor/theme · iris-example│             f  toggle log follow             click  focus pane, select row  │                                         
-  ⇅ #189   build: pin the toolchain [cho│             r  refresh (fake)             2x click  open it                 │                       closed  ✓ checks  
-           build/pin · ada-example · +19│             :  command line                  wheel  scroll under pointer    │                                         
-                                        │      :account  account picker                    4  the repo's files        │                                         
-                                        │  :issues :prs  jump to a tab                     5  agents running here     │                                         
-                                        │         :logs  open logs of selection            E  edit the file in $EDIT… │                                         
-                                        │  :diff :files  open the diff                    ^l  repaint the screen      │                                         
-                                        │        :theme  theme picker                      x  send this to an agent   │                                         
-                                        │      :sidebar  hide / show repos       x then type  …and say something spe… │                                         
-                                        │         :find  the finder                                                   │                                         
+  ⇅ #214   feat(finder): rank by subsequ┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✓ checks  
+           feat/fuzzy-rank · iris-exampl│ KEYBINDINGS                                                    esc to close │                                         
+  ⇅ #212   perf(render): reuse the cell ├─────────────────────────────────────────────────────────────────────────────┤                         open  ✓ checks  
+           perf/reuse-buffer · kai-examp│         j / k  move in the pane                 :q  close overlay           │                                         
+  ⑂ #211   wip: split the reducer by vie│         h / l  pane left / right           ^d / ^u  half page scroll        │                        draft  ○ checks  
+           wip/split-reducer · noa-examp│         g / G  top / bottom                      d  diff of the PR files    │                                         
+  ⑃ #209   chore: drop the unused ansi c│         1 2 3  Issues / PRs / Actions            s  split / unified diff    │                       merged  ✓ checks  
+           chore/deps · noa-example · +8│         enter  enter the pane                    w  ignore whitespace       │                                         
+  ⇅ #207   fix(logs): keep the filter ac│       esc / q  back one level                { / }  previous / next hunk    │                         open  ✓ checks  
+           fix/log-filter · eli-example │             a  switch account                J / K  next / previous file    │                                         
+  ⇅ #205   feat(diff): word-level highli│             t  switch theme                  H / L  pan the diff            │                         open  ◐ checks  
+           feat/word-diff · iris-example│             b  hide / show repos             n / N  next / previous match   │                                         
+  ⇅ #202   docs: write down the key map │         [ / ]  previous / next repo          ( / )  previous / next comment │                         open  ✓ checks  
+           docs/keymap · ada-example · +│             p  find repos, issues, P…            C  show / hide comments    │                                         
+  ⇅ #199   fix(finder): do not steal the│             o  fold a job or a folder          tab  next pane               │                         open  ✗ checks  
+           fix/finder-esc · kai-example │             O  fold / open all                   m  merge the pull request  │                                         
+  ⇅ #196   test: golden frames for the n│             /  filter / search diff              c  close / reopen the PR   │                         open  ✓ checks  
+           test/narrow · noa-example · +│             e  jump to first error               D  delete the branch       │                                         
+  ⇅ #193   refactor: move theming out of│             f  toggle log follow             y / n  confirm / cancel        │                         open  ✓ checks  
+           refactor/theme · iris-example│             r  refresh (fake)                click  focus pane, select row  │                                         
+  ⇅ #189   build: pin the toolchain [cho│             :  command line               2x click  open it                 │                       closed  ✓ checks  
+           build/pin · ada-example · +19│      :account  account picker                wheel  scroll under pointer    │                                         
+                                        │  :issues :prs  jump to a tab                     4  the repo's files        │                                         
+                                        │         :logs  open logs of selection            5  agents running here     │                                         
+                                        │  :diff :files  open the diff                     E  edit the file in $EDIT… │                                         
+                                        │        :theme  theme picker                     ^l  repaint the screen      │                                         
+                                        │      :sidebar  hide / show repos                 x  send this to an agent   │                                         
+                                        │         :find  the finder              x then type  …and say something spe… │                                         
+                                        │             ?  this help                                                    │                                         
                                         │                                                                             │                                         
                                         └─────────────────────────────────────────────────────────────────────────────┘                                         
                                                                                                                                                                 

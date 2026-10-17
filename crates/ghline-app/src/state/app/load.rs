@@ -178,6 +178,17 @@ impl App {
                         num,
                     });
                 }
+                let threads_idle = self
+                    .threads_state
+                    .get(&(key.clone(), num))
+                    .is_none_or(|s| *s == Load::Idle);
+                if kind == Kind::Pr && threads_idle {
+                    self.threads_state.insert((key.clone(), num), Load::Loading);
+                    self.ask(Request::PrThreads {
+                        repo: key.clone(),
+                        num,
+                    });
+                }
                 if kind == Kind::Pr && idle {
                     self.diff_state.insert((key.clone(), num), Load::Loading);
                     self.ask(Request::PrDiff { repo: key, num });
@@ -568,6 +579,21 @@ impl App {
                 Err(e) => {
                     self.flash_warn(e.brief());
                     self.diff_state.insert((repo, num), Load::from(e));
+                }
+            },
+
+            Response::PrThreads { repo, num, result } => match result {
+                Ok(threads) => {
+                    self.threads_state.insert((repo.clone(), num), Load::Ready);
+                    if let Some(pr) = self.item_mut(&repo, 1, num).and_then(Item::as_pr_mut) {
+                        pr.threads = threads;
+                    }
+                }
+                // Comments are an extra on the diff, not the diff: their
+                // failure says so once and leaves the diff to be read.
+                Err(e) => {
+                    self.flash_warn(format!("review comments: {}", e.brief()));
+                    self.threads_state.insert((repo, num), Load::from(e));
                 }
             },
 

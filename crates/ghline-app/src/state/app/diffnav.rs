@@ -14,11 +14,10 @@ use std::collections::HashSet;
 
 use super::App;
 use super::files::{Entry, rows as tree_rows};
-use super::input::strip_ws_only;
-use super::prepared::{code, split_rows};
+use super::prepared::{code, file_rows, split_rows};
 use unicode_width::UnicodeWidthStr;
 
-use crate::data::{DiffKind, Hunk};
+use crate::data::DiffKind;
 
 /// Where a search hit is: a file, by index, and a row of its unified diff.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,10 +108,17 @@ impl App {
         let prep = self.prepared();
         if self.split {
             let pairs = split_rows(&prep.rows);
+            // a comment spans the halves as a header does; only a real
+            // header starts a hunk
             let starts = pairs
                 .iter()
                 .enumerate()
-                .filter_map(|(i, p)| p.header.map(|_| i))
+                .filter(|(_, p)| {
+                    p.header
+                        .and_then(|h| prep.rows.get(h))
+                        .is_some_and(|r| r.kind == DiffKind::Hdr)
+                })
+                .map(|(i, _)| i)
                 .collect();
             (pairs.len(), starts)
         } else {
@@ -124,6 +130,82 @@ impl App {
                 .collect();
             (prep.rows.len(), starts)
         }
+    }
+
+    /// The line each review thread starts on in the open file, in the mode on
+    /// screen: a comment head with no comment row above it.
+    fn thread_lines(&mut self) -> Vec<usize> {
+        let prep = self.prepared();
+        let starts: Vec<usize> = prep
+            .rows
+            .iter()
+            .enumerate()
+            .filter(|(i, r)| {
+                r.kind == DiffKind::NoteHead
+                    && !i
+                        .checked_sub(1)
+                        .and_then(|p| prep.rows.get(p))
+                        .is_some_and(|p| p.kind.is_note())
+            })
+            .map(|(i, _)| i)
+            .collect();
+        if !self.split {
+            return starts;
+        }
+        let pairs = split_rows(&prep.rows);
+        starts
+            .iter()
+            .filter_map(|s| pairs.iter().position(|p| p.header == Some(*s)))
+            .collect()
+    }
+
+    /// How many lines of code a jump to a thread leaves above it: enough to
+    /// see the line it is about and a little of what leads there.
+    const ABOVE: usize = 3;
+
+    /// `)` / `(`: the next or previous review thread, carrying on into the
+    /// files either side as `}` does. Asking for comments shows them.
+    pub(super) fn step_thread(&mut self, forward: bool) {
+        self.diff_notes = true;
+        let here = self.diff_scroll + Self::ABOVE;
+        let lines = self.thread_lines();
+        let found = if forward {
+            lines.iter().find(|l| **l > here).copied()
+        } else {
+            lines.iter().rev().find(|l| **l < here).copied()
+        };
+        if let Some(l) = found {
+            self.diff_scroll = l.saturating_sub(Self::ABOVE);
+            return;
+        }
+        // the nearest file on that side with a thread in it
+        let order = self.file_order();
+        let at = order
+            .iter()
+            .position(|i| *i == self.file_idx())
+            .unwrap_or(0);
+        let others: Vec<usize> = if forward {
+            order.iter().skip(at + 1).copied().collect()
+        } else {
+            order.iter().take(at).rev().copied().collect()
+        };
+        let next = others.into_iter().find(|&i| {
+            self.diff_files()
+                .get(i)
+                .is_some_and(|f| !self.threads_on(&f.path).is_empty())
+        });
+        let Some(i) = next else {
+            self.flash_ok(if forward {
+                "no more comments"
+            } else {
+                "no earlier comments"
+            });
+            return;
+        };
+        self.show_file(i);
+        let lines = self.thread_lines();
+        let line = if forward { lines.first() } else { lines.last() };
+        self.diff_scroll = line.map_or(0, |l| l.saturating_sub(Self::ABOVE));
     }
 
     /// The furthest the pane can scroll, which is where the render clamps to.
@@ -162,16 +244,13 @@ impl App {
         }
     }
 
-    /// A file's rows as the pane would number them, `w` applied.
+    /// A file's rows as the pane would number them: `w` applied and its
+    /// review threads laid in, so a hit's row is the row the pane shows.
     fn unified(&self, idx: usize) -> Vec<crate::data::DiffRow> {
         let Some(f) = self.diff_files().get(idx) else {
             return Vec::new();
         };
-        if self.ws {
-            Hunk::rows(&f.hunks.iter().map(strip_ws_only).collect::<Vec<_>>())
-        } else {
-            Hunk::rows(&f.hunks)
-        }
+        file_rows(f, self.ws, &self.threads_on(&f.path), self.notes())
     }
 
     /// The unified row the top of the pane is on.

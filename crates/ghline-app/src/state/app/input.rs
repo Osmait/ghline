@@ -916,6 +916,17 @@ impl App {
                     self.flash_ok("first file");
                 }
             }
+            Key::Char(')') if self.view == View::Diff => self.step_thread(true),
+            Key::Char('(') if self.view == View::Diff => self.step_thread(false),
+            // capital, because `c` already closes the pull request
+            Key::Char('C') if self.view == View::Diff => {
+                self.diff_notes = !self.diff_notes;
+                self.flash_ok(if self.diff_notes {
+                    "review comments shown"
+                } else {
+                    "review comments hidden"
+                });
+            }
             Key::Char('L') if self.view == View::Diff => self.pan(1),
             Key::Char('H') if self.view == View::Diff => self.pan(-1),
             Key::Char('n') if self.view == View::Diff => self.search(true, false),

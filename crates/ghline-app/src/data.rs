@@ -253,6 +253,36 @@ pub struct FileChange {
     pub hunks: Vec<Hunk>,
 }
 
+/// Which side of a diff a review comment is on: the old file's lines or the
+/// new one's. A comment on a deleted line is on the left.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DiffSide {
+    Left,
+    #[default]
+    Right,
+}
+
+/// One comment in a review thread.
+#[derive(Clone, Debug, Default)]
+pub struct ThreadComment {
+    pub author: String,
+    pub body: String,
+    /// How long ago, already as the list writes it (`3h ago`).
+    pub when: String,
+}
+
+/// A review thread: comments anchored to a line of one file.
+#[derive(Clone, Debug, Default)]
+pub struct Thread {
+    pub path: String,
+    /// The line it is on now, on `side`. `None` once the code under it has
+    /// changed, which GitHub calls outdated.
+    pub line: Option<u32>,
+    pub side: DiffSide,
+    pub resolved: bool,
+    pub comments: Vec<ThreadComment>,
+}
+
 /// One file of a unified diff, as `gh pr diff` gives it.
 pub struct DiffFile {
     pub path: String,
@@ -349,6 +379,17 @@ pub enum DiffKind {
     Add,
     Del,
     Ctx,
+    /// The first row of a review comment: who wrote it, and when.
+    NoteHead,
+    /// A line of a review comment's text.
+    Note,
+}
+
+impl DiffKind {
+    /// A review comment's row rather than a line of the file.
+    pub fn is_note(self) -> bool {
+        matches!(self, Self::NoteHead | Self::Note)
+    }
 }
 
 /// A line ready to draw, with both of its line numbers.
@@ -390,6 +431,8 @@ pub struct PrDetail {
     pub base: String,
     pub reviews: Vec<Review>,
     pub file_list: Vec<FileChange>,
+    /// Review threads on the diff, fetched with it.
+    pub threads: Vec<Thread>,
     /// Name of the workflow the checks belong to.
     pub workflow: String,
     /// How it was merged, once it has been.
@@ -674,6 +717,8 @@ pub const HELP: &[(&str, &str)] = &[
     ("J / K", "next / previous file"),
     ("H / L", "pan the diff"),
     ("n / N", "next / previous match"),
+    ("( / )", "previous / next comment"),
+    ("C", "show / hide comments"),
     ("tab", "next pane"),
     ("m", "merge the pull request"),
     ("c", "close / reopen the PR"),

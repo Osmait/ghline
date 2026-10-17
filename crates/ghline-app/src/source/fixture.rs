@@ -21,8 +21,8 @@
 //! came from).
 
 use crate::data::{
-    Account, Detail, FileChange, Hunk, Item, Job, Label, LogKind, PrDetail, RawLog, Repo, Review,
-    ReviewState, RunDetail, StaticHunk, Status, Step,
+    Account, Detail, DiffSide, FileChange, Hunk, Item, Job, Label, LogKind, PrDetail, RawLog, Repo,
+    Review, ReviewState, RunDetail, StaticHunk, Status, Step, Thread, ThreadComment,
 };
 use crate::state::app::{App, Load};
 
@@ -307,6 +307,36 @@ pub fn prs(repo: usize) -> Vec<Item> {
                     Review {
                         author: "iris-example".into(),
                         state: ReviewState::Approved,
+                    },
+                ];
+                // On the first file the diff opens on: one thread still being
+                // talked about, under the line it is about, and one settled.
+                let said = |author: &str, body: &str, when: &str| ThreadComment {
+                    author: author.into(),
+                    body: body.into(),
+                    when: when.into(),
+                };
+                d.threads = vec![
+                    Thread {
+                        path: "src/layout/mod.rs".into(),
+                        line: Some(19),
+                        side: DiffSide::Right,
+                        resolved: false,
+                        comments: vec![
+                            said(
+                                "noa-example",
+                                "Should MIN_SIDEBAR come from the config rather than a constant?",
+                                "2h ago",
+                            ),
+                            said("ada-example", "Next PR — it needs the settings store.", "1h ago"),
+                        ],
+                    },
+                    Thread {
+                        path: "src/layout/mod.rs".into(),
+                        line: Some(21),
+                        side: DiffSide::Right,
+                        resolved: true,
+                        comments: vec![said("iris-example", "nit: blank line above", "3h ago")],
                     },
                 ];
             }
