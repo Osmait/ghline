@@ -3,13 +3,16 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::files::Entry;
 use crate::app::hit::{Region, Target};
+use crate::app::prepared::{Prepared, SIGN, code};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
 use crate::shared::icons::{file as icon_file, folder};
+use crate::shared::syntax::Span;
 use crate::tui::diff::{Pair, Side, pair};
 use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
@@ -300,7 +303,8 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
     let split_x = put_right(buf, ws_x - 2, area.y, split_label, base.fg(theme::purple()));
 
-    let rows = app.diff_rows();
+    let prep = app.prepared();
+    let rows = &prep.rows;
     let hunks = rows.iter().filter(|r| r.kind == DiffKind::Hdr).count();
     let branch = app
         .current()
@@ -345,11 +349,8 @@ fn draw_body(buf: &mut Buffer, area: Rect, app: &mut App) {
         empty(buf, view, app);
         return;
     }
-    if app.split {
-        unified_or_split(buf, view, app, &rows, true);
-    } else {
-        unified_or_split(buf, view, app, &rows, false);
-    }
+    let split = app.split;
+    unified_or_split(buf, view, app, &prep, split);
 }
 
 /// Empty state: either the file has no textual changes, or the diff has not
@@ -406,7 +407,8 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
 
 /// Both modes share the clipping and the scrolling; only the column layout
 /// differs.
-fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, rows: &[DiffRow], split: bool) {
+fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared, split: bool) {
+    let rows = &prep.rows;
     let pairs = if split { split_rows(rows) } else { Vec::new() };
     let len = if split { pairs.len() } else { rows.len() };
     let h = area.height as usize;
@@ -418,9 +420,9 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, rows: &[DiffRow
         let y = area.y + row as u16;
         let i = scroll + row;
         if split {
-            draw_split_row(buf, area, y, &pairs[i], rows);
+            draw_split_row(buf, area, y, &pairs[i], prep);
         } else {
-            draw_unified_row(buf, area, y, &rows[i]);
+            draw_unified_row(buf, area, y, prep, i);
         }
         if focused {
             put(
@@ -435,7 +437,8 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, rows: &[DiffRow
     }
 }
 
-fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, r: &DiffRow) {
+fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: usize) {
+    let r = &prep.rows[i];
     let bg = row_bg(r.kind);
     fill(
         buf,
@@ -451,14 +454,124 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, r: &DiffRow) {
     // two numbering columns: original file and new file
     put_right(buf, area.x + 6, y, &r.lo, base.fg(theme::gutter()));
     put_right(buf, area.x + 12, y, &r.ln, base.fg(theme::gutter()));
-    put_trunc(
-        buf,
-        area.x + 14,
-        y,
-        area.right(),
-        &r.text,
-        base.fg(row_fg(r.kind)),
-    );
+    draw_line(buf, (area.x + 14, y), area.right(), prep, i, base);
+}
+
+/// One row's text: its sign, then its code in syntax colour with the words
+/// that changed reversed, cut with a `…` when it does not fit.
+///
+/// Syntax colour goes on context lines always, and on added and deleted ones
+/// only when the theme tints their ground. The terminal theme cannot, and
+/// there the green and red of the text are all that tell an addition from a
+/// deletion — colouring its keywords purple would take that away.
+///
+/// The changed words are reversed rather than given a ground of their own,
+/// which is what git's `diff-highlight` does: it reads in every theme, the
+/// terminal one included, without a role for "a stronger green".
+///
+/// `tinted` is whether the theme gives added and deleted lines a ground of
+/// their own, passed in rather than read here so a test can draw both ways.
+fn draw_line(buf: &mut Buffer, at: (u16, u16), max: u16, prep: &Prepared, i: usize, base: Style) {
+    draw_line_tinted(buf, at, max, prep, i, base, tints());
+}
+
+/// Whether the theme in force tints added and deleted lines.
+fn tints() -> bool {
+    theme::diff_add_bg() != theme::bg()
+}
+
+fn draw_line_tinted(
+    buf: &mut Buffer,
+    (x, y): (u16, u16),
+    max: u16,
+    prep: &Prepared,
+    i: usize,
+    base: Style,
+    tinted: bool,
+) {
+    let r = &prep.rows[i];
+    let ink = base.fg(row_fg(r.kind));
+    if r.kind == DiffKind::Hdr {
+        put_trunc(buf, x, y, max, &r.text, ink);
+        return;
+    }
+    let sign = r.text.get(..SIGN).unwrap_or("");
+    let x = put(buf, x, y, max, sign, ink);
+    let text = code(r);
+
+    let coloured = r.kind == DiffKind::Ctx || tinted;
+    let spans: &[Span] = if coloured {
+        prep.spans.get(i).map_or(&[], Vec::as_slice)
+    } else {
+        &[]
+    };
+    let word = prep.words.get(i).cloned().flatten();
+
+    // where the text has to stop to leave a column for the `…`
+    let room = max.saturating_sub(x) as usize;
+    let cut = if text.width() > room {
+        Some(fit(text, room.saturating_sub(1)))
+    } else {
+        None
+    };
+    let end = cut.unwrap_or(text.len());
+
+    // Every place the style can change, in order; between two of them it
+    // cannot, so each stretch is one `put`.
+    let mut marks = vec![0, end];
+    for s in spans {
+        marks.extend([s.from, s.to]);
+    }
+    if let Some(w) = &word {
+        marks.extend([w.start, w.end]);
+    }
+    marks.retain(|m| *m <= end && text.is_char_boundary(*m));
+    marks.sort_unstable();
+    marks.dedup();
+
+    let mut cx = x;
+    for pair in marks.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let mut style = spans
+            .iter()
+            .find(|s| s.from <= from && to <= s.to)
+            .map_or(ink, |s| base.fg(syntax_color(s.kind)));
+        if word
+            .as_ref()
+            .is_some_and(|w| w.start <= from && to <= w.end)
+        {
+            style = style.add_modifier(Modifier::REVERSED);
+        }
+        cx = put(buf, cx, y, max, &text[from..to], style);
+    }
+    if cut.is_some() {
+        put(buf, cx, y, max, "…", base.fg(theme::dimmer()));
+    }
+}
+
+/// The byte where `text` stops fitting in `cols` columns.
+fn fit(text: &str, cols: usize) -> usize {
+    let mut used = 0;
+    for (i, c) in text.char_indices() {
+        let w = c.width().unwrap_or(0);
+        if used + w > cols {
+            return i;
+        }
+        used += w;
+    }
+    text.len()
+}
+
+/// The explorer's colours, so a file reads the same in both places.
+fn syntax_color(kind: crate::shared::syntax::Kind) -> Color {
+    use crate::shared::syntax::Kind;
+    match kind {
+        Kind::Comment => theme::dimmer(),
+        Kind::Str => theme::green(),
+        Kind::Number => theme::orange(),
+        Kind::Keyword => theme::purple(),
+        Kind::Type => theme::cyan_soft(),
+    }
 }
 
 /// One side-by-side line.
@@ -466,7 +579,8 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, r: &DiffRow) {
 /// Reads its cells out of `rows` by index rather than being handed copies of
 /// them: the fold works in indices now, and cloning two strings per row per
 /// frame to hand them here was paying for the convenience twice.
-fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, rows: &[DiffRow]) {
+fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepared) {
+    let rows = &prep.rows;
     let half = area.width / 2;
     let left = Rect {
         x: area.x,
@@ -494,7 +608,7 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, rows: &[DiffRo
     // Each side shows its own file's number: a context line below an
     // insertion is line 5 on the left and 6 on the right.
     let side = |rect: Rect, at: Option<usize>, old: bool, buf: &mut Buffer| {
-        let Some(r) = at.and_then(|i| rows.get(i)) else {
+        let Some((i, r)) = at.and_then(|i| rows.get(i).map(|r| (i, r))) else {
             // the gap of an unbalanced pair gets a duller grey
             fill(buf, rect, theme::diff_void_bg());
             return;
@@ -504,14 +618,7 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, rows: &[DiffRo
         let base = Style::default().bg(bg);
         let num = if old { &r.lo } else { &r.ln };
         put_right(buf, rect.x + 5, y, num, base.fg(theme::gutter()));
-        put_trunc(
-            buf,
-            rect.x + 6,
-            y,
-            rect.right(),
-            &r.text,
-            base.fg(row_fg(r.kind)),
-        );
+        draw_line(buf, (rect.x + 6, y), rect.right(), prep, i, base);
     };
 
     side(left, p.left, true, buf);
@@ -586,12 +693,13 @@ mod tests {
         use ratatui::layout::Rect;
         let area = Rect::new(0, 0, w, h);
         let mut buf = Buffer::empty(area);
+        let prep = crate::app::prepared::prepare("", rows.to_vec());
         let pairs = if split { split_rows(rows) } else { Vec::new() };
         for row in 0..h.min(if split { pairs.len() } else { rows.len() } as u16) {
             if split {
-                draw_split_row(&mut buf, area, row, &pairs[row as usize], rows);
+                draw_split_row(&mut buf, area, row, &pairs[row as usize], &prep);
             } else {
-                draw_unified_row(&mut buf, area, row, &rows[row as usize]);
+                draw_unified_row(&mut buf, area, row, &prep, row as usize);
             }
         }
         (0..h)
@@ -631,5 +739,70 @@ mod tests {
         let out = rendered(&src, true, 60, 1);
         assert_eq!(out[0].matches("only").count(), 1, "one side only");
         assert!(out[0].contains('│'), "and the separator still divides them");
+    }
+
+    /// The style of each column of row 0, as `(symbol, fg, reversed)`.
+    fn cells(prep: &Prepared, tinted: bool) -> Vec<(String, Option<Color>, bool)> {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+        draw_line_tinted(&mut buf, (0, 0), 40, prep, 1, Style::default(), tinted);
+        (0..40)
+            .filter_map(|x| buf.cell((x, 0)))
+            .map(|c| {
+                let s = c.style();
+                (
+                    c.symbol().to_string(),
+                    s.fg,
+                    s.add_modifier.contains(Modifier::REVERSED),
+                )
+            })
+            .collect()
+    }
+
+    fn edit() -> Prepared {
+        crate::app::prepared::prepare(
+            "x.rs",
+            rows(&[
+                (DiffKind::Del, "- let n = total;"),
+                (DiffKind::Add, "+ let n = width;"),
+            ]),
+        )
+    }
+
+    #[test]
+    fn the_word_that_changed_is_reversed_and_the_rest_is_not() {
+        let c = cells(&edit(), true);
+        let reversed: String = c.iter().filter(|c| c.2).map(|c| c.0.as_str()).collect();
+        assert_eq!(reversed, "width");
+    }
+
+    #[test]
+    fn an_untinted_theme_keeps_an_added_line_all_green() {
+        // The terminal theme has no ground for an addition, so its green ink
+        // is what says "added" — syntax colour would take it away.
+        let c = cells(&edit(), false);
+        let text: Vec<_> = c.iter().filter(|c| c.0.trim() != "").collect();
+        assert!(text.iter().all(|c| c.1 == Some(theme::green())), "{c:?}");
+        // a tinted one colours the keyword
+        let c = cells(&edit(), true);
+        assert!(c.iter().any(|c| c.0 == "l" && c.1 != Some(theme::green())));
+    }
+
+    #[test]
+    fn a_line_too_long_for_its_room_ends_in_an_ellipsis() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        let prep = crate::app::prepared::prepare(
+            "",
+            rows(&[(DiffKind::Ctx, "  abcdefghijklmnopqrstuvwxyz")]),
+        );
+        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
+        draw_line_tinted(&mut buf, (0, 0), 10, &prep, 0, Style::default(), true);
+        let line: String = (0..10)
+            .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
+            .collect();
+        assert_eq!(line, "  abcdefg…");
     }
 }
