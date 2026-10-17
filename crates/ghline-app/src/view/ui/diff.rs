@@ -484,14 +484,15 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     let scroll = app.diff_scroll;
     let focused = app.pane == Pane::DiffBody;
     let query = app.diff_query.clone();
+    let pan = app.diff_pan;
 
     for row in 0..h.min(len.saturating_sub(scroll)) {
         let y = area.y + row as u16;
         let i = scroll + row;
         if split {
-            draw_split_row(buf, area, y, &pairs[i], prep, &query);
+            draw_split_row(buf, area, y, &pairs[i], prep, (&query, pan));
         } else {
-            draw_unified_row(buf, area, y, prep, i, &query);
+            draw_unified_row(buf, area, y, prep, i, (&query, pan));
         }
         if focused {
             put(
@@ -506,7 +507,14 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     }
 }
 
-fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: usize, query: &str) {
+fn draw_unified_row(
+    buf: &mut Buffer,
+    area: Rect,
+    y: u16,
+    prep: &Prepared,
+    i: usize,
+    (query, pan): (&str, usize),
+) {
     let r = &prep.rows[i];
     let bg = row_bg(r.kind);
     fill(
@@ -527,7 +535,12 @@ fn draw_unified_row(buf: &mut Buffer, area: Rect, y: u16, prep: &Prepared, i: us
         buf,
         (area.x + 14, y),
         area.right(),
-        Line { prep, i, query },
+        Line {
+            prep,
+            i,
+            query,
+            pan,
+        },
         base,
     );
 }
@@ -556,6 +569,8 @@ struct Line<'a> {
     prep: &'a Prepared,
     i: usize,
     query: &'a str,
+    /// Columns of code scrolled off the left.
+    pan: usize,
 }
 
 /// Whether the theme in force tints added and deleted lines.
@@ -567,7 +582,12 @@ fn draw_line_tinted(
     buf: &mut Buffer,
     (x, y): (u16, u16),
     max: u16,
-    Line { prep, i, query }: Line<'_>,
+    Line {
+        prep,
+        i,
+        query,
+        pan,
+    }: Line<'_>,
     base: Style,
     tinted: bool,
 ) {
@@ -589,10 +609,19 @@ fn draw_line_tinted(
     };
     let word = prep.words.get(i).cloned().flatten();
 
+    // Panned: the code starts `pan` columns in, and a `…` where it was cut
+    // says there is more to the left. Everything below is still counted in
+    // bytes from the start of the whole line, which is what the spans use.
+    let start = fit(text, pan);
+    let x = if start > 0 {
+        put(buf, x, y, max, "…", base.fg(theme::dimmer()))
+    } else {
+        x
+    };
     // where the text has to stop to leave a column for the `…`
     let room = max.saturating_sub(x) as usize;
-    let cut = if text.width() > room {
-        Some(fit(text, room.saturating_sub(1)))
+    let cut = if text[start..].width() > room {
+        Some(start + fit(&text[start..], room.saturating_sub(1)))
     } else {
         None
     };
@@ -600,7 +629,7 @@ fn draw_line_tinted(
 
     // Every place the style can change, in order; between two of them it
     // cannot, so each stretch is one `put`.
-    let mut marks = vec![0, end];
+    let mut marks = vec![start, end];
     for s in spans {
         marks.extend([s.from, s.to]);
     }
@@ -620,7 +649,7 @@ fn draw_line_tinted(
         marks.extend([m.start, m.end]);
         hits.push(m);
     }
-    marks.retain(|m| *m <= end && text.is_char_boundary(*m));
+    marks.retain(|m| (start..=end).contains(m) && text.is_char_boundary(*m));
     marks.sort_unstable();
     marks.dedup();
 
@@ -697,7 +726,14 @@ fn syntax_color(kind: crate::shared::syntax::Kind) -> Color {
 /// Reads its cells out of `rows` by index rather than being handed copies of
 /// them: the fold works in indices now, and cloning two strings per row per
 /// frame to hand them here was paying for the convenience twice.
-fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepared, query: &str) {
+fn draw_split_row(
+    buf: &mut Buffer,
+    area: Rect,
+    y: u16,
+    p: &Pair,
+    prep: &Prepared,
+    (query, pan): (&str, usize),
+) {
     let rows = &prep.rows;
     let half = area.width / 2;
     let left = Rect {
@@ -740,7 +776,12 @@ fn draw_split_row(buf: &mut Buffer, area: Rect, y: u16, p: &Pair, prep: &Prepare
             buf,
             (rect.x + 6, y),
             rect.right(),
-            Line { prep, i, query },
+            Line {
+                prep,
+                i,
+                query,
+                pan,
+            },
             base,
         );
     };
@@ -804,9 +845,9 @@ mod tests {
         let pairs = if split { split_rows(rows) } else { Vec::new() };
         for row in 0..h.min(if split { pairs.len() } else { rows.len() } as u16) {
             if split {
-                draw_split_row(&mut buf, area, row, &pairs[row as usize], &prep, "");
+                draw_split_row(&mut buf, area, row, &pairs[row as usize], &prep, ("", 0));
             } else {
-                draw_unified_row(&mut buf, area, row, &prep, row as usize, "");
+                draw_unified_row(&mut buf, area, row, &prep, row as usize, ("", 0));
             }
         }
         (0..h)
@@ -858,6 +899,7 @@ mod tests {
             prep,
             i: 1,
             query: "",
+            pan: 0,
         };
         draw_line_tinted(&mut buf, (0, 0), 40, line, Style::default(), tinted);
         (0..40)
@@ -915,6 +957,7 @@ mod tests {
             prep: &prep,
             i: 0,
             query: "",
+            pan: 0,
         };
         draw_line_tinted(&mut buf, (0, 0), 10, line, Style::default(), true);
         let line: String = (0..10)
@@ -930,5 +973,25 @@ mod tests {
             "…ws/backend.yaml"
         );
         assert_eq!(tail("short.rs", 16), "short.rs");
+    }
+
+    #[test]
+    fn a_panned_line_says_there_is_more_to_its_left() {
+        use ratatui::buffer::Buffer;
+        use ratatui::layout::Rect;
+        let prep =
+            crate::app::prepared::prepare("", rows(&[(DiffKind::Ctx, "  0123456789abcdef")]));
+        let mut buf = Buffer::empty(Rect::new(0, 0, 12, 1));
+        let line = Line {
+            prep: &prep,
+            i: 0,
+            query: "",
+            pan: 4,
+        };
+        draw_line_tinted(&mut buf, (0, 0), 12, line, Style::default(), true);
+        let shown: String = (0..12)
+            .filter_map(|x| buf.cell((x, 0)).map(|c| c.symbol().to_string()))
+            .collect();
+        assert_eq!(shown, "  …456789ab…");
     }
 }

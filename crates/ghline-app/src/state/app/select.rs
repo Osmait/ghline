@@ -487,6 +487,7 @@ impl App {
         // folds belong to the PR they were made in
         self.diff_folded.clear();
         self.diff_dir = None;
+        self.diff_pan = 0;
         self.file_idx = self.first_file();
         self.diff_scroll = 0;
         self.pane = Pane::Files;
