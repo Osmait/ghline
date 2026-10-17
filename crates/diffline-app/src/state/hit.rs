@@ -20,6 +20,8 @@ pub enum Target {
     Modal,
     /// The tab that shows the queue count while the queue is hidden.
     QueueTab,
+    /// One of the finder's tabs, by index into `FinderTab::ALL`.
+    FinderTab(usize),
 }
 
 pub type Region = crate::tui::hit::Region<Target>;
