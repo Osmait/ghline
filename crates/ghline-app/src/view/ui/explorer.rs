@@ -316,6 +316,8 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     // wrapped line spans several of. Finding the first row of the selected
     // line is what keeps the two in step.
     let height = body.height as usize;
+    // what `^d/^u` pages by, as the diff and the log record theirs
+    app.detail_height = body.height;
     let sel_line = sel_line_for_scroll.min(source.len().saturating_sub(1));
     let sel_row = rendered
         .iter()

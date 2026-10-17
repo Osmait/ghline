@@ -2282,6 +2282,24 @@ mod residue {
     }
 
     #[test]
+    fn half_a_page_down_in_the_diff_or_a_file_pages_rather_than_quitting() {
+        // Both footers offer `^d/^u`; neither pane was in the paging branch,
+        // so the keypress reached the quit beneath it.
+        let mut app = seeded();
+        app.detail_height = 20;
+        app.pane = Pane::DiffBody;
+        app.on_key(Press::ctrl(Key::Char('d')));
+        assert!(!app.should_quit);
+        assert_eq!(app.diff_scroll, 10);
+        app.on_key(Press::ctrl(Key::Char('u')));
+        assert_eq!(app.diff_scroll, 0);
+
+        app.pane = Pane::FileView;
+        app.on_key(Press::ctrl(Key::Char('d')));
+        assert!(!app.should_quit);
+    }
+
+    #[test]
     fn a_forced_repaint_is_the_main_loops_to_make() {
         // Ratatui writes only what differs between two buffers, so nothing
         // inside a frame can repaint a cell it believes is already right.
