@@ -9,39 +9,39 @@ expression: "frame(\"?\")"
 ▌ ⇅ #217   fix(layout): clamp the sideba┌─────────────────────────────────────────────────────────────────────────────┐                         open  ✗ checks  
 ▌          fix/sidebar-clamp · ada-examp│ KEYBINDINGS                                                    esc to close │                                         
   ⇅ #214   feat(finder): rank by subsequ├─────────────────────────────────────────────────────────────────────────────┤                         open  ✓ checks  
-           feat/fuzzy-rank · iris-exampl│         j / k  move in the pane                 ^c  quit                    │                                         
-  ⇅ #212   perf(render): reuse the cell │         h / l  pane left / right                 d  diff of the PR files    │                         open  ✓ checks  
-           perf/reuse-buffer · kai-examp│         g / G  top / bottom                      s  split / unified diff    │                                         
-  ⑂ #211   wip: split the reducer by vie│         1 2 3  Issues / PRs / Actions            w  ignore whitespace       │                        draft  ○ checks  
-           wip/split-reducer · noa-examp│         enter  enter the pane                { / }  previous / next hunk    │                                         
-  ⑃ #209   chore: drop the unused ansi c│       esc / q  back one level                J / K  next / previous file    │                       merged  ✓ checks  
-           chore/deps · noa-example · +8│             a  switch account                H / L  pan the diff            │                                         
-  ⇅ #207   fix(logs): keep the filter ac│             t  switch theme                  n / N  next / previous match   │                         open  ✓ checks  
-           fix/log-filter · eli-example │             b  hide / show repos             ( / )  previous / next comment │                                         
-  ⇅ #205   feat(diff): word-level highli│         [ / ]  previous / next repo              C  show / hide comments    │                         open  ◐ checks  
-           feat/word-diff · iris-example│             p  find repos, issues, P…            v  one commit of the PR    │                                         
-  ⇅ #202   docs: write down the key map │             o  fold a job or a folder            i  a note on this line     │                         open  ✓ checks  
-           docs/keymap · ada-example · +│             O  fold / open all                   X  drop the note here      │                                         
-  ⇅ #199   fix(finder): do not steal the│             /  filter / search diff              R  send the review         │                         open  ✗ checks  
-           fix/finder-esc · kai-example │             e  jump to first error              ^j  new line, in a note     │                                         
-  ⇅ #196   test: golden frames for the n│             f  toggle log follow               tab  next pane               │                         open  ✓ checks  
-           test/narrow · noa-example · +│             r  refresh                           m  merge the pull request  │                                         
-  ⇅ #193   refactor: move theming out of│             :  command line                      c  close / reopen the PR   │                         open  ✓ checks  
-           refactor/theme · iris-example│      :account  account picker                    D  delete the branch       │                                         
-  ⇅ #189   build: pin the toolchain [cho:issues :files…  jump to a tab                 y / n  confirm / cancel        │                       closed  ✓ checks  
-           build/pin · ada-example · +19│         :logs  open logs of selection        click  focus pane, select row  │                                         
-                                        │         :diff  open the diff              2x click  open it                 │                                         
-                                       :review :commits  send, or pick a commit        wheel  scroll under pointer    │                                         
-                                        │        :theme  theme picker                      4  the repo's files        │                                         
-                                        │      :sidebar  hide / show repos                 5  agents running here     │                                         
-                                        │         :find  the finder                        E  edit the file in $EDIT… │                                         
-                                        │             ?  this help                        ^l  repaint the screen      │                                         
-                                        │            :q  back to the list                  x  send this to an agent   │                                         
-                                        │       ^d / ^u  half page scroll        x then type  …and say something spe… │                                         
-                                        │       ^p / ^b  finder / hide repos                                          │                                         
+           feat/fuzzy-rank · iris-exampl│         j / k  move in the pane                  d  diff of the PR files    │                                         
+  ⇅ #212   perf(render): reuse the cell │         h / l  pane left / right                 s  split / unified diff    │                         open  ✓ checks  
+           perf/reuse-buffer · kai-examp│         g / G  top / bottom                      w  ignore whitespace       │                                         
+  ⑂ #211   wip: split the reducer by vie│         1 2 3  Issues / PRs / Actions        { / }  previous / next hunk    │                        draft  ○ checks  
+           wip/split-reducer · noa-examp│         enter  enter the pane                J / K  next / previous file    │                                         
+  ⑃ #209   chore: drop the unused ansi c│       esc / q  back one level                H / L  pan the diff            │                       merged  ✓ checks  
+           chore/deps · noa-example · +8│             a  switch account                n / N  next / previous match   │                                         
+  ⇅ #207   fix(logs): keep the filter ac│             t  switch theme                  ( / )  previous / next comment │                         open  ✓ checks  
+           fix/log-filter · eli-example │             b  hide / show repos                 C  show / hide comments    │                                         
+  ⇅ #205   feat(diff): word-level highli│         [ / ]  previous / next repo              v  one commit of the PR    │                         open  ◐ checks  
+           feat/word-diff · iris-example│             p  find repos, issues, P…            i  a note on this line     │                                         
+  ⇅ #202   docs: write down the key map │             o  fold a job or a folder            X  drop the note here      │                         open  ✓ checks  
+           docs/keymap · ada-example · +│             O  fold / open all                   R  send the review         │                                         
+  ⇅ #199   fix(finder): do not steal the│             /  filter / search diff             ^j  new line, in a note     │                         open  ✗ checks  
+           fix/finder-esc · kai-example │             e  jump to first error     tab / s-tab  next / previous pane    │                                         
+  ⇅ #196   test: golden frames for the n│             f  toggle log follow       PgUp / PgDn  a page up / down        │                         open  ✓ checks  
+           test/narrow · noa-example · +│             r  refresh                  tab, ^n/^p  finder: source / row    │                                         
+  ⇅ #193   refactor: move theming out of│             :  command line            1 2 3 · j/k  in a merge: the method  │                         open  ✓ checks  
+           refactor/theme · iris-example│      :account  account picker                    m  merge the pull request  │                                         
+  ⇅ #189   build: pin the toolchain [cho:issues :files…  jump to a tab                     c  close / reopen the PR   │                       closed  ✓ checks  
+           build/pin · ada-example · +19│         :logs  open logs of selection            D  delete the branch       │                                         
+                                        │         :diff  open the diff                 y / n  confirm / cancel        │                                         
+                                       :review :commits  send, or pick a commit        click  focus pane, select row  │                                         
+                                        │        :theme  theme picker               2x click  open it                 │                                         
+                                        │      :sidebar  hide / show repos             wheel  scroll under pointer    │                                         
+                                        │         :find  the finder                        4  the repo's files        │                                         
+                                        │             ?  this help                         5  agents running here     │                                         
+                                        │            :q  back to the list                  E  edit the file in $EDIT… │                                         
+                                        │       ^d / ^u  half page scroll                 ^l  repaint the screen      │                                         
+                                        │       ^p / ^b  finder / hide repos               x  send this to an agent   │                                         
+                                        │            ^c  quit                    x then type  …and say something spe… │                                         
                                         │                                                                             │                                         
                                         └─────────────────────────────────────────────────────────────────────────────┘                                         
-                                                                                                                                                                
                                                                                                                                                                 
                                                                                                                                                                 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
