@@ -2790,6 +2790,27 @@ mod diff_loading {
     }
 
     #[test]
+    fn a_diff_opened_before_its_files_lands_on_the_trees_first_once_they_come() {
+        let (mut app, repo, num) = bare();
+        ch(&mut app, 'd');
+        let file = |path: &str| DiffFile {
+            path: path.into(),
+            from: None,
+            hunks: vec![hunk()],
+        };
+        app.apply(Response::PrDiff {
+            repo,
+            num,
+            result: Ok(vec![file("z.rs"), file("src/a.rs")]),
+        });
+        assert_eq!(
+            app.diff_file().map(|f| f.path.as_str()),
+            Some("src/a.rs"),
+            "the folder comes first in the tree, not in the diff"
+        );
+    }
+
+    #[test]
     fn a_diff_that_arrives_before_the_file_list_still_fills_the_tree() {
         let (mut app, repo, num) = bare();
         app.apply(Response::PrDiff {

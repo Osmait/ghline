@@ -482,6 +482,7 @@ impl App {
                     Err(e) => (Load::from(e), None),
                 };
                 self.detail_state.insert((repo.clone(), num), state);
+                let was_empty = self.diff_files().is_empty();
                 if let Some((body, files, reviews)) = got
                     && let Some(it) = self.item_mut(&repo, 1, num)
                 {
@@ -500,6 +501,7 @@ impl App {
                         pr.reviews = reviews;
                     }
                 }
+                self.land_on_first_file(was_empty);
             }
 
             Response::Search {
@@ -546,6 +548,7 @@ impl App {
             Response::PrDiff { repo, num, result } => match result {
                 Ok(files) => {
                     self.diff_state.insert((repo.clone(), num), Load::Ready);
+                    let was_empty = self.diff_files().is_empty();
                     // match the hunks against the already-loaded file list, or
                     // stand in for it when the diff got here first; the
                     // detail fills in what only it knows when it arrives
@@ -560,6 +563,7 @@ impl App {
                             }
                         }
                     }
+                    self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
                     self.flash_warn(e.brief());
@@ -634,6 +638,17 @@ impl App {
 /// alone is unambiguous.
 fn is_it(item: &Item, repo: &str, num: i64) -> bool {
     item.num == num && (item.repo.is_empty() || item.repo == repo)
+}
+
+impl App {
+    /// A diff opened before its files were known picked "the first" of
+    /// nothing. When they arrive, it lands where opening it would have.
+    fn land_on_first_file(&mut self, was_empty: bool) {
+        if was_empty && self.view == View::Diff && !self.diff_files().is_empty() {
+            self.file_idx = self.first_file();
+            self.diff_scroll = 0;
+        }
+    }
 }
 
 /// A file list entry made from the diff alone, for when the diff arrives
