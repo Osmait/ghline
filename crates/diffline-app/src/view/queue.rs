@@ -11,6 +11,9 @@ use crate::tui::theme;
 use crate::tui::{Section, fill, hline, put, put_right, put_trunc, scroll_into_view};
 
 pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
+    use crate::keys::Action;
+    let key = |a: Action| app.keys.key_label(a).unwrap_or_else(|| ":".into());
+    let (pick, send_key, note_key) = (key(Action::Agents), key(Action::Send), key(Action::Note));
     Section::new("REVIEW QUEUE")
         .count(app.comments.len())
         .focused(app.pane == Pane::Queue)
@@ -36,7 +39,7 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
                 crate::shared::mux::AgentStatus::Unknown => theme::dimmer(),
             },
         ),
-        (None, None) => ("no agent — press a".into(), theme::dimmer()),
+        (None, None) => (format!("no agent — {pick} picks one"), theme::dimmer()),
     };
     put(buf, area.x + 1, foot_y, area.right(), "●", fs.fg(dot));
     put_trunc(
@@ -47,9 +50,11 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
         &who,
         fs.fg(theme::fg()),
     );
-    put_right(buf, area.right() - 1, foot_y, "a", fs.fg(theme::dimmer()));
+    put_right(buf, area.right() - 1, foot_y, &pick, fs.fg(theme::dimmer()));
 
-    let send = format!(" ⏎ S · send {} ", app.comments.len());
+    // the keys as the keymap has them — these said `a`, `S` and `c`, which
+    // stopped being the keys when they moved behind the leader
+    let send = format!(" {send_key} · send {} ", app.comments.len());
     let ready = !app.comments.is_empty();
     put(
         buf,
@@ -78,10 +83,10 @@ pub(super) fn queue(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     if app.comments.is_empty() && app.replies.is_empty() {
         for (n, line) in [
-            "No comments yet.",
-            "",
-            "Move to a line and press c.",
-            "V first to take a range.",
+            "No comments yet.".to_string(),
+            String::new(),
+            format!("Move to a line and press {note_key}."),
+            "V first to take a range.".to_string(),
         ]
         .iter()
         .enumerate()
