@@ -7,6 +7,7 @@ use ratatui::style::Style;
 use super::parts::{count_style, put_right_parts};
 use crate::app::{App, Pane};
 use crate::hit::{Region, Target};
+use crate::shared::icons::{file as file_icon, folder};
 use crate::shared::tree::Entry;
 use crate::tui::theme;
 use crate::tui::{Section, fill, put, put_trunc, scroll_into_view};
@@ -53,6 +54,9 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     }
     let focused = app.pane == Pane::Tree;
     let open = app.file_idx;
+    // the same glyphs ghline's tree and file explorer draw, in the style the
+    // config asks for — Nerd Font, plain, or none
+    let icons = crate::shared::config::file_icons();
 
     for (row, r) in tree.iter().enumerate().skip(app.tree_scroll) {
         let y = list.y + (row - app.tree_scroll) as u16;
@@ -108,7 +112,7 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
                 } else {
                     area.right()
                 };
-                let cx = put(
+                let mut cx = put(
                     buf,
                     x,
                     y,
@@ -116,6 +120,11 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
                     if r.folded { "▸ " } else { "▾ " },
                     base.fg(theme::cyan_soft()),
                 );
+                let icon = folder(icons, !r.folded);
+                if !icon.is_empty() {
+                    cx = put(buf, cx, y, area.right(), icon, base.fg(theme::cyan_soft()));
+                    cx = put(buf, cx, y, area.right(), " ", base);
+                }
                 put_trunc(
                     buf,
                     cx,
@@ -132,7 +141,16 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
                     crate::model::Status::Deleted => theme::red(),
                     _ => theme::cyan(),
                 };
-                let cx = put(buf, x, y, area.right(), f.status.mark(), base.fg(status_fg));
+                // The status letter sits in the column a folder's arrow does,
+                // so a file's icon lines up under its folder's, as in ghline.
+                let mut cx = put(buf, x, y, area.right(), f.status.mark(), base.fg(status_fg));
+                cx = put(buf, cx, y, area.right(), " ", base);
+                let icon = file_icon(icons, &f.path);
+                if !icon.is_empty() {
+                    let color = theme::lang(crate::shared::icons::language(&f.path));
+                    cx = put(buf, cx, y, area.right(), icon, base.fg(color));
+                    cx = put(buf, cx, y, area.right(), " ", base);
+                }
                 // A file with notes on it carries a dot, so the tree says
                 // where the work is without opening anything. The dot
                 // carries "this one has notes"; the counts carry what changed.
@@ -152,7 +170,7 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
                 let lit = sel || i == open;
                 put_trunc(
                     buf,
-                    cx + 1,
+                    cx,
                     y,
                     right.saturating_sub(1),
                     &r.label,
