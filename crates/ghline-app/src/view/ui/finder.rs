@@ -47,17 +47,28 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     // --- the sources
     let y = modal.y + 3;
     let mut x = modal.x + 2;
-    for s in Source::ALL {
+    for (i, s) in Source::ALL.into_iter().enumerate() {
         let active = s == app.finder_source;
         let style = if active {
             base.fg(theme::bright()).add_modifier(Modifier::BOLD)
         } else {
             base.fg(theme::dimmer())
         };
+        let from = x;
         if active {
             x = put(buf, x, y, inner_right, "▸ ", base.fg(theme::cyan()));
         }
         x = put(buf, x, y, inner_right, s.label(), style);
+        // each label a target of its own, as tab is: a click picks the source
+        app.hits.push(Region::plain(
+            Target::FinderSource(i),
+            Rect {
+                x: from,
+                y,
+                width: x.saturating_sub(from),
+                height: 1,
+            },
+        ));
         x = put(buf, x, y, inner_right, "   ", base);
     }
     put_right(buf, inner_right, y, "tab", base.fg(theme::dimmer()));

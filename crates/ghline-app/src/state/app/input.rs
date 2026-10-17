@@ -96,7 +96,12 @@ impl App {
             .iter()
             .position(|s| *s == self.finder_source)
             .unwrap_or(0) as i64;
-        self.finder_source = all[(i + d.step()).rem_euclid(all.len() as i64) as usize];
+        self.set_finder_source(all[(i + d.step()).rem_euclid(all.len() as i64) as usize]);
+    }
+
+    /// Searches `s` instead — by tab, or by a click on its label.
+    pub(super) fn set_finder_source(&mut self, s: crate::data::Source) {
+        self.finder_source = s;
         self.finder_sel = 0;
         self.finder_scroll = 0;
         self.finder_hits.clear();

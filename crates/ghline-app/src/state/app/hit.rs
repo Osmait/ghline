@@ -27,6 +27,8 @@ pub enum Target {
     Review,
     /// The help: a click inside it keeps it open.
     Help,
+    /// One of the finder's sources, by index into `Source::ALL`.
+    FinderSource(usize),
 }
 
 pub type Region = crate::tui::hit::Region<Target>;
