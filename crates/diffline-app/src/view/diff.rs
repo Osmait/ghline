@@ -55,8 +55,18 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
     );
     // The path gives way to the right-hand label rather than running under
     // it: knowing the blame is off matters more than the middle of a path.
+    // When it must give way it is cut from the left, keeping the file's name:
+    // cut from the right, two files of one folder read the same.
     let room = area.right().saturating_sub(right.width() as u16 + 1);
-    put_trunc(buf, x + 2, area.y, room, app.path(), hs.fg(theme::bright()));
+    let cols = room.saturating_sub(x + 2) as usize;
+    put_trunc(
+        buf,
+        x + 2,
+        area.y,
+        room,
+        &crate::tui::tail(app.path(), cols),
+        hs.fg(theme::bright()),
+    );
     put_right(
         buf,
         area.right(),
