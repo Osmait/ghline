@@ -46,9 +46,12 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
         hs.fg(theme::yellow()),
     );
     let right = format!(
-        " blame {} │ ctx ±{} ",
+        " blame {} │ ctx ±{}{} ",
         if app.blame_on { "on" } else { "off" },
-        app.context
+        app.context,
+        // said only while it is on: a diff with whitespace left out is not
+        // the whole diff, and it should not be mistaken for one
+        if app.ignore_ws { " │ ws ignored" } else { "" }
     );
     // The path gives way to the right-hand label rather than running under
     // it: knowing the blame is off matters more than the middle of a path.

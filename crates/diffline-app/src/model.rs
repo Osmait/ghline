@@ -198,6 +198,17 @@ pub struct Row {
     pub text: String,
 }
 
+/// How a file's diff is asked of the version control: how many lines of
+/// context either side, and whether changes of whitespace alone count.
+///
+/// One value rather than two arguments because an answer is stale when either
+/// has moved on since it was asked, and the check is one comparison.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DiffOpts {
+    pub context: u32,
+    pub ignore_ws: bool,
+}
+
 /// Which words changed on each edited row, by byte range in its text.
 ///
 /// A run of deletions followed straight away by a run of additions is an

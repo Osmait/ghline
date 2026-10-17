@@ -189,6 +189,8 @@ pub struct App {
     pub anchor: Option<usize>,
     /// Lines of context either side, as `git diff -U<n>`.
     pub context: u32,
+    /// Whether changes of whitespace alone are left out (`␣w`).
+    pub ignore_ws: bool,
     pub blame_on: bool,
     pub blame: HashMap<String, Vec<String>>,
     pub blame_state: HashMap<String, Load>,
@@ -299,6 +301,7 @@ impl App {
             diff_scroll: 0,
             anchor: None,
             context: 3,
+            ignore_ws: false,
             blame_on: false,
             blame: HashMap::new(),
             blame_state: HashMap::new(),
@@ -343,6 +346,14 @@ impl App {
     pub fn file(&self) -> Option<&ChangedFile> {
         self.files
             .get(self.file_idx.min(self.files.len().saturating_sub(1)))
+    }
+
+    /// How the open diff is asked for, as one value an answer is checked by.
+    pub fn opts(&self) -> crate::model::DiffOpts {
+        crate::model::DiffOpts {
+            context: self.context,
+            ignore_ws: self.ignore_ws,
+        }
     }
 
     pub fn path(&self) -> &str {
@@ -579,7 +590,7 @@ impl App {
             repo: self.repo.clone(),
             scope: self.scope.clone(),
             path: self.path().to_string(),
-            context: self.context,
+            opts: self.opts(),
         }) {
             self.refreshing = false;
         }
@@ -609,7 +620,7 @@ impl App {
                 repo: self.repo.clone(),
                 scope: self.scope.clone(),
                 path: path.clone(),
-                context: self.context,
+                opts: self.opts(),
             });
             if !sent {
                 self.rows_state.insert(path, Self::gone());
@@ -675,13 +686,9 @@ impl App {
                 }
             }
 
-            Response::Diff {
-                path,
-                context,
-                result,
-            } => {
+            Response::Diff { path, opts, result } => {
                 // The context may have moved on while this was in flight.
-                if context != self.context {
+                if opts != self.opts() {
                     self.rows_state.insert(path, Load::Idle);
                     return;
                 }
@@ -706,7 +713,7 @@ impl App {
             Response::Refresh {
                 scope,
                 path,
-                context,
+                opts,
                 files,
                 diff,
             } => {
@@ -744,7 +751,7 @@ impl App {
                         self.blame_state.retain(|cached, _| cached == &current);
                     }
 
-                    if context == self.context
+                    if opts == self.opts()
                         && path == self.path()
                         && let Some(result) = diff
                     {
@@ -1051,7 +1058,10 @@ mod tests {
         a.context = 9;
         a.apply(Response::Diff {
             path: "src/a.rs".into(),
-            context: 3,
+            opts: crate::model::DiffOpts {
+                context: 3,
+                ignore_ws: false,
+            },
             result: Ok((Vec::new(), Vec::new())),
         });
         assert_eq!(
@@ -1060,6 +1070,21 @@ mod tests {
             "so `ensure` fetches the width that is now wanted"
         );
         assert_eq!(a.diff_rows().len(), 5, "and the old rows still stand");
+    }
+
+    #[test]
+    fn an_answer_from_before_the_whitespace_rule_changed_is_asked_for_again() {
+        let mut a = app();
+        a.ignore_ws = true;
+        a.apply(Response::Diff {
+            path: "src/a.rs".into(),
+            opts: crate::model::DiffOpts {
+                context: 3,
+                ignore_ws: false,
+            },
+            result: Ok((Vec::new(), Vec::new())),
+        });
+        assert_eq!(a.rows_state.get("src/a.rs"), Some(&Load::Idle));
     }
 
     #[test]
@@ -1085,14 +1110,11 @@ mod tests {
         }];
         a.service = Some(Box::new(Immediate::new(move |req| match req {
             Request::Refresh {
-                scope,
-                path,
-                context,
-                ..
+                scope, path, opts, ..
             } => Response::Refresh {
                 scope,
                 path,
-                context,
+                opts,
                 files: Ok(vec![
                     ChangedFile {
                         path: "src/new.rs".into(),
@@ -1134,16 +1156,13 @@ mod tests {
         let mut a = app();
         a.service = Some(Box::new(Immediate::new(move |req| match req {
             Request::Refresh {
-                scope,
-                path,
-                context,
-                ..
+                scope, path, opts, ..
             } => {
                 seen.set(seen.get() + 1);
                 Response::Refresh {
                     scope,
                     path,
-                    context,
+                    opts,
                     files: Ok(Vec::new()),
                     diff: Some(Ok((Vec::new(), Vec::new()))),
                 }

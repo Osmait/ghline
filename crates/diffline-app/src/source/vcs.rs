@@ -19,7 +19,7 @@
 //! whether it can — the same shape as `Multiplexer::detects_status`, and for
 //! the same reason: not knowing is not the same as knowing there is nobody.
 
-use crate::model::{ChangedFile, LogEntry, Row, Scope};
+use crate::model::{ChangedFile, DiffOpts, LogEntry, Row, Scope};
 use crate::shared::error::Result as Res;
 
 /// Something that can be asked what changed.
@@ -48,7 +48,7 @@ pub trait Vcs: Sync + 'static {
     fn changed_files(&self, repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>>;
 
     /// One file's diff, at `context` lines either side, as rows.
-    fn file_diff(&self, repo: &str, scope: &Scope, path: &str, context: u32) -> Res<Vec<Row>>;
+    fn file_diff(&self, repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<Vec<Row>>;
 
     /// The last `limit` commits reaching the checkout, newest first.
     ///
@@ -116,7 +116,7 @@ mod tests {
         fn changed_files(&self, _repo: &str, _scope: &Scope) -> Res<Vec<ChangedFile>> {
             Ok(Vec::new())
         }
-        fn file_diff(&self, _r: &str, _s: &Scope, _p: &str, _c: u32) -> Res<Vec<Row>> {
+        fn file_diff(&self, _r: &str, _s: &Scope, _p: &str, _o: DiffOpts) -> Res<Vec<Row>> {
             Ok(Vec::new())
         }
         fn log(&self, _repo: &str, _limit: usize) -> Res<Vec<LogEntry>> {
