@@ -2472,3 +2472,106 @@ mod note {
         assert!(!app.dispatch_open);
     }
 }
+
+mod file_tree {
+    use super::*;
+    use crate::app::files::Entry;
+
+    /// The fixture's PR diff, open: `src/layout/` (mod.rs, solver.rs),
+    /// `tests/` (layout.rs) and `CHANGELOG.md`.
+    fn diff() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        assert_eq!(app.view, View::Diff);
+        app
+    }
+
+    fn shown(app: &App) -> String {
+        app.diff_file().map(|f| f.path.clone()).unwrap_or_default()
+    }
+
+    fn cursor(app: &App) -> Entry {
+        let rows = app.file_rows();
+        rows[app.file_row(&rows)].entry.clone()
+    }
+
+    #[test]
+    fn the_diff_opens_on_the_first_file_the_tree_shows() {
+        let app = diff();
+        assert_eq!(shown(&app), "src/layout/mod.rs");
+        assert_eq!(app.file_ordinal(), 0);
+    }
+
+    #[test]
+    fn h_on_a_file_folds_its_folder_and_the_diff_keeps_the_file() {
+        let mut app = diff();
+        press(&mut app, Key::Char('h'));
+        assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
+        assert!(app.diff_folded.contains("src/layout"));
+        assert_eq!(shown(&app), "src/layout/mod.rs", "still reading it");
+        let labels: Vec<String> = app.file_rows().into_iter().map(|r| r.label).collect();
+        assert_eq!(labels, ["src/layout", "tests", "layout.rs", "CHANGELOG.md"]);
+
+        press(&mut app, Key::Char('l'));
+        assert!(app.diff_folded.is_empty(), "l opens it again");
+        assert_eq!(app.pane, Pane::Files, "and stays in the tree");
+    }
+
+    #[test]
+    fn moving_past_a_folded_folder_skips_what_is_inside_it() {
+        let mut app = diff();
+        press(&mut app, Key::Char('h'));
+        press(&mut app, Key::Char('j'));
+        assert_eq!(cursor(&app), Entry::Dir("tests".into()));
+        press(&mut app, Key::Char('j'));
+        assert_eq!(shown(&app), "tests/layout.rs");
+    }
+
+    #[test]
+    fn enter_folds_a_folder_and_opens_a_file() {
+        let mut app = diff();
+        press(&mut app, Key::Char('k'));
+        assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
+        press(&mut app, Key::Enter);
+        assert!(app.diff_folded.contains("src/layout"));
+        press(&mut app, Key::Enter);
+        assert!(app.diff_folded.is_empty());
+        assert_eq!(app.pane, Pane::Files);
+
+        press(&mut app, Key::Char('j'));
+        press(&mut app, Key::Enter);
+        assert_eq!(app.pane, Pane::DiffBody, "a file opens its diff");
+    }
+
+    #[test]
+    fn capital_o_folds_everything_then_opens_everything() {
+        let mut app = diff();
+        press(&mut app, Key::Char('O'));
+        let labels: Vec<String> = app.file_rows().into_iter().map(|r| r.label).collect();
+        assert_eq!(labels, ["src/layout", "tests", "CHANGELOG.md"]);
+        assert_eq!(cursor(&app), Entry::Dir("src/layout".into()));
+        press(&mut app, Key::Char('O'));
+        assert!(app.diff_folded.is_empty());
+    }
+
+    #[test]
+    fn a_file_at_the_top_has_nothing_to_fold() {
+        let mut app = diff();
+        press(&mut app, Key::Char('G'));
+        assert_eq!(shown(&app), "CHANGELOG.md");
+        press(&mut app, Key::Char('h'));
+        assert!(app.diff_folded.is_empty());
+    }
+
+    #[test]
+    fn folds_do_not_follow_you_into_another_pull_request() {
+        let mut app = diff();
+        press(&mut app, Key::Char('O'));
+        press(&mut app, Key::Esc);
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        assert!(app.diff_folded.is_empty());
+    }
+}

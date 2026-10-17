@@ -5,9 +5,11 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 
+use crate::app::files::Entry;
 use crate::app::hit::{Region, Target};
 use crate::app::{App, Pane};
 use crate::data::{DiffKind, DiffRow};
+use crate::shared::icons::{file as icon_file, folder};
 use crate::tui::diff::{Pair, Side, pair};
 use crate::tui::theme;
 use crate::tui::{fill, hline, pct, put, put_right, put_trunc, scroll_into_view, skel_bar, vline};
@@ -118,8 +120,9 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         Style::default().bg(theme::panel()).fg(theme::dimmer()),
     );
 
-    let sel = app.file_idx();
-    let len = app.diff_files().len();
+    let tree = app.file_rows();
+    let len = tree.len();
+    let sel = app.file_row(&tree);
     if len == 0 && app.diff_status().is_loading() {
         let avail = area.width.saturating_sub(14);
         let names = [58, 44, 70, 50, 38, 62];
@@ -153,14 +156,15 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         len,
     ));
     let focused = app.pane == Pane::Files;
+    let icon_style = crate::shared::config::file_icons();
+    let shown = app.file_idx();
 
-    for (row, i) in (scroll..len).enumerate() {
-        if row >= list_h {
+    for (row, r) in tree.iter().enumerate().skip(scroll) {
+        if row - scroll >= list_h {
             break;
         }
-        let y = area.y + 2 + row as u16;
-        let f = &app.diff_files()[i];
-        let selected = i == sel;
+        let y = area.y + 2 + (row - scroll) as u16;
+        let selected = row == sel;
         let bg = if selected {
             theme::sel()
         } else {
@@ -186,26 +190,73 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
             put(buf, area.x, y, area.right(), "▌", base.fg(mark));
         }
 
-        // counts on the right; the name on the left, with its directory in
-        // grey so the file itself stands out
-        let del_x = put_right(buf, area.right() - 1, y, &f.del, base.fg(theme::red()));
-        let add_x = put_right(buf, del_x - 1, y, &f.add, base.fg(theme::green()));
+        // The counts on the right. An open folder leaves them to the files
+        // under it, which are right there; a folded one stands in for them.
+        let dir = matches!(r.entry, Entry::Dir(_));
+        let counts = !dir || r.folded;
+        let mut right = area.right() - 1;
+        if counts {
+            let del_x = put_right(buf, right, y, &format!("-{}", r.del), base.fg(theme::red()));
+            right = put_right(
+                buf,
+                del_x - 1,
+                y,
+                &format!("+{}", r.add),
+                base.fg(theme::green()),
+            );
+        }
+        if dir && r.folded {
+            right = put_right(
+                buf,
+                right - 1,
+                y,
+                &format!(
+                    "{} {}",
+                    r.files,
+                    if r.files == 1 { "file" } else { "files" }
+                ),
+                base.fg(theme::dimmer()),
+            );
+        }
 
-        let (dir, name) = match f.path.rfind('/') {
-            Some(i) => f.path.split_at(i + 1),
-            None => ("", f.path.as_str()),
+        // Two columns a level, but never so deep the name has no room: a
+        // PR's tree is rarely more than five levels and a pane is 38 wide.
+        let indent = (r.depth as u16 * 2).min(area.width.saturating_sub(16));
+        let mut x = area.x + 2 + indent;
+        let (arrow, icon) = match &r.entry {
+            Entry::Dir(_) => (
+                if r.folded { "▸" } else { "▾" },
+                folder(icon_style, !r.folded),
+            ),
+            Entry::File(_) => (" ", ""),
         };
-        let fg = if selected {
-            theme::bright()
-        } else {
-            theme::fg()
+        // a file keeps the arrow's column blank, as in the repository's own
+        // tree, so it lines up under its folder's name and not its arrow
+        x = put(buf, x, y, area.right(), arrow, base.fg(theme::cyan_soft()));
+        let icon = match &r.entry {
+            Entry::File(i) => app
+                .diff_files()
+                .get(*i)
+                .map_or("", |f| icon_file(icon_style, &f.path)),
+            Entry::Dir(_) => icon,
         };
-        let max = add_x.saturating_sub(1);
-        // when it does not all fit, the directory is cut before the name
-        let name_w = name.chars().count() as u16;
-        let dir_max = max.saturating_sub(name_w).max(area.x + 2);
-        let cx = put_trunc(buf, area.x + 2, y, dir_max, dir, base.fg(theme::dimmer()));
-        put_trunc(buf, cx, y, max, name, base.fg(fg));
+        if !icon.is_empty() {
+            let color = match &r.entry {
+                Entry::File(i) => app.diff_files().get(*i).map_or(theme::dimmer(), |f| {
+                    theme::lang(crate::shared::icons::language(&f.path))
+                }),
+                Entry::Dir(_) => theme::cyan_soft(),
+            };
+            x = put(buf, x, y, area.right(), icon, base.fg(color));
+            x = put(buf, x, y, area.right(), " ", base);
+        }
+        let (label, fg) = match r.entry {
+            Entry::Dir(_) => (format!("{}/", r.label), theme::cyan_soft()),
+            // the file on show stays lit while the cursor is elsewhere
+            Entry::File(i) if selected || i == shown => (r.label.clone(), theme::bright()),
+            Entry::File(_) => (r.label.clone(), theme::fg()),
+        };
+        put_trunc(buf, x, y, right.saturating_sub(1), &label, base.fg(fg));
     }
 }
 

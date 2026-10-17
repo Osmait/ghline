@@ -472,10 +472,7 @@ impl App {
                 let i = step(self.tree_sel, d, self.flat_tree().len());
                 self.select_in(pane, i);
             }
-            Pane::Files => {
-                let i = step(self.file_idx, d, self.diff_files().len());
-                self.select_in(pane, i);
-            }
+            Pane::Files => self.move_file_row(d),
             Pane::Agents => {
                 let i = step(self.agent_sel, d, self.agents_visible().len());
                 self.select_in(pane, i);
@@ -524,10 +521,7 @@ impl App {
                 self.tree_sel = i;
                 self.log_scroll = 0;
             }
-            Pane::Files => {
-                self.file_idx = i;
-                self.diff_scroll = 0;
-            }
+            Pane::Files => self.select_file_row(i),
             Pane::Agents => self.agent_sel = i,
             Pane::FileTree => {
                 self.fs_sel = i;
@@ -594,8 +588,8 @@ impl App {
             // the tree leads to the output and the file list to the diff
             // itself; the body opens the PR's diff
             Pane::Tree => self.pane = Pane::Log,
-            Pane::Files => self.pane = Pane::DiffBody,
-            Pane::Body => self.open_diff(0),
+            Pane::Files => self.enter_file_row(),
+            Pane::Body => self.open_diff(),
             // `enter` on a directory opens it; on a file it moves to the
             // contents, which is the only place left to go
             Pane::FileTree => match self.fs_current().map(|e| (e.is_dir, e.path.clone())) {
@@ -682,7 +676,7 @@ impl App {
                 self.view = View::Logs;
                 self.pane = Pane::Tree;
             }
-            "diff" | "files" => self.open_diff(0),
+            "diff" | "files" => self.open_diff(),
             "theme" | "themes" => self.open_themes(),
             "sidebar" | "repos" => self.toggle_sidebar(),
             "find" | "search" => self.open_finder(),
@@ -866,6 +860,10 @@ impl App {
         match press.key {
             Key::Char('j') | Key::Down => self.move_by(1),
             Key::Char('k') | Key::Up => self.move_by(-1),
+            // on the file tree `h`/`l` fold and open first, as in any tree,
+            // and only move between panes when there is nothing to fold
+            Key::Char('h') | Key::Left if self.pane == Pane::Files && self.fold_left() => {}
+            Key::Char('l') | Key::Right if self.pane == Pane::Files && self.unfold_right() => {}
             Key::Char('h') | Key::Left => self.focus_by(Dir::Prev, false),
             Key::Char('l') | Key::Right => self.focus_by(Dir::Next, false),
             Key::Tab => self.focus_by(Dir::Next, true),
@@ -899,7 +897,7 @@ impl App {
             Key::PageDown => self.page_by(1),
             Key::PageUp => self.page_by(-1),
             Key::Char('d') if self.actionable_pr() && self.view != View::Diff => {
-                self.open_diff(0);
+                self.open_diff();
             }
             Key::Char('s') if self.view == View::Diff => {
                 self.split = !self.split;
@@ -926,6 +924,8 @@ impl App {
             }
             Key::Char('x') => self.open_dispatch(),
             Key::Char('E') => self.open_in_editor(),
+            Key::Char('o') if self.pane == Pane::Files => self.toggle_cursor_folder(),
+            Key::Char('O') if self.pane == Pane::Files => self.toggle_all_folders(),
             Key::Char('o') if self.pane == Pane::FileTree => {
                 if let Some((true, path)) = self.fs_current().map(|e| (e.is_dir, e.path.clone()))
                     && !self.fs_open.remove(&path)

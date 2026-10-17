@@ -173,8 +173,23 @@ incidentally, keeps the byte offsets a colour span is written in.
 ## Files and diff
 
 `d` on a pull request opens the diff view: the changed files with their counts
-on the left, the contents on the right. `j`/`k` walks the files, `l` moves to
+on the left, the contents on the right. `j`/`k` walks the files, `enter` moves to
 the diff and `j`/`k` scrolls it there.
+
+The files are a folder tree, laid out as GitHub lays it out: folders before
+files at every level, and a folder that holds nothing but another folder joined
+into one row (`internal/platform/`). A big PR is mostly read by where it lands,
+so a folder can be folded out of the way once it has been read:
+
+- `enter` on a folder folds or opens it; on a file it moves into the diff.
+- `h` folds the folder the cursor is in, and `l` opens a folded one. At the top
+  level, with nothing to fold, they move between the panes as everywhere else.
+- `o` folds or opens the folder the cursor is in; `O` folds everything, or
+  opens everything if anything is folded.
+- A folded folder shows how many files are under it and their counts summed.
+
+While the cursor is on a folder the diff keeps the last file opened, which is
+the one still being read. Folds belong to the PR they were made in.
 
 - `s` switches between the unified diff (two numbering columns, original and
   new) and the split one (deletions left, additions right).
@@ -292,7 +307,8 @@ thing off if you would rather have it back.
 | `b` `^b` | hide / show the repository pane |
 | `[` `]` | previous / next repository |
 | `p` `^p` | the finder |
-| `o` | fold / unfold a job (in the logs) |
+| `o` | fold / unfold a job (in the logs) or a folder (in the diff's files) |
+| `O` | fold / unfold every folder (in the diff's files) |
 | `/` | filter (list or log) |
 | `e` | jump to the first error in the log |
 | `f` | toggle the log's *follow* mode |
