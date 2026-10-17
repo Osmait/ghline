@@ -2300,9 +2300,10 @@ mod residue {
         app.pane = Pane::DiffBody;
         app.on_key(Press::ctrl(Key::Char('d')));
         assert!(!app.should_quit);
-        assert_eq!(app.diff_scroll, 10);
+        // the cursor moves half a page; the render brings the view along
+        assert_eq!(app.diff_cursor, 10);
         app.on_key(Press::ctrl(Key::Char('u')));
-        assert_eq!(app.diff_scroll, 0);
+        assert_eq!(app.diff_cursor, 0);
 
         app.pane = Pane::FileView;
         app.on_key(Press::ctrl(Key::Char('d')));
@@ -3065,5 +3066,55 @@ mod commits {
         app.pane = Pane::List;
         ch(&mut app, 'd');
         assert_eq!(app.diff_commit, None);
+    }
+}
+
+mod diff_cursor {
+    use super::*;
+
+    fn reading() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        app
+    }
+
+    #[test]
+    fn j_moves_the_cursor_and_a_new_file_starts_it_at_the_top() {
+        let mut app = reading();
+        ch(&mut app, 'j');
+        ch(&mut app, 'j');
+        assert_eq!(app.diff_cursor, 2);
+        ch(&mut app, 'J');
+        assert_eq!(app.diff_cursor, 0);
+    }
+
+    #[test]
+    fn a_search_hit_puts_the_cursor_on_its_line() {
+        let mut app = reading();
+        ch(&mut app, '/');
+        for c in "debug_assert".chars() {
+            ch(&mut app, c);
+        }
+        press(&mut app, Key::Enter);
+        let hit = app.diff_hit.expect("a hit");
+        assert_eq!(app.cursor_row(), hit.row);
+    }
+
+    #[test]
+    fn switching_to_split_keeps_the_cursor_on_the_same_line_of_code() {
+        let mut app = reading();
+        for _ in 0..4 {
+            ch(&mut app, 'j');
+        }
+        let row = app.cursor_row();
+        let text = app.prepared().rows[row].text.clone();
+        ch(&mut app, 's');
+        let after = app.cursor_row();
+        assert_eq!(app.prepared().rows[after].text, text);
+        ch(&mut app, 's');
+        assert_eq!(app.cursor_row(), row, "and back");
     }
 }

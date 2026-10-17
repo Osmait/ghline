@@ -423,8 +423,13 @@ impl App {
                 self.detail_scroll = 0;
                 self.log_scroll = 0;
                 self.diff_scroll = 0;
+                self.diff_cursor = 0;
             }
-            Pane::DiffBody => self.diff_scroll = usize::MAX,
+            // the render clamps both to the last line
+            Pane::DiffBody => {
+                self.diff_scroll = usize::MAX;
+                self.diff_cursor = usize::MAX;
+            }
             // the real limit is applied by the render, which knows the length
             Pane::Body => self.detail_scroll = usize::MAX,
             Pane::Log => {
@@ -493,8 +498,9 @@ impl App {
                 self.follow = false;
                 self.log_scroll = (self.log_scroll as i64 + d).max(0) as usize;
             }
+            // the cursor moves and the render brings the view along
             Pane::DiffBody => {
-                self.diff_scroll = (self.diff_scroll as i64 + d).max(0) as usize;
+                self.diff_cursor = (self.diff_cursor as i64 + d).max(0) as usize;
             }
         }
     }
@@ -953,13 +959,11 @@ impl App {
             Key::Char('d') if self.actionable_pr() && self.view != View::Diff => {
                 self.open_diff();
             }
-            Key::Char('s') if self.view == View::Diff => {
-                self.split = !self.split;
-                self.diff_scroll = 0;
-            }
+            Key::Char('s') if self.view == View::Diff => self.toggle_split(),
             Key::Char('w') if self.view == View::Diff => {
                 self.ws = !self.ws;
                 self.diff_scroll = 0;
+                self.diff_cursor = 0;
             }
             Key::Char('f') => self.follow = !self.follow,
             Key::Char('r') => {

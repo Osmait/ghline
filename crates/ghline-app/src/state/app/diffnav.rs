@@ -64,6 +64,7 @@ impl App {
         self.file_idx = idx;
         self.diff_dir = None;
         self.diff_scroll = 0;
+        self.diff_cursor = 0;
         self.diff_pan = 0;
     }
 
@@ -167,7 +168,7 @@ impl App {
     /// files either side as `}` does. Asking for comments shows them.
     pub(super) fn step_thread(&mut self, forward: bool) {
         self.diff_notes = true;
-        let here = self.diff_scroll + Self::ABOVE;
+        let here = self.diff_cursor;
         let lines = self.thread_lines();
         let found = if forward {
             lines.iter().find(|l| **l > here).copied()
@@ -175,7 +176,7 @@ impl App {
             lines.iter().rev().find(|l| **l < here).copied()
         };
         if let Some(l) = found {
-            self.diff_scroll = l.saturating_sub(Self::ABOVE);
+            self.land(l, Self::ABOVE);
             return;
         }
         // the nearest file on that side with a thread in it
@@ -205,7 +206,7 @@ impl App {
         self.show_file(i);
         let lines = self.thread_lines();
         let line = if forward { lines.first() } else { lines.last() };
-        self.diff_scroll = line.map_or(0, |l| l.saturating_sub(Self::ABOVE));
+        self.land(line.copied().unwrap_or(0), Self::ABOVE);
     }
 
     /// `v`: the commit picker, on the row of what the diff is showing now.
@@ -244,22 +245,24 @@ impl App {
         self.diff_pan = 0;
         self.file_idx = self.first_file();
         self.diff_scroll = 0;
+        self.diff_cursor = 0;
     }
 
-    /// The furthest the pane can scroll, which is where the render clamps to.
-    fn max_scroll(&self, len: usize) -> usize {
-        len.saturating_sub(self.detail_height.max(1) as usize)
+    /// Puts the cursor on `line` with `above` lines of context over it — as
+    /// many as there are, and never so many the end of the file is passed.
+    fn land(&mut self, line: usize, above: usize) {
+        self.diff_cursor = line;
+        self.diff_scroll = line.saturating_sub(above);
     }
 
-    /// `}`: the next hunk at the top of the pane. Past the last one — or once
-    /// the pane is at its end and every hunk left is already on screen — it
-    /// carries on into the next file, so a PR reads straight through.
+    /// `}`: the cursor to the next hunk, at the top of the pane. Past the
+    /// last one it carries on into the next file, so a PR reads straight
+    /// through.
     pub(super) fn next_hunk(&mut self) {
-        let (len, starts) = self.hunk_lines();
-        let scroll = self.diff_scroll.min(self.max_scroll(len));
-        match starts.iter().find(|s| **s > scroll) {
-            Some(&s) if scroll < self.max_scroll(len) => self.diff_scroll = s,
-            _ => {
+        let (_, starts) = self.hunk_lines();
+        match starts.iter().find(|s| **s > self.diff_cursor) {
+            Some(&s) => self.land(s, 0),
+            None => {
                 if !self.step_file(1) {
                     self.flash_ok("last file");
                 }
@@ -269,17 +272,51 @@ impl App {
 
     /// `{`: the previous hunk; from the top of a file, the file before it.
     pub(super) fn prev_hunk(&mut self) {
-        let (len, starts) = self.hunk_lines();
-        let scroll = self.diff_scroll.min(self.max_scroll(len));
-        match starts.iter().rev().find(|s| **s < scroll) {
-            Some(&s) => self.diff_scroll = s,
-            None if scroll > 0 => self.diff_scroll = 0,
+        let (_, starts) = self.hunk_lines();
+        match starts.iter().rev().find(|s| **s < self.diff_cursor) {
+            Some(&s) => self.land(s, 0),
+            None if self.diff_cursor > 0 => self.land(0, 0),
             None => {
                 if !self.step_file(-1) {
                     self.flash_ok("first file");
                 }
             }
         }
+    }
+
+    /// `s`: the other layout, with the cursor kept on the same line of code —
+    /// rows and pairs are counted differently, so it is carried across rather
+    /// than kept as a number that would now mean somewhere else.
+    pub(super) fn toggle_split(&mut self) {
+        let row = self.cursor_row();
+        self.split = !self.split;
+        let line = self.line_of_row(row);
+        self.land(line, self.detail_height as usize / 3);
+    }
+
+    /// The unified row the cursor is on.
+    pub(super) fn cursor_row(&mut self) -> usize {
+        if !self.split {
+            return self.diff_cursor;
+        }
+        let prep = self.prepared();
+        let pairs = split_rows(&prep.rows);
+        pairs
+            .get(self.diff_cursor)
+            .and_then(|p| [p.header, p.left, p.right].into_iter().flatten().min())
+            .unwrap_or(0)
+    }
+
+    /// The line, in the mode on screen, that unified `row` is drawn on.
+    fn line_of_row(&mut self, row: usize) -> usize {
+        if !self.split {
+            return row;
+        }
+        let prep = self.prepared();
+        split_rows(&prep.rows)
+            .iter()
+            .position(|p| [p.header, p.left, p.right].contains(&Some(row)))
+            .unwrap_or(0)
     }
 
     /// A file's rows as the pane would number them: `w` applied and its
@@ -291,32 +328,11 @@ impl App {
         file_rows(f, self.ws, &self.threads_on(&f.path), self.notes())
     }
 
-    /// The unified row the top of the pane is on.
-    fn top_row(&mut self) -> usize {
-        if !self.split {
-            return self.diff_scroll;
-        }
-        let prep = self.prepared();
-        let pairs = split_rows(&prep.rows);
-        pairs
-            .get(self.diff_scroll)
-            .and_then(|p| [p.header, p.left, p.right].into_iter().flatten().min())
-            .unwrap_or(0)
-    }
-
-    /// Scrolls so `row` of the open file sits a third of the way down: the
-    /// lines above a hit are usually what explains it.
+    /// Puts the cursor on `row` of the open file, a third of the way down
+    /// the pane: the lines above a hit are usually what explains it.
     fn reveal(&mut self, row: usize) {
-        let line = if self.split {
-            let prep = self.prepared();
-            split_rows(&prep.rows)
-                .iter()
-                .position(|p| [p.header, p.left, p.right].contains(&Some(row)))
-                .unwrap_or(0)
-        } else {
-            row
-        };
-        self.diff_scroll = line.saturating_sub(self.detail_height as usize / 3);
+        let line = self.line_of_row(row);
+        self.land(line, self.detail_height as usize / 3);
     }
 
     /// The next (or previous) line matching the search, across every file in
@@ -336,7 +352,7 @@ impl App {
         }
         let here = match self.diff_hit {
             Some(h) if h.file == self.file_idx() => h.row,
-            _ => self.top_row(),
+            _ => self.cursor_row(),
         };
         let start = order
             .iter()

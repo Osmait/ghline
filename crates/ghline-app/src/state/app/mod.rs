@@ -370,6 +370,10 @@ pub struct App {
     /// Ignore whitespace-only changes (`w`).
     pub ws: bool,
     pub diff_scroll: usize,
+    /// The line of the diff the cursor is on, in the lines the pane draws —
+    /// rows unified, pairs split. What a note is written against. The scroll
+    /// follows it; a jump moves both.
+    pub diff_cursor: usize,
     /// Scroll offset of the issue body / PR description.
     pub detail_scroll: usize,
     /// True height of the scrollable pane, which only the render knows.
@@ -529,6 +533,7 @@ impl App {
             split: false,
             ws: false,
             diff_scroll: 0,
+            diff_cursor: 0,
             detail_scroll: 0,
             detail_height: 10,
             trees: HashMap::new(),

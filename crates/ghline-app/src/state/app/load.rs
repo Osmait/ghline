@@ -710,6 +710,7 @@ impl App {
         if was_empty && self.view == View::Diff && !self.diff_files().is_empty() {
             self.file_idx = self.first_file();
             self.diff_scroll = 0;
+            self.diff_cursor = 0;
         }
     }
 }

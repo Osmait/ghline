@@ -572,8 +572,12 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
     let pairs = if split { split_rows(rows) } else { Vec::new() };
     let len = if split { pairs.len() } else { rows.len() };
     let h = area.height as usize;
+    // the cursor is kept on a line that exists, and the view on the cursor
+    app.diff_cursor = app.diff_cursor.min(len.saturating_sub(1));
+    scroll_into_view(&mut app.diff_scroll, app.diff_cursor, h, len);
     app.diff_scroll = app.diff_scroll.min(len.saturating_sub(h));
     let scroll = app.diff_scroll;
+    let cursor = app.diff_cursor;
     let focused = app.pane == Pane::DiffBody;
     let query = app.diff_query.clone();
     let pan = app.diff_pan;
@@ -586,14 +590,27 @@ fn unified_or_split(buf: &mut Buffer, area: Rect, app: &mut App, prep: &Prepared
         } else {
             draw_unified_row(buf, area, y, prep, i, (&query, pan));
         }
-        if focused {
+        // The cursor's line: its ground lifted to the selection's, its colours
+        // kept, and a bar at the edge — lit while the pane has the focus, as
+        // every other pane's cursor is.
+        if i == cursor {
+            for x in area.x..area.right() {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_bg(theme::sel());
+                }
+            }
+            let mark = if focused {
+                theme::cyan()
+            } else {
+                theme::sel_mark_idle()
+            };
             put(
                 buf,
                 area.x,
                 y,
                 area.x + 1,
                 "▌",
-                Style::default().bg(theme::bg()).fg(theme::cyan()),
+                Style::default().bg(theme::sel()).fg(mark),
             );
         }
     }
