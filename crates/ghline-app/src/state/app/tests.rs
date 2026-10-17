@@ -2579,3 +2579,102 @@ mod file_tree {
         assert!(app.diff_folded.is_empty());
     }
 }
+
+mod diff_nav {
+    use super::*;
+
+    /// The fixture's PR diff with the diff pane focused. In tree order its
+    /// files are `src/layout/mod.rs`, `src/layout/solver.rs`,
+    /// `tests/layout.rs` and `CHANGELOG.md`, the first three with the same
+    /// one-hunk edit and the last with none.
+    fn reading() -> App {
+        let mut app = seeded();
+        ch(&mut app, '2');
+        app.pane = Pane::List;
+        ch(&mut app, 'd');
+        press(&mut app, Key::Enter);
+        assert_eq!(app.pane, Pane::DiffBody);
+        app
+    }
+
+    fn shown(app: &App) -> String {
+        app.diff_file().map(|f| f.path.clone()).unwrap_or_default()
+    }
+
+    fn search(app: &mut App, q: &str) {
+        ch(app, '/');
+        for c in q.chars() {
+            ch(app, c);
+        }
+        press(app, Key::Enter);
+    }
+
+    #[test]
+    fn past_the_last_hunk_the_next_hunk_is_in_the_next_file() {
+        let mut app = reading();
+        ch(&mut app, '}');
+        assert_eq!(shown(&app), "src/layout/solver.rs");
+        assert_eq!(app.diff_scroll, 0);
+        ch(&mut app, '{');
+        assert_eq!(shown(&app), "src/layout/mod.rs", "and back again");
+    }
+
+    #[test]
+    fn capital_j_and_k_walk_the_files_in_the_trees_order() {
+        let mut app = reading();
+        ch(&mut app, 'J');
+        ch(&mut app, 'J');
+        assert_eq!(shown(&app), "tests/layout.rs");
+        ch(&mut app, 'K');
+        assert_eq!(shown(&app), "src/layout/solver.rs");
+        assert_eq!(app.pane, Pane::DiffBody, "without leaving the diff");
+    }
+
+    #[test]
+    fn k_on_the_first_file_stays_and_says_so() {
+        let mut app = reading();
+        ch(&mut app, 'K');
+        assert_eq!(shown(&app), "src/layout/mod.rs");
+        assert!(app.flash.is_some());
+    }
+
+    #[test]
+    fn a_search_finds_its_line_and_n_carries_it_into_the_next_file() {
+        let mut app = reading();
+        search(&mut app, "debug_assert");
+        let first = app.diff_hit.expect("a hit");
+        assert_eq!(shown(&app), "src/layout/mod.rs");
+        assert_eq!(app.cmd, None, "enter leaves the prompt");
+
+        ch(&mut app, 'n');
+        assert_eq!(shown(&app), "src/layout/solver.rs");
+        assert_eq!(app.diff_hit.map(|h| h.row), Some(first.row));
+        ch(&mut app, 'n');
+        assert_eq!(shown(&app), "tests/layout.rs");
+        ch(&mut app, 'n');
+        assert_eq!(
+            shown(&app),
+            "src/layout/mod.rs",
+            "round the end to the start"
+        );
+        ch(&mut app, 'N');
+        assert_eq!(shown(&app), "tests/layout.rs", "and N goes back");
+    }
+
+    #[test]
+    fn a_search_with_no_match_says_so_and_holds_no_hit() {
+        let mut app = reading();
+        search(&mut app, "nowhere_at_all");
+        assert!(app.diff_hit.is_none());
+        assert!(app.flash.is_some());
+        assert_eq!(shown(&app), "src/layout/mod.rs", "and moves nothing");
+    }
+
+    #[test]
+    fn searching_the_diff_leaves_the_lists_filter_alone() {
+        let mut app = reading();
+        search(&mut app, "side");
+        assert!(app.filter.is_empty());
+        assert_eq!(app.diff_query, "side");
+    }
+}

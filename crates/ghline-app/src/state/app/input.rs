@@ -888,12 +888,28 @@ impl App {
             }
             Key::Char('/') => {
                 self.cmd = Some(Cmd::Slash);
-                self.cmd_text = if self.view == View::Logs {
-                    self.log_filter.clone()
-                } else {
-                    self.filter.clone()
+                self.cmd_text = match self.view {
+                    View::Logs => self.log_filter.clone(),
+                    // in the diff `/` searches the code rather than filtering
+                    // a list, which is what a filter would be of here
+                    View::Diff => self.diff_query.clone(),
+                    _ => self.filter.clone(),
                 };
             }
+            Key::Char('}') if self.view == View::Diff => self.next_hunk(),
+            Key::Char('{') if self.view == View::Diff => self.prev_hunk(),
+            Key::Char('J') if self.view == View::Diff => {
+                if !self.step_file(1) {
+                    self.flash_ok("last file");
+                }
+            }
+            Key::Char('K') if self.view == View::Diff => {
+                if !self.step_file(-1) {
+                    self.flash_ok("first file");
+                }
+            }
+            Key::Char('n') if self.view == View::Diff => self.search(true, false),
+            Key::Char('N') if self.view == View::Diff => self.search(false, false),
             Key::PageDown => self.page_by(1),
             Key::PageUp => self.page_by(-1),
             Key::Char('d') if self.actionable_pr() && self.view != View::Diff => {
@@ -976,7 +992,9 @@ impl App {
             return;
         }
         let t = self.cmd_text.clone();
-        if self.view == View::Logs {
+        if self.view == View::Diff {
+            self.search_as_typed(t);
+        } else if self.view == View::Logs {
             self.log_filter = t;
             self.log_scroll = 0;
         } else {

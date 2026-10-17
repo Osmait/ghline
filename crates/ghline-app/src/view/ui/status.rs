@@ -102,7 +102,8 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
                 .to_string()
         }
         Pane::DiffBody => {
-            "j/k scroll · ^d/^u page · s split · w ignore ws · h files · esc".to_string()
+            "j/k scroll · {/} hunk · J/K file · / search · n/N next · s split · w ws · h files"
+                .to_string()
         }
     };
 
@@ -117,7 +118,14 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App) {
         Pane::Body => format!("+{}", app.detail_scroll),
         Pane::Log => format!("+{}", app.log_scroll),
         Pane::Files => format!("{}/{}", app.file_ordinal() + 1, app.diff_files().len()),
-        Pane::DiffBody => format!("+{}", app.diff_scroll),
+        // which file as well as how far down it, since `J`, `}` and `n` all
+        // move between files while the tree is out of the reader's sight
+        Pane::DiffBody => format!(
+            "{}/{} +{}",
+            app.file_ordinal() + 1,
+            app.diff_files().len(),
+            app.diff_scroll
+        ),
         Pane::FileView => {
             let n = app.file_lines();
             format!("{}/{}", app.file_sel.min(n.saturating_sub(1)) + 1, n)
