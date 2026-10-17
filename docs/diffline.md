@@ -35,6 +35,11 @@ the way once it has been read:
 While the cursor is on a folder the diff keeps the file it was showing, and
 `]f`/`[f` step through the files in the tree's order.
 
+`␣w` leaves changes of whitespace alone out of the diff, by asking git for
+`git diff -w` rather than filtering here: git knows a re-indented block from
+an edited one. The header says `ws ignored` while it is on, so a diff with
+something left out is never mistaken for the whole of one.
+
 On an edited line — a deletion paired with the addition that replaced it —
 the words that changed are reversed, as git's `diff-highlight` does. Under a
 theme that cannot tint added and deleted lines, the terminal one, those lines

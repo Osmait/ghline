@@ -10,7 +10,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use crate::shared::worker::{Gone, Worker};
 use std::thread;
 
-use crate::model::{ChangedFile, LogEntry, Row, Scope};
+use crate::model::{ChangedFile, DiffOpts, LogEntry, Row, Scope};
 use crate::shared::error::{Error, Result as Res};
 use crate::shared::mux::Agent;
 
@@ -20,12 +20,12 @@ pub type HighlightedRows = (Vec<Row>, Vec<Vec<crate::shared::syntax::Span>>);
 pub enum Request {
     /// Which files a scope touches.
     Files { repo: String, scope: Scope },
-    /// One file's diff, at a context width.
+    /// One file's diff, at a context width and a whitespace rule.
     Diff {
         repo: String,
         scope: Scope,
         path: String,
-        context: u32,
+        opts: DiffOpts,
     },
     /// Re-read the active working-tree view after a filesystem event.
     ///
@@ -35,7 +35,7 @@ pub enum Request {
         repo: String,
         scope: Scope,
         path: String,
-        context: u32,
+        opts: DiffOpts,
     },
     /// Who last touched each line.
     Blame { repo: String, path: String },
@@ -69,14 +69,14 @@ pub enum Response {
     },
     Diff {
         path: String,
-        context: u32,
+        opts: DiffOpts,
         /// The rows, and the colour spans that go with them.
         result: Res<HighlightedRows>,
     },
     Refresh {
         scope: Scope,
         path: String,
-        context: u32,
+        opts: DiffOpts,
         files: Res<Vec<ChangedFile>>,
         diff: Option<Res<HighlightedRows>>,
     },
@@ -178,34 +178,30 @@ fn handle(req: Request) -> Response {
             repo,
             scope,
             path,
-            context,
+            opts,
         } => {
             // Lexed here rather than when the answer lands: a large file takes
             // long enough to be a dropped frame, and this thread exists so the
             // interface never has to wait.
             let result = vcs(&repo)
-                .file_diff(&repo, &scope, &path, context)
+                .file_diff(&repo, &scope, &path, opts)
                 .map(|rows| {
                     let spans = highlight_rows(&path, &rows);
                     (rows, spans)
                 });
-            Response::Diff {
-                path,
-                context,
-                result,
-            }
+            Response::Diff { path, opts, result }
         }
 
         Request::Refresh {
             repo,
             scope,
             path,
-            context,
+            opts,
         } => {
             let files = vcs(&repo).changed_files(&repo, &scope);
             let diff = (!path.is_empty()).then(|| {
                 vcs(&repo)
-                    .file_diff(&repo, &scope, &path, context)
+                    .file_diff(&repo, &scope, &path, opts)
                     .map(|rows| {
                         let spans = highlight_rows(&path, &rows);
                         (rows, spans)
@@ -214,7 +210,7 @@ fn handle(req: Request) -> Response {
             Response::Refresh {
                 scope,
                 path,
-                context,
+                opts,
                 files,
                 diff,
             }
