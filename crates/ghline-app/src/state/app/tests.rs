@@ -8,6 +8,10 @@ use crate::data::Status;
 use crate::shared::key::{Key, Press};
 
 fn seeded() -> App {
+    // Settings go to memory, never to the reader's own config. `enter` in the
+    // theme picker saves, and before this every test run wrote `mocha` over
+    // whatever theme the person running them had chosen.
+    let _ = crate::shared::settings::use_store(Box::<crate::shared::settings::Memory>::default());
     crate::fixture::app()
 }
 
