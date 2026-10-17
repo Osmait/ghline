@@ -189,14 +189,36 @@ so a folder can be folded out of the way once it has been read:
 - A folded folder shows how many files are under it and their counts summed.
 
 While the cursor is on a folder the diff keeps the last file opened, which is
-the one still being read. Folds belong to the PR they were made in.
+the one still being read. Folds belong to the PR they were made in. The tree
+also says what happened to each file: new ones are green, deleted ones red and
+struck through, renamed ones yellow, and the diff's header says "new file",
+"deleted" or the path a file was renamed from.
+
+A PR is read straight through, so the diff moves on its own without a trip
+back to the tree:
+
+- `}` and `{` move by hunk, and carry on into the next or previous file at
+  either end of one.
+- `J` and `K` step through the files in the tree's order.
+- `/` searches every file's diff, jumping as you type and lighting each match;
+  `n` and `N` carry it on from file to file, round the end to the start. A
+  lowercase search ignores case and one with a capital does not.
+- `H` and `L` pan long lines a tab stop at a time, so the end of a lockfile's
+  line is in reach; a `…` at either edge says the line goes on.
+
+Lines are coloured as the file explorer colours code, and on a line that was
+edited rather than replaced the words that changed are reversed, as git's
+`diff-highlight` does. A theme that cannot tint added and deleted lines — the
+`terminal` one — keeps the syntax colour to the context lines, since there the
+green and red of the text are all that tell an addition from a deletion.
 
 - `s` switches between the unified diff (two numbering columns, original and
   new) and the split one (deletions left, additions right).
 - `w` ignores whitespace-only changes: `-`/`+` pairs whose contents match once
   whitespace is removed collapse into a single context line.
-- A file with no textual changes — a binary, a mode change — shows
-  "no textual changes" instead of an empty pane.
+- A file with no textual changes — a binary, a mode change, a pure rename —
+  shows "no textual changes" and which of those it was, instead of an empty
+  pane.
 
 From the PR detail, `enter` on the body opens that same view.
 
@@ -296,6 +318,10 @@ thing off if you would rather have it back.
 | `d` | diff of the PR's files |
 | `s` | split / unified diff |
 | `w` | ignore whitespace-only changes |
+| `{` `}` | previous / next hunk, across files (in the diff) |
+| `J` `K` | next / previous file (in the diff) |
+| `H` `L` | pan long lines left / right (in the diff) |
+| `n` `N` | next / previous search match (in the diff) |
 | `g` `G` | start / end of the pane |
 | `^d` `^u` | half a page |
 | `PgUp` `PgDn` | a whole page |
@@ -309,7 +335,7 @@ thing off if you would rather have it back.
 | `p` `^p` | the finder |
 | `o` | fold / unfold a job (in the logs) or a folder (in the diff's files) |
 | `O` | fold / unfold every folder (in the diff's files) |
-| `/` | filter (list or log) |
+| `/` | filter (list or log), or search every file (in the diff) |
 | `e` | jump to the first error in the log |
 | `f` | toggle the log's *follow* mode |
 | `r` | refresh |
