@@ -251,7 +251,7 @@ jobs:
       # them. What the checker is allowed to be wrong about is in _typos.toml,
       # entry by entry.
       - name: Spelling
-        uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f # v1.49.0
+        uses: crate-ci/typos@512fc24f32f44ab01972217aaaf3dc86ec234d53 # v1.50.2
 
       # The linter for the files in this directory. It is what says the
       # actions above should be pinned to a commit, that a checkout leaves a
