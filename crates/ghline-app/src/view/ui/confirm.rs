@@ -35,12 +35,18 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     let pr = cur.as_pr();
     scrim(buf, area);
 
-    let is_merge = matches!(prompt, Prompt::Merge(_));
-    let (title, accent) = match prompt {
-        Prompt::Merge(_) => ("MERGE PULL REQUEST", theme::purple()),
-        Prompt::Close => ("CLOSE PULL REQUEST", theme::yellow()),
-        Prompt::Reopen => ("REOPEN PULL REQUEST", theme::green()),
-        Prompt::DeleteBranch { .. } => ("DELETE BRANCH", theme::red()),
+    let is_merge = matches!(prompt, Prompt::Merge { .. });
+    let (title, accent, prompt_repo, num) = match prompt {
+        Prompt::Merge { repo, num, .. } => {
+            ("MERGE PULL REQUEST", theme::purple(), repo.as_str(), *num)
+        }
+        Prompt::Close { repo, num } => ("CLOSE PULL REQUEST", theme::yellow(), repo.as_str(), *num),
+        Prompt::Reopen { repo, num } => {
+            ("REOPEN PULL REQUEST", theme::green(), repo.as_str(), *num)
+        }
+        Prompt::DeleteBranch { repo, num, .. } => {
+            ("DELETE BRANCH", theme::red(), repo.as_str(), *num)
+        }
         // drawn above, before the selection is needed
         Prompt::Dispatch { .. } | Prompt::Clone { .. } => return,
     };
@@ -60,7 +66,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         cx,
         modal.y + 1,
         max - 22,
-        &app.item_repo_key(),
+        prompt_repo,
         base.fg(theme::dimmer()),
     );
     put_right(
@@ -76,11 +82,6 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
     );
     rule(buf, modal, modal.y + 2, accent);
 
-    // the PR reference; branch deletion uses its own, not the selection's
-    let num = match prompt {
-        Prompt::DeleteBranch { num, .. } => *num,
-        _ => cur.num,
-    };
     let mut y = modal.y + 3;
     let nx = put(
         buf,
@@ -104,7 +105,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
                 base.fg(theme::body()),
             );
         }
-        Prompt::Reopen => {
+        Prompt::Reopen { .. } => {
             put(
                 buf,
                 x,
@@ -175,7 +176,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &App, prompt: &Prompt) {
         }
         y += 2;
 
-        if let Prompt::Merge(sel) = prompt {
+        if let Prompt::Merge { method: sel, .. } = prompt {
             let sel = *sel;
             for (i, m) in MERGE_METHODS.iter().enumerate() {
                 let row = Rect {

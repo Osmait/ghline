@@ -259,7 +259,7 @@ impl App {
         if hit.target != Target::Pane(Pane::Diff) {
             return;
         }
-        let max = self.longest_line() as i64;
+        let max = self.max_hscroll() as i64;
         self.hscroll = (self.hscroll as i64 + d).clamp(0, max) as usize;
     }
 
@@ -633,6 +633,11 @@ mod tests {
     fn a_horizontal_notch_pans_the_code_and_stops_at_the_longest_line() {
         let mut a = app();
         with_rows(&mut a, 4);
+        if let Some(rows) = a.rows.get_mut("src/a.rs")
+            && let Some(r) = rows.get_mut(1)
+        {
+            r.text = "x".repeat(200);
+        }
         draw_wide(&mut a);
 
         let (x, y) = cell_of(&a, Pane::Diff, 1);
@@ -641,7 +646,7 @@ mod tests {
         for _ in 0..40 {
             a.on_mouse(ev(Motion::ScrollRight, x, y));
         }
-        assert_eq!(a.hscroll, a.longest_line(), "blank columns read as broken");
+        assert_eq!(a.hscroll, a.max_hscroll(), "blank columns read as broken");
         for _ in 0..40 {
             a.on_mouse(ev(Motion::ScrollLeft, x, y));
         }

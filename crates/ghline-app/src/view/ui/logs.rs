@@ -281,6 +281,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
     let time_x = area.x + 8;
     let text_x = area.x + 17;
     let text_w = area.right().saturating_sub(text_x + 1) as usize;
+    app.log_text_width = text_w.max(8);
 
     // flatten by wrapping each log line; only the first carries number and time
     struct Disp {

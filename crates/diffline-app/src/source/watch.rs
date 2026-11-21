@@ -44,7 +44,14 @@ impl Watch {
                 match result {
                     // Merely reading the repository must not make Git read it
                     // again, especially on backends that report access events.
-                    Ok(event) if !matches!(event.kind, EventKind::Access(_)) => {
+                    // Git's own internal housekeeping (lockfiles, loose objects,
+                    // logs) lives under `.git/` and would otherwise re-trigger
+                    // refreshes in a loop while Git runs; keep index and HEAD
+                    // changes so staging and commits still refresh.
+                    Ok(event)
+                        if !matches!(event.kind, EventKind::Access(_))
+                            && is_relevant(&event.paths) =>
+                    {
                         let _ = change_tx.try_send(());
                     }
                     Ok(_) => {}
@@ -75,6 +82,27 @@ impl Watch {
             Err(TryRecvError::Disconnected) => Notice::Gone,
         }
     }
+}
+
+/// Ignores events that touch only `.git/` internals other than `index`,
+/// `HEAD` and `refs` so Git's own lockfiles and object writes do not trigger
+/// refresh loops.
+fn is_relevant(paths: &[std::path::PathBuf]) -> bool {
+    if paths.is_empty() {
+        return true;
+    }
+    paths.iter().any(|path| {
+        let mut comps = path.components().peekable();
+        while let Some(c) = comps.next() {
+            if c.as_os_str() == ".git" {
+                return matches!(
+                    comps.next().and_then(|n| n.as_os_str().to_str()),
+                    Some("index" | "HEAD" | "refs" | "packed-refs")
+                );
+            }
+        }
+        true
+    })
 }
 
 #[cfg(test)]

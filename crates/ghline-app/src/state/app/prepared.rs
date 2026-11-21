@@ -22,7 +22,7 @@ use std::rc::Rc;
 use super::App;
 use super::input::strip_ws_only;
 use super::notes::{Notes, annotate};
-use crate::data::{DiffKind, DiffRow, FileChange, Hunk, Thread};
+use crate::data::{DiffKind, DiffRow, DiffSide, FileChange, Hunk, Thread};
 use crate::shared::syntax::{self, Span};
 use crate::shared::words;
 use crate::tui::diff::{Pair, Side, pair};
@@ -51,8 +51,9 @@ pub struct Key {
     ws: bool,
     lines: usize,
     threads: usize,
-    /// The drafts on the file, by what they say: an edit changes no count.
-    drafts: Vec<(u32, String)>,
+    rev: u64,
+    /// The drafts on the file, by line, side and body: an edit changes no count.
+    drafts: Vec<(u32, DiffSide, String)>,
     notes: Notes,
 }
 
@@ -73,11 +74,12 @@ impl App {
             ws: self.ws,
             lines: f.hunks.iter().map(|h| h.lines.len() + 1).sum(),
             threads: threads.len(),
+            rev: self.diff_rev,
             drafts: drafts
                 .iter()
                 .map(|d| {
                     let body = d.comments.first().map_or("", |c| c.body.as_str());
-                    (d.line.unwrap_or(0), body.to_string())
+                    (d.line.unwrap_or(0), d.side, body.to_string())
                 })
                 .collect(),
             notes,

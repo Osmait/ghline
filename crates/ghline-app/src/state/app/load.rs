@@ -7,50 +7,41 @@ use crate::data::{Item, Kind, PrFetched};
 use crate::service::{Request, Response};
 
 impl App {
-    /// The row an answer about `repo` / `num` belongs to.
+    /// Applies `f` to every cached copy of `(repo, tab, num)` — both the
+    /// repository's own list and the gathered `owner/*` list, when present.
     ///
-    /// A detail is asked for under the item's own repository, but the list
-    /// holding that item may be the gathered one, filed under `owner/*`. Both
-    /// are checked, or a body arriving in an all-repositories list would land
-    /// nowhere and the pane would keep saying there is nothing to read.
-    ///
-    /// The repository is matched as well as the number because a gathered list
-    /// really does hold two different `#14`s, and writing one's body onto the
-    /// other would be quiet and wrong.
-    fn item_mut(&mut self, repo: &str, tab: usize, num: i64) -> Option<&mut Item> {
+    /// Updating only the first match left the other copy permanently blank
+    /// while `detail_state` / `diff_state` / `threads_state` already said
+    /// `Ready`.
+    fn for_each_item_mut(
+        &mut self,
+        repo: &str,
+        tab: usize,
+        num: i64,
+        mut f: impl FnMut(&mut Item),
+    ) {
         let gathered = repo.split_once('/').map(|(owner, _)| format!("{owner}/*"));
-        let key = [Some(repo.to_string()), gathered]
-            .into_iter()
-            .flatten()
-            .find(|k| {
-                self.lists
-                    .get(&(k.clone(), tab))
-                    .is_some_and(|items| items.iter().any(|i| is_it(i, repo, num)))
-            })?;
-        self.lists
-            .get_mut(&(key, tab))?
-            .iter_mut()
-            .find(|i| is_it(i, repo, num))
+        for key in [Some(repo.to_string()), gathered].into_iter().flatten() {
+            if let Some(items) = self.lists.get_mut(&(key, tab)) {
+                for item in items.iter_mut() {
+                    if is_it(item, repo, num) {
+                        f(item);
+                    }
+                }
+            }
+        }
     }
 
-    /// Hands a request to the worker. `false` means it never got there — a
-    /// thread that has died would otherwise leave the pane that asked marked
-    /// `Loading` forever, animating a skeleton over data that is never coming.
-    /// A loader that cannot finish is worse than an error: it looks like
-    /// progress.
     /// Hands a request to the worker.
     ///
     /// A request that never arrives would leave whichever pane asked for it
     /// marked `Loading` forever, animating a skeleton over data that is not
     /// coming — a loader that cannot finish is worse than an error, because it
-    /// looks like progress. The thread only dies when the program is being
-    /// torn down, so this is a guard rather than a path anyone walks; the
-    /// flag is enough to stop the animation and say why.
-    pub(super) fn ask(&mut self, req: Request) {
+    /// looks like progress. Failing every in-flight state via `worker_died`
+    /// stops the animation and surfaces the failure uniformly.
+    pub(crate) fn ask(&mut self, req: Request) {
         if self.service.is_some() && !self.service.as_ref().is_some_and(|w| w.send(req)) {
-            self.worker_gone = true;
-            self.busy = false;
-            self.flash_warn("the worker thread is gone — restart the program");
+            self.worker_died();
         }
     }
 
@@ -333,9 +324,18 @@ impl App {
         if !self.has_worker() {
             return;
         }
-        let key = self.repo_key();
+        if matches!(self.accounts_state, Load::Failed(_)) {
+            self.accounts_state = Load::Idle;
+        }
+        let repo_key = self.repo_key();
         for t in 0..3 {
-            self.lists_state.insert((key.clone(), t), Load::Idle);
+            self.lists_state.insert((repo_key.clone(), t), Load::Idle);
+        }
+        if !self.is_all() {
+            self.trees_state.insert(repo_key.clone(), Load::Idle);
+            if let Some(path) = self.fs_selected_file() {
+                self.file_state.insert((repo_key.clone(), path), Load::Idle);
+            }
         }
         // the selection's caches hang off its own repository
         let key = self.item_repo_key();
@@ -351,6 +351,10 @@ impl App {
             let num = cur.num;
             self.diff_state.insert((key.clone(), num), Load::Idle);
             self.detail_state.insert((key.clone(), num), Load::Idle);
+            self.threads_state.insert((key.clone(), num), Load::Idle);
+        }
+        if let Some(sha) = self.diff_commit.clone() {
+            self.commit_state.insert((key, sha), Load::Idle);
         }
         self.flash_ok("refreshing…");
     }
@@ -392,12 +396,27 @@ impl App {
 
             Response::Cloned { repo, result } => {
                 self.busy = false;
+                let target = self.pending_clone_edit.take();
                 match result {
                     Ok(path) => {
                         self.flash_ok(format!("cloned into {path}"));
-                        self.clones.insert(repo, std::path::PathBuf::from(path));
-                        // the reader asked to edit; now they can
-                        self.open_in_editor();
+                        self.clones
+                            .insert(repo.clone(), std::path::PathBuf::from(path));
+                        // Only open the editor if the user is still on the
+                        // repository (and file, when pinned) they asked to clone.
+                        let still_there = match target {
+                            Some((want_repo, want_path)) => {
+                                repo == want_repo
+                                    && self.tab == crate::data::FILES_TAB
+                                    && self.repo_key() == want_repo
+                                    && self.fs_selected_file().as_deref()
+                                        == Some(want_path.as_str())
+                            }
+                            None => self.tab == crate::data::FILES_TAB && self.repo_key() == repo,
+                        };
+                        if still_there {
+                            self.open_in_editor();
+                        }
                     }
                     Err(e) => self.flash_warn(self.advice(&e)),
                 }
@@ -432,7 +451,20 @@ impl App {
                 self.clones_state = Load::Ready;
                 // somebody pressed `E` while this was still on its way
                 if self.wants_edit {
-                    self.open_in_editor();
+                    let target = self.wants_edit_target.take();
+                    let still_there = match target {
+                        Some((want_repo, want_path)) => {
+                            self.tab == crate::data::FILES_TAB
+                                && self.repo_key() == want_repo
+                                && self.fs_selected_file().as_deref() == Some(want_path.as_str())
+                        }
+                        None => true,
+                    };
+                    if still_there {
+                        self.open_in_editor();
+                    } else {
+                        self.wants_edit = false;
+                    }
                 }
             }
 
@@ -468,9 +500,22 @@ impl App {
             },
 
             Response::List { repo, tab, result } => match result {
-                Ok(items) => {
+                Ok(mut items) => {
+                    // Preserve already-fetched bodies, comments, diffs and
+                    // threads across list reloads so items whose detail/diff
+                    // states are still `Ready` never turn blank.
+                    if let Some(prev) = self.lists.get(&(repo.clone(), tab)) {
+                        for it in &mut items {
+                            if let Some(old) =
+                                prev.iter().find(|o| o.num == it.num && o.repo == it.repo)
+                            {
+                                carry_details(old, it);
+                            }
+                        }
+                    }
                     self.lists.insert((repo.clone(), tab), items);
                     self.lists_state.insert((repo, tab), Load::Ready);
+                    self.diff_rev = self.diff_rev.wrapping_add(1);
                 }
                 Err(e) => {
                     self.flash_warn(self.advice(&e));
@@ -486,14 +531,14 @@ impl App {
                     Err(e) => (Load::from(e), None),
                 };
                 self.detail_state.insert((repo.clone(), num), state);
-                if let Some((body, comments)) = got
-                    && let Some(it) = self.item_mut(&repo, 0, num)
-                {
-                    it.body = body;
-                    if let Some(d) = it.as_issue_mut() {
-                        d.comments = comments.len() as u32;
-                        d.comment_list = comments;
-                    }
+                if let Some((body, comments)) = got {
+                    self.for_each_item_mut(&repo, 0, num, |it| {
+                        it.body.clone_from(&body);
+                        if let Some(d) = it.as_issue_mut() {
+                            d.comments = comments.len() as u32;
+                            d.comment_list.clone_from(&comments);
+                        }
+                    });
                 }
             }
 
@@ -511,35 +556,41 @@ impl App {
                     comments,
                     commits,
                 }) = got
-                    && let Some(it) = self.item_mut(&repo, 1, num)
                 {
-                    it.body = body;
-                    if let Some(pr) = it.as_pr_mut() {
-                        // The diff may have come first: its hunks are kept
-                        // rather than replaced by a list that has none.
-                        let mut files = files;
-                        for f in &mut files {
-                            if let Some(old) = pr.file_list.iter().find(|o| o.path == f.path) {
-                                f.hunks = old.hunks.clone();
-                                f.from = old.from.clone();
+                    self.for_each_item_mut(&repo, 1, num, |it| {
+                        it.body.clone_from(&body);
+                        if let Some(pr) = it.as_pr_mut() {
+                            // The diff may have come first: its hunks are kept
+                            // rather than replaced by a list that has none.
+                            let mut merged = files.clone();
+                            for f in &mut merged {
+                                if let Some(old) = pr.file_list.iter().find(|o| o.path == f.path) {
+                                    f.hunks = old.hunks.clone();
+                                    f.from = old.from.clone();
+                                }
                             }
+                            pr.file_list = merged;
+                            pr.reviews.clone_from(&reviews);
+                            pr.comments.clone_from(&comments);
+                            pr.commits.clone_from(&commits);
                         }
-                        pr.file_list = files;
-                        pr.reviews = reviews;
-                        pr.comments = comments;
-                        pr.commits = commits;
-                    }
+                    });
+                    self.diff_rev = self.diff_rev.wrapping_add(1);
                 }
                 self.land_on_first_file(was_empty);
             }
 
             Response::Search {
+                owner,
                 query,
                 source,
                 result,
             } => {
-                // an answer to a query that is no longer typed is not an answer
-                if query != self.finder_query || source != self.finder_source {
+                // an answer to a query or account that is no longer active is not an answer
+                if owner != self.login()
+                    || query != self.finder_query
+                    || source != self.finder_source
+                {
                     return;
                 }
                 match result {
@@ -581,17 +632,20 @@ impl App {
                     // match the hunks against the already-loaded file list, or
                     // stand in for it when the diff got here first; the
                     // detail fills in what only it knows when it arrives
-                    if let Some(pr) = self.item_mut(&repo, 1, num).and_then(Item::as_pr_mut) {
-                        if pr.file_list.is_empty() {
-                            pr.file_list = files.iter().map(from_diff).collect();
-                        }
-                        for f in &mut pr.file_list {
-                            if let Some(d) = files.iter().find(|d| d.path == f.path) {
-                                f.hunks = d.hunks.clone();
-                                f.from = d.from.clone();
+                    self.for_each_item_mut(&repo, 1, num, |it| {
+                        if let Some(pr) = it.as_pr_mut() {
+                            if pr.file_list.is_empty() {
+                                pr.file_list = files.iter().map(from_diff).collect();
+                            }
+                            for f in &mut pr.file_list {
+                                if let Some(d) = files.iter().find(|d| d.path == f.path) {
+                                    f.hunks = d.hunks.clone();
+                                    f.from = d.from.clone();
+                                }
                             }
                         }
-                    }
+                    });
+                    self.diff_rev = self.diff_rev.wrapping_add(1);
                     self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
@@ -604,15 +658,38 @@ impl App {
                 repo,
                 num,
                 verdict,
+                submitted,
                 result,
             } => {
                 self.busy = false;
                 match result {
                     Ok(()) => {
-                        let sent = self
-                            .drafts
-                            .remove(&(repo.clone(), num))
-                            .map_or(0, |d| d.len());
+                        let key = (repo.clone(), num);
+                        let sent = if submitted.is_empty() {
+                            // Backwards-compatible fallback when a synthetic
+                            // test constructs `Response::ReviewSent` without
+                            // echoing the drafts list.
+                            self.drafts.remove(&key).map_or(0, |d| d.len())
+                        } else {
+                            let mut removed = 0usize;
+                            if let Some(list) = self.drafts.get_mut(&key) {
+                                for s in &submitted {
+                                    if let Some(pos) = list.iter().position(|d| {
+                                        d.path == s.path
+                                            && d.line == s.line
+                                            && d.side == s.side
+                                            && d.body == s.body
+                                    }) {
+                                        list.remove(pos);
+                                        removed += 1;
+                                    }
+                                }
+                                if list.is_empty() {
+                                    self.drafts.remove(&key);
+                                }
+                            }
+                            removed
+                        };
                         self.flash_ok(format!(
                             "review sent · {} · {sent} {}",
                             verdict.label(),
@@ -634,6 +711,7 @@ impl App {
                         .insert((repo.clone(), sha.clone()), Load::Ready);
                     self.commit_files
                         .insert((repo, sha), files.iter().map(from_diff).collect());
+                    self.diff_rev = self.diff_rev.wrapping_add(1);
                     self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
@@ -646,9 +724,12 @@ impl App {
             Response::PrThreads { repo, num, result } => match result {
                 Ok(threads) => {
                     self.threads_state.insert((repo.clone(), num), Load::Ready);
-                    if let Some(pr) = self.item_mut(&repo, 1, num).and_then(Item::as_pr_mut) {
-                        pr.threads = threads;
-                    }
+                    self.for_each_item_mut(&repo, 1, num, |it| {
+                        if let Some(pr) = it.as_pr_mut() {
+                            pr.threads.clone_from(&threads);
+                        }
+                    });
+                    self.diff_rev = self.diff_rev.wrapping_add(1);
                 }
                 // Comments are an extra on the diff, not the diff: their
                 // failure says so once and leaves the diff to be read.
@@ -703,9 +784,17 @@ impl App {
                         // closed PR went on reading as open, and offering to
                         // close it again rather than to reopen it.
                         if let Some(state) = now {
-                            for item in self.lists.values_mut().flatten() {
-                                if is_it(item, &repo, num) {
-                                    item.state = state;
+                            for ((list_repo, tab), items) in &mut self.lists {
+                                // Pull request actions only ever mutate PR lists
+                                // (`tab == 1`) for the same repository or its
+                                // gathered `owner/*` list — never another repo
+                                // or an issue with the same number.
+                                if *tab == 1 && (list_repo == &repo || list_repo.ends_with("/*")) {
+                                    for item in items {
+                                        if is_it(item, &repo, num) {
+                                            item.state = state;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -726,13 +815,50 @@ impl App {
                             self.repos_state.insert(login, Load::Idle);
                         }
                         // only a successful merge offers to delete the branch
-                        if let Some(branch) = merged_branch {
-                            self.prompt = Some(Prompt::DeleteBranch { num, branch });
+                        if let Some(branch) = merged_branch
+                            && !branch.is_empty()
+                        {
+                            self.prompt = Some(Prompt::DeleteBranch {
+                                repo: repo.clone(),
+                                num,
+                                branch,
+                            });
                         }
                     }
                     Err(e) => self.flash_warn(e.brief()),
                 }
             }
+        }
+    }
+}
+
+/// Carries already-loaded details, diffs and threads from `old` onto a fresh
+/// list item `new` when the list endpoint itself does not return them.
+fn carry_details(old: &Item, new: &mut Item) {
+    if new.body.is_empty() && !old.body.is_empty() {
+        new.body.clone_from(&old.body);
+    }
+    if let (Some(o), Some(n)) = (old.as_issue(), new.as_issue_mut())
+        && n.comment_list.is_empty()
+        && !o.comment_list.is_empty()
+    {
+        n.comment_list.clone_from(&o.comment_list);
+    }
+    if let (Some(o), Some(n)) = (old.as_pr(), new.as_pr_mut()) {
+        if n.file_list.is_empty() && !o.file_list.is_empty() {
+            n.file_list.clone_from(&o.file_list);
+        }
+        if n.reviews.is_empty() && !o.reviews.is_empty() {
+            n.reviews.clone_from(&o.reviews);
+        }
+        if n.comments.is_empty() && !o.comments.is_empty() {
+            n.comments.clone_from(&o.comments);
+        }
+        if n.commits.is_empty() && !o.commits.is_empty() {
+            n.commits.clone_from(&o.commits);
+        }
+        if n.threads.is_empty() && !o.threads.is_empty() {
+            n.threads.clone_from(&o.threads);
         }
     }
 }

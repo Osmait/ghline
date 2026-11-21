@@ -49,24 +49,19 @@ impl Parser {
                 return Ok(Some(Arg::Value(raw)));
             }
 
-            let Some(text) = raw.to_str() else {
-                return Err(Error::InvalidOption(raw));
-            };
-            if let Some(option) = text.strip_prefix("--") {
-                let (name, value) = option
-                    .split_once('=')
-                    .map_or((option, None), |(name, value)| {
-                        (name, Some(OsString::from(value)))
-                    });
+            if bytes.starts_with(b"--") {
+                let Some((name, value)) = split_long_option(&raw) else {
+                    return Err(Error::InvalidOption(raw));
+                };
                 if name.is_empty() {
                     return Err(Error::MissingOptionName(raw));
                 }
-                return Ok(Some(Arg::Long {
-                    name: name.into(),
-                    value,
-                }));
+                return Ok(Some(Arg::Long { name, value }));
             }
 
+            let Some(text) = raw.to_str() else {
+                return Err(Error::InvalidOption(raw));
+            };
             if let Some(option) = text.strip_prefix('-') {
                 return Ok(Some(Arg::Short(option.into())));
             }
@@ -100,6 +95,48 @@ impl Parser {
         let argument = argument.into();
         let value = self.value(argument.clone(), inline)?;
         value_as(&value, argument)
+    }
+}
+
+/// Splits `--name` or `--name=value` without requiring `value` to be UTF-8.
+///
+/// The option name itself must still be valid UTF-8 so callers can match it
+/// against their schema; the inline value is kept as raw OS bytes.
+fn split_long_option(raw: &OsStr) -> Option<(String, Option<OsString>)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let rest = raw.as_bytes().strip_prefix(b"--")?;
+        if let Some(eq) = rest.iter().position(|&b| b == b'=') {
+            let name = std::str::from_utf8(&rest[..eq]).ok()?;
+            let value = OsStr::from_bytes(&rest[eq + 1..]).to_os_string();
+            Some((name.to_owned(), Some(value)))
+        } else {
+            let name = std::str::from_utf8(rest).ok()?;
+            Some((name.to_owned(), None))
+        }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let wide: Vec<u16> = raw.encode_wide().collect();
+        let rest = wide.strip_prefix(&[u16::from(b'-'), u16::from(b'-')])?;
+        if let Some(eq) = rest.iter().position(|&u| u == u16::from(b'=')) {
+            let name = String::from_utf16(&rest[..eq]).ok()?;
+            let value = OsString::from_wide(&rest[eq + 1..]);
+            Some((name, Some(value)))
+        } else {
+            let name = String::from_utf16(rest).ok()?;
+            Some((name, None))
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let option = raw.to_str()?.strip_prefix("--")?;
+        let (name, value) = option
+            .split_once('=')
+            .map_or((option, None), |(n, v)| (n, Some(OsString::from(v))));
+        Some((name.to_owned(), value))
     }
 }
 

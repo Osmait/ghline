@@ -32,7 +32,7 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &mut App) {
         buf,
         m.right() - 2,
         m.y + 1,
-        "via herdr",
+        &format!("via {}", crate::shared::mux::current().name()),
         base.fg(theme::dimmer()),
     );
     rule(buf, m, m.y + 2, theme::border());

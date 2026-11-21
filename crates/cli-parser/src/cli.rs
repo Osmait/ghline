@@ -186,6 +186,9 @@ where
         };
         let mut values = Vec::new();
         if let Some(value) = inline {
+            if schema.is_empty() {
+                return Err(Error::unexpected(Arg::Value(value)));
+            }
             values.push(value);
         }
         while let Some(argument) = parser.next_arg()? {
@@ -366,4 +369,42 @@ fn positional_value<I>(argument: &ArgSpec<I>) -> Option<&crate::ValueSpec> {
 
 fn positional_name<I>(argument: &ArgSpec<I>) -> String {
     positional_value(argument).map_or_else(|| "value".into(), |value| value.name.clone())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "assertions"
+)]
+mod tests {
+    use std::ffi::OsString;
+
+    use super::*;
+
+    #[test]
+    fn mode_taking_no_values_rejects_an_inline_value() {
+        let cli = Cli::new("tool").arg(ArgSpec::mode("dry", "dry", []));
+        let err = cli
+            .parse([OsString::from("--dry=yes")])
+            .expect_err("a zero-value mode must not accept --mode=val");
+        assert!(matches!(err, Error::UnexpectedArgument(_)), "{err:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn long_option_preserves_non_utf8_inline_value() {
+        use std::os::unix::ffi::OsStringExt;
+        let raw = OsString::from_vec(b"--file=/tmp/\xffbad".to_vec());
+        let mut parser = Parser::new([raw]);
+        let arg = parser.next_arg().unwrap().unwrap();
+        match arg {
+            Arg::Long { name, value } => {
+                assert_eq!(name, "file");
+                assert_eq!(value.unwrap(), OsString::from_vec(b"/tmp/\xffbad".to_vec()));
+            }
+            other => panic!("expected Arg::Long, got {other:?}"),
+        }
+    }
 }

@@ -797,7 +797,7 @@ fn m_merges_the_pull_request_after_y() {
     let cur = app.current().unwrap();
     let (num, branch) = (cur.num, cur.branch().to_string());
     ch(&mut app, 'm');
-    assert_eq!(app.prompt, Some(Prompt::Merge(0)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 0, .. })));
     ch(&mut app, 'y');
     assert!(app.prompt.is_none());
     assert!(tape.0.borrow().iter().any(|r| matches!(
@@ -812,14 +812,14 @@ fn one_two_three_and_j_k_choose_the_merge_method() {
     let (mut app, tape) = recording();
     ch(&mut app, 'm');
     ch(&mut app, '3');
-    assert_eq!(app.prompt, Some(Prompt::Merge(2)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 2, .. })));
     ch(&mut app, '1');
-    assert_eq!(app.prompt, Some(Prompt::Merge(0)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 0, .. })));
     ch(&mut app, 'j');
-    assert_eq!(app.prompt, Some(Prompt::Merge(1)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 1, .. })));
     ch(&mut app, 'j');
     ch(&mut app, 'k');
-    assert_eq!(app.prompt, Some(Prompt::Merge(1)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 1, .. })));
     ch(&mut app, '2');
     press(&mut app, Key::Enter);
     assert!(tape.0.borrow().iter().any(|r| matches!(
@@ -847,7 +847,7 @@ fn c_closes_an_open_pull_request_after_y() {
     let (mut app, tape) = recording();
     let num = app.current().unwrap().num;
     ch(&mut app, 'c');
-    assert_eq!(app.prompt, Some(Prompt::Close));
+    assert!(matches!(app.prompt, Some(Prompt::Close { .. })));
     ch(&mut app, 'y');
     assert!(
         tape.0
@@ -878,7 +878,7 @@ fn once_github_says_it_is_closed_the_row_reads_closed_and_c_offers_to_reopen() {
     });
     assert_eq!(app.current().unwrap().state, Status::Closed);
     ch(&mut app, 'c');
-    assert_eq!(app.prompt, Some(Prompt::Reopen));
+    assert!(matches!(app.prompt, Some(Prompt::Reopen { .. })));
 }
 
 #[test]
@@ -891,7 +891,7 @@ fn c_reopens_a_closed_pull_request_after_y() {
         .unwrap();
     let num = app.current().unwrap().num;
     ch(&mut app, 'c');
-    assert_eq!(app.prompt, Some(Prompt::Reopen));
+    assert!(matches!(app.prompt, Some(Prompt::Reopen { .. })));
     ch(&mut app, 'y');
     assert!(
         tape.0
@@ -1414,10 +1414,10 @@ fn on_the_list_b_shows_the_repositories_when_they_are_hidden() {
 fn on_the_list_the_pr_keys_act_on_the_selected_pr() {
     let mut app = seeded();
     ch(&mut app, 'm');
-    assert_eq!(app.prompt, Some(Prompt::Merge(0)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 0, .. })));
     press(&mut app, Key::Esc);
     ch(&mut app, 'c');
-    assert_eq!(app.prompt, Some(Prompt::Close));
+    assert!(matches!(app.prompt, Some(Prompt::Close { .. })));
     press(&mut app, Key::Esc);
     ch(&mut app, 'd');
     assert_eq!(app.view, View::Diff);
@@ -1458,7 +1458,7 @@ fn on_the_body_esc_goes_back() {
 fn on_the_body_the_pr_keys_act_on_the_pr_shown() {
     let mut app = pr_detail();
     ch(&mut app, 'm');
-    assert_eq!(app.prompt, Some(Prompt::Merge(0)));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 0, .. })));
     press(&mut app, Key::Esc);
     ch(&mut app, 'd');
     assert_eq!(app.view, View::Diff);
@@ -1503,7 +1503,7 @@ fn on_the_checks_the_pr_keys_act_on_the_pr_shown() {
     let mut app = pr_detail_with_checks();
     ch(&mut app, 'l');
     ch(&mut app, 'c');
-    assert_eq!(app.prompt, Some(Prompt::Close));
+    assert!(matches!(app.prompt, Some(Prompt::Close { .. })));
 }
 
 // ---------------------------------------------------------- the agents pane

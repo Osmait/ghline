@@ -32,17 +32,38 @@ pub fn matches(text: &str, query: &str) -> bool {
 
 /// Where `query` first occurs in `text`, by byte, with the same smartcase.
 pub fn find(text: &str, query: &str) -> Option<std::ops::Range<usize>> {
+    if query.is_empty() {
+        return None;
+    }
     if query.chars().any(char::is_uppercase) {
         return text.find(query).map(|i| i..i + query.len());
     }
-    // Lowercasing can change a string's length, so the offset is looked for
-    // in a lowercased copy only when that copy is the same length.
+    // Fast path when lowercasing preserves byte offsets; otherwise build a
+    // byte-offset map from each lowercased byte back to `text` so characters
+    // like `İ` (whose lowercase expands in UTF-8) still match case-insensitively.
     let (t, q) = (text.to_lowercase(), query.to_lowercase());
     if t.len() == text.len() {
-        t.find(&q).map(|i| i..i + q.len())
-    } else {
-        text.find(query).map(|i| i..i + query.len())
+        return t.find(&q).map(|i| i..i + q.len());
     }
+    let mut folded = String::with_capacity(t.len());
+    // For each byte in `folded`, the `(start, end)` byte range in `text` of
+    // the source character that produced it.
+    let mut map: Vec<(usize, usize)> = Vec::with_capacity(t.len());
+    for (orig_start, ch) in text.char_indices() {
+        let orig_end = orig_start + ch.len_utf8();
+        for lc in ch.to_lowercase() {
+            let start = folded.len();
+            folded.push(lc);
+            for _ in start..folded.len() {
+                map.push((orig_start, orig_end));
+            }
+        }
+    }
+    let pos = folded.find(&q)?;
+    let end = pos + q.len();
+    let start_byte = map.get(pos)?.0;
+    let end_byte = map.get(end.saturating_sub(1))?.1;
+    Some(start_byte..end_byte)
 }
 
 impl App {
@@ -292,10 +313,15 @@ impl App {
         }
         let prep = self.prepared();
         let pairs = split_rows(&prep.rows);
-        pairs
-            .get(self.diff_cursor)
-            .and_then(|p| [p.header, p.left, p.right].into_iter().flatten().min())
-            .unwrap_or(0)
+        if pairs.is_empty() {
+            return 0;
+        }
+        let idx = self.diff_cursor.min(pairs.len() - 1);
+        let p = pairs[idx];
+        // Prefer the new (right) side when a pair holds both an edited-out and
+        // an edited-in line, matching how review comments anchor on the PR's
+        // head version.
+        p.right.or(p.left).or(p.header).unwrap_or(0)
     }
 
     /// The line, in the mode on screen, that unified `row` is drawn on.
@@ -423,5 +449,14 @@ mod tests {
     fn a_match_is_found_at_its_byte_offset() {
         assert_eq!(find("a Total b", "total"), Some(2..7));
         assert_eq!(find("漢 x", "x"), Some(4..5));
+    }
+
+    #[test]
+    fn find_matches_case_insensitively_when_lowercasing_changes_byte_length() {
+        // Turkish capital `İ` (U+0130, 2 UTF-8 bytes) lowercases to `i` +
+        // combining dot (3 bytes), changing the lowercased string length.
+        let text = "İ foo BAR";
+        let range = find(text, "bar").expect("must still find BAR");
+        assert_eq!(&text[range], "BAR");
     }
 }

@@ -52,7 +52,9 @@ impl Status {
             "merged" => Self::Merged,
             "closed" => Self::Closed,
             "success" | "neutral" => Self::Success,
-            "failure" | "timed out" | "action required" | "startup failure" => Self::Failure,
+            "failure" | "error" | "timed out" | "action required" | "startup failure" => {
+                Self::Failure
+            }
             "running" | "in progress" => Self::Running,
             "pending" | "queued" | "waiting" | "requested" => Self::Pending,
             "cancelled" | "canceled" => Self::Cancelled,

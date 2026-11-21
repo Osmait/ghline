@@ -80,6 +80,14 @@ pub trait Vcs: Sync + 'static {
     fn blame(&self, _repo: &str, _path: &str) -> Res<Vec<String>> {
         Ok(Vec::new())
     }
+
+    /// Who last touched each line of `path` at `scope`.
+    ///
+    /// Defaults to [`Vcs::blame`] so backends that only annotate the working
+    /// tree do not need an extra method.
+    fn blame_in(&self, repo: &str, _scope: &Scope, path: &str) -> Res<Vec<String>> {
+        self.blame(repo, path)
+    }
 }
 
 /// The backends that exist.

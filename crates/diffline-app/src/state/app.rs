@@ -253,6 +253,9 @@ pub struct App {
     pub toast: String,
     pub toast_ttl: u8,
     pub busy: bool,
+    /// The agent kind name captured when `send_queue` started, so `on_sent`
+    /// reports the right target even after spawning a new agent or switching.
+    pub sending_to: Option<String>,
     pub blink: bool,
     pub anim: u64,
     pub should_quit: bool,
@@ -353,6 +356,7 @@ impl App {
             toast: "ready".into(),
             toast_ttl: 0,
             busy: false,
+            sending_to: None,
             blink: true,
             anim: 0,
             should_quit: false,
@@ -536,7 +540,14 @@ impl App {
     /// Preferring one in this repository: an agent working somewhere else has
     /// none of the files the review is about.
     pub fn first_usable_agent(&self) -> Option<usize> {
-        let here = |a: &Agent| self.repo.starts_with(&a.cwd) || a.cwd.starts_with(&self.repo);
+        let repo = std::path::Path::new(&self.repo);
+        let here = |a: &Agent| {
+            if a.cwd.is_empty() {
+                return false;
+            }
+            let cwd = std::path::Path::new(&a.cwd);
+            repo.starts_with(cwd) || cwd.starts_with(repo)
+        };
         let free: Vec<usize> = (0..self.agents.len())
             .filter(|i| self.refusal(&self.agents[*i]).is_none())
             .collect();
@@ -597,14 +608,22 @@ impl App {
         // Dropped so this runs once rather than on every frame from here on.
         self.service = None;
         self.busy = false;
+        self.sending_to = None;
         self.refreshing = false;
         self.refresh_again = false;
+        self.search_pending = None;
         let gone = || Self::gone();
         if self.files_state.is_loading() {
             self.files_state = gone();
         }
         if self.agents_state.is_loading() {
             self.agents_state = gone();
+        }
+        if self.log_state.is_loading() {
+            self.log_state = gone();
+        }
+        if self.corpus_state.is_loading() {
+            self.corpus_state = gone();
         }
         for st in self.rows_state.values_mut() {
             if st.is_loading() {
@@ -631,6 +650,7 @@ impl App {
             || self.files_state.is_loading()
             || self.agents_state.is_loading()
             || self.log_state.is_loading()
+            || self.corpus_state.is_loading()
             || self.rows_state.values().any(Load::is_loading)
             || self.blame_state.values().any(Load::is_loading)
     }
@@ -697,6 +717,7 @@ impl App {
             self.blame_state.insert(path.clone(), Load::Loading);
             if !self.ask(Request::Blame {
                 repo: self.repo.clone(),
+                scope: self.scope.clone(),
                 path: path.clone(),
             }) {
                 self.blame_state.insert(path, Self::gone());
@@ -750,7 +771,16 @@ impl App {
                 }
             }
 
-            Response::Diff { path, opts, result } => {
+            Response::Diff {
+                scope,
+                path,
+                opts,
+                result,
+            } => {
+                // A scope that has since changed has an answer nobody wants.
+                if scope != self.scope {
+                    return;
+                }
                 // The context may have moved on while this was in flight.
                 if opts != self.opts() {
                     self.rows_state.insert(path, Load::Idle);
@@ -785,38 +815,41 @@ impl App {
                 self.refreshing = false;
 
                 if scope == self.scope {
-                    if let Ok(files) = files {
-                        let selected = self.path().to_string();
-                        let previous = self.file_idx;
-                        let changed = self.files != files;
-                        if changed {
-                            // an edit on disk: what was read for a search is
-                            // no longer what the files say
-                            self.forget_corpus();
-                            self.files = files;
-                            self.file_idx = self
-                                .files
-                                .iter()
-                                .position(|file| file.path == selected)
-                                .unwrap_or_else(|| {
-                                    previous.min(self.files.len().saturating_sub(1))
-                                });
-                            if self.path() != selected {
-                                self.cursor = 0;
-                                self.anchor = None;
+                    match files {
+                        Ok(files) => {
+                            let selected = self.path().to_string();
+                            let previous = self.file_idx;
+                            let changed = self.files != files;
+                            if changed {
+                                // an edit on disk: what was read for a search is
+                                // no longer what the files say
+                                self.forget_corpus();
+                                self.files = files;
+                                self.file_idx = self
+                                    .files
+                                    .iter()
+                                    .position(|file| file.path == selected)
+                                    .unwrap_or_else(|| {
+                                        previous.min(self.files.len().saturating_sub(1))
+                                    });
+                                if self.path() != selected {
+                                    self.cursor = 0;
+                                    self.anchor = None;
+                                }
                             }
-                        }
 
-                        // Any path not on screen is cheap to fetch when it is
-                        // next selected. Keeping those cached after an event
-                        // is how an edit to the second file stayed invisible.
-                        let current = self.path().to_string();
-                        self.rows.retain(|cached, _| cached == &current);
-                        self.spans.retain(|cached, _| cached == &current);
-                        self.words.retain(|cached, _| cached == &current);
-                        self.rows_state.retain(|cached, _| cached == &current);
-                        self.blame.retain(|cached, _| cached == &current);
-                        self.blame_state.retain(|cached, _| cached == &current);
+                            // Any path not on screen is cheap to fetch when it is
+                            // next selected. Keeping those cached after an event
+                            // is how an edit to the second file stayed invisible.
+                            let current = self.path().to_string();
+                            self.rows.retain(|cached, _| cached == &current);
+                            self.spans.retain(|cached, _| cached == &current);
+                            self.words.retain(|cached, _| cached == &current);
+                            self.rows_state.retain(|cached, _| cached == &current);
+                            self.blame.retain(|cached, _| cached == &current);
+                            self.blame_state.retain(|cached, _| cached == &current);
+                        }
+                        Err(error) => self.flash(error.brief()),
                     }
 
                     if opts == self.opts()
@@ -827,7 +860,11 @@ impl App {
                             Ok((rows, spans)) => {
                                 let changed = self.rows.get(&path) != Some(&rows);
                                 if changed {
+                                    self.forget_corpus();
                                     self.cursor = first_code(&rows, self.cursor);
+                                    self.anchor = self.anchor.and_then(|a| {
+                                        (!rows.is_empty()).then(|| a.min(rows.len() - 1))
+                                    });
                                     self.words
                                         .insert(path.clone(), crate::model::changed_words(&rows));
                                     self.rows.insert(path.clone(), rows);
@@ -880,16 +917,25 @@ impl App {
                 }
             }
 
-            Response::Blame { path, result } => match result {
-                Ok(lines) => {
-                    self.blame.insert(path.clone(), lines);
-                    self.blame_state.insert(path, Load::Ready);
+            Response::Blame {
+                scope,
+                path,
+                result,
+            } => {
+                if scope != self.scope {
+                    return;
                 }
-                Err(e) => {
-                    self.blame_state
-                        .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
+                match result {
+                    Ok(lines) => {
+                        self.blame.insert(path.clone(), lines);
+                        self.blame_state.insert(path, Load::Ready);
+                    }
+                    Err(e) => {
+                        self.blame_state
+                            .insert(path, Load::Failed(Arc::new(Failure::Ran(e))));
+                    }
                 }
-            },
+            }
 
             Response::Log(result) => match result {
                 Ok(entries) => {
@@ -917,6 +963,10 @@ impl App {
                 Ok(agents) => {
                     self.agents = agents;
                     self.agents_state = Load::Ready;
+                    self.agent_idx = self.agent_idx.min(self.agents.len().saturating_sub(1));
+                    if self.modal == Some(Modal::Agents) {
+                        self.sel = self.sel.min(self.agent_choices().len().saturating_sub(1));
+                    }
                 }
                 Err(e) => {
                     self.agents_state = Load::Failed(Arc::new(Failure::Ran(e)));
@@ -933,10 +983,13 @@ impl App {
                 match result {
                     Ok(()) => self.on_sent(),
                     Err(e) => {
+                        self.sending_to = None;
                         // The queue is put back: a note that did not arrive is
                         // still a note you meant to make.
                         for c in &mut self.comments {
-                            c.state = State::Queued;
+                            if c.state == State::Sending {
+                                c.state = State::Queued;
+                            }
                         }
                         self.flash(format!("✗ {}", e.brief()));
                     }
@@ -947,20 +1000,32 @@ impl App {
 
     /// What the queue becomes once an agent has it.
     fn on_sent(&mut self) {
-        let n = self.comments.len();
-        let files = {
-            let mut v: Vec<&str> = self.comments.iter().map(Comment::path).collect();
-            v.sort_unstable();
-            v.dedup();
-            v.len()
-        };
-        let who = self.agent().map_or("the agent".into(), |a| a.kind.clone());
-        self.comments.clear();
-        self.queue_sel = 0;
+        let mut n = 0usize;
+        let mut files: Vec<&str> = self
+            .comments
+            .iter()
+            .filter(|c| c.state == State::Sending)
+            .map(|c| {
+                n += 1;
+                c.path()
+            })
+            .collect();
+        files.sort_unstable();
+        files.dedup();
+        let file_count = files.len();
+        let who = self
+            .sending_to
+            .take()
+            .or_else(|| self.agent().map(|a| a.kind.clone()))
+            .unwrap_or_else(|| "the agent".into());
+        // Only the comments that were actually in flight leave the queue;
+        // anything added while the send was running stays queued.
+        self.comments.retain(|c| c.state != State::Sending);
+        self.queue_sel = self.queue_sel.min(self.comments.len().saturating_sub(1));
         self.replies.push(format!(
-            "{who} · accepted {n} note{}\nReading them across {files} file{}.",
+            "{who} · accepted {n} note{}\nReading them across {file_count} file{}.",
             plural(n),
-            plural(files)
+            plural(file_count)
         ));
         self.flash(format!("→ {n} sent to {who}"));
     }
@@ -1153,6 +1218,7 @@ mod tests {
         let mut a = app();
         a.context = 9;
         a.apply(Response::Diff {
+            scope: a.scope.clone(),
             path: "src/a.rs".into(),
             opts: crate::model::DiffOpts {
                 context: 3,
@@ -1173,6 +1239,7 @@ mod tests {
         let mut a = app();
         a.ignore_ws = true;
         a.apply(Response::Diff {
+            scope: a.scope.clone(),
             path: "src/a.rs".into(),
             opts: crate::model::DiffOpts {
                 context: 3,
@@ -1430,5 +1497,105 @@ mod tests {
             a.tick();
         }
         assert_eq!(a.toast, "ready");
+    }
+
+    #[test]
+    fn a_stale_diff_response_from_another_scope_is_ignored() {
+        let mut a = app();
+        a.scope = Scope::Branch {
+            base: "main".into(),
+        };
+        a.apply(Response::Diff {
+            scope: Scope::WorkingTree,
+            path: "src/a.rs".into(),
+            opts: a.opts(),
+            result: Ok((Vec::new(), Vec::new())),
+        });
+        assert_eq!(
+            a.diff_rows().len(),
+            5,
+            "a diff response from the previous scope must not overwrite the active one"
+        );
+    }
+
+    #[test]
+    fn sending_keeps_comments_added_while_in_flight_and_uses_captured_target() {
+        let mut a = app();
+        a.sending_to = Some("codex".into());
+        a.comments.push(Comment {
+            file: "src/a.rs".into(),
+            anchors: vec![Anchor {
+                path: "src/a.rs".into(),
+                side: crate::model::Side::New,
+                line: 1,
+            }],
+            snippet: String::new(),
+            body: "sent one".into(),
+            state: State::Sending,
+        });
+        a.comments.push(Comment {
+            file: "src/a.rs".into(),
+            anchors: vec![Anchor {
+                path: "src/a.rs".into(),
+                side: crate::model::Side::New,
+                line: 2,
+            }],
+            snippet: String::new(),
+            body: "written while sending".into(),
+            state: State::Queued,
+        });
+        a.apply(Response::Sent(Ok(())));
+        assert_eq!(a.comments.len(), 1);
+        assert_eq!(a.comments[0].body, "written while sending");
+        assert!(a.replies[0].contains("codex"), "{}", a.replies[0]);
+        assert!(a.replies[0].contains("1 note"), "{}", a.replies[0]);
+    }
+
+    #[test]
+    fn worker_died_fails_log_and_corpus_states_and_stops_waiting() {
+        let mut a = app();
+        a.service = Some(Box::new(crate::service::Service::dead()));
+        a.log_state = Load::Loading;
+        a.corpus_state = Load::Loading;
+        a.search_pending = Some(1);
+        assert!(a.waiting());
+        a.poll();
+        assert!(!a.waiting());
+        assert!(a.log_state.error().is_some());
+        assert!(a.corpus_state.error().is_some());
+        assert_eq!(a.search_pending, None);
+    }
+
+    #[test]
+    fn first_usable_agent_uses_path_boundaries_and_ignores_empty_cwd() {
+        let mut a = app();
+        a.repo = "/work/app".into();
+        a.agents = vec![
+            Agent {
+                kind: "empty".into(),
+                status: crate::shared::mux::AgentStatus::Idle,
+                cwd: String::new(),
+                pane: "p0".into(),
+                title: String::new(),
+                focused: false,
+            },
+            Agent {
+                kind: "sibling".into(),
+                status: crate::shared::mux::AgentStatus::Idle,
+                cwd: "/work/app-other".into(),
+                pane: "p1".into(),
+                title: String::new(),
+                focused: false,
+            },
+            Agent {
+                kind: "real".into(),
+                status: crate::shared::mux::AgentStatus::Idle,
+                cwd: "/work/app/sub".into(),
+                pane: "p2".into(),
+                title: String::new(),
+                focused: false,
+            },
+        ];
+        assert_eq!(a.first_usable_agent(), Some(2));
     }
 }

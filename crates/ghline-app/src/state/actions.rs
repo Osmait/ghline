@@ -9,16 +9,32 @@ use crate::data::{Kind, MERGE_METHODS, Status};
 use crate::service::Request;
 
 /// A pending confirmation. While one is up, every other key is ignored.
+///
+/// Every variant pins its target repository and pull request when opened so a
+/// background reload or selection shift before confirmation can never mutate a
+/// different repository or PR.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Prompt {
-    /// Index into `MERGE_METHODS`.
-    Merge(usize),
-    Close,
-    Reopen,
-    /// Carries the branch and number explicitly: this prompt appears after
-    /// the merge, once the list has already been reloaded, so it cannot
-    /// depend on where the selection happens to be by then.
+    /// Merge a pull request with `MERGE_METHODS[method]`.
+    Merge {
+        repo: String,
+        num: i64,
+        branch: String,
+        method: usize,
+    },
+    Close {
+        repo: String,
+        num: i64,
+    },
+    Reopen {
+        repo: String,
+        num: i64,
+    },
+    /// Carries the repository, branch and number explicitly: this prompt
+    /// appears after the merge, once the list has already been reloaded, so it
+    /// cannot depend on where the selection happens to be by then.
     DeleteBranch {
+        repo: String,
         num: i64,
         branch: String,
     },
@@ -82,8 +98,17 @@ impl App {
     /// `m`: opens the merge confirmation if the PR allows it.
     pub fn ask_merge(&mut self) {
         let Some(cur) = self.current() else { return };
-        match cur.state {
-            Status::Open => self.prompt = Some(Prompt::Merge(0)),
+        let (state, num, branch) = (cur.state, cur.num, cur.branch().to_string());
+        let repo = self.item_repo_key();
+        match state {
+            Status::Open => {
+                self.prompt = Some(Prompt::Merge {
+                    repo,
+                    num,
+                    branch,
+                    method: 0,
+                });
+            }
             Status::Draft => {
                 self.flash_warn("draft pull requests can't be merged — mark it ready first");
             }
@@ -95,10 +120,12 @@ impl App {
     /// `c`: closes the PR, or reopens it if it was already closed.
     pub fn ask_close(&mut self) {
         let Some(cur) = self.current() else { return };
-        if cur.state.is_open() {
-            self.prompt = Some(Prompt::Close);
-        } else if cur.state == Status::Closed {
-            self.prompt = Some(Prompt::Reopen);
+        let (state, num) = (cur.state, cur.num);
+        let repo = self.item_repo_key();
+        if state.is_open() {
+            self.prompt = Some(Prompt::Close { repo, num });
+        } else if state == Status::Closed {
+            self.prompt = Some(Prompt::Reopen { repo, num });
         } else {
             self.flash_warn("a merged pull request can't be closed");
         }
@@ -112,10 +139,15 @@ impl App {
             self.flash_warn(format!("branch {branch} is already deleted"));
             return;
         }
-        let (num, branch) = (cur.num, cur.branch().to_string());
-        match cur.state {
+        let (state, num, branch) = (cur.state, cur.num, cur.branch().to_string());
+        let repo = self.item_repo_key();
+        if branch.is_empty() {
+            self.flash_warn("no branch name to delete");
+            return;
+        }
+        match state {
             Status::Merged | Status::Closed => {
-                self.prompt = Some(Prompt::DeleteBranch { num, branch });
+                self.prompt = Some(Prompt::DeleteBranch { repo, num, branch });
             }
             _ => self.flash_warn("delete the branch after merging or closing the pull request"),
         }
@@ -126,92 +158,79 @@ impl App {
         let Some(prompt) = self.prompt.take() else {
             return;
         };
-        if let Prompt::Clone { repo, dest } = prompt {
-            self.busy = true;
-            self.flash_ok(format!("cloning {repo} into {dest}…"));
-            self.send(Request::Clone { repo, dest });
-            return;
-        }
-
-        // dispatching carries everything it needs and has no pull request
-        // behind it, so it never reaches the extraction below
-        if let Prompt::Dispatch { who, pane, text } = prompt {
-            self.busy = true;
-            self.flash_ok(format!("sending to {who}…"));
-            // A fresh worktree needs three calls chained; an agent that is
-            // already there needs one. Which it is was decided in the picker.
-            match self.pending_fresh.take() {
-                Some(f) => self.send(Request::DispatchFresh {
-                    repo_root: f.repo_root,
-                    branch: f.branch,
-                    label: f.label,
-                    kind: f.kind,
-                    text,
-                }),
-                None => self.send(Request::Dispatch { pane, text }),
-            }
-            return;
-        }
-
-        // deleting a branch carries its own data; everything else acts on the
-        // PR selected right now
-        let (num, branch) = match &prompt {
-            Prompt::DeleteBranch { num, branch } => (*num, branch.clone()),
-            _ => match self.current() {
-                Some(cur) => (cur.num, cur.branch().to_string()),
-                None => return,
-            },
-        };
-
-        self.dispatch(&prompt, num, branch);
-    }
-
-    /// The action goes to the service thread and the list is refreshed from
-    /// what GitHub reports, not from a local guess.
-    fn dispatch(&mut self, prompt: &Prompt, num: i64, branch: String) {
-        let repo = self.item_repo_key();
-        self.busy = true;
         match prompt {
-            Prompt::Merge(m) => {
-                let method = MERGE_METHODS[*m];
+            Prompt::Clone { repo, dest } => {
+                self.busy = true;
+                self.flash_ok(format!("cloning {repo} into {dest}…"));
+                self.ask(Request::Clone { repo, dest });
+            }
+            // dispatching carries everything it needs and has no pull request
+            // behind it
+            Prompt::Dispatch { who, pane, text } => {
+                self.busy = true;
+                self.flash_ok(format!("sending to {who}…"));
+                // A fresh worktree needs three calls chained; an agent that is
+                // already there needs one. Which it is was decided in the picker.
+                match self.pending_fresh.take() {
+                    Some(f) => self.ask(Request::DispatchFresh {
+                        repo_root: f.repo_root,
+                        branch: f.branch,
+                        label: f.label,
+                        kind: f.kind,
+                        text,
+                    }),
+                    None => self.ask(Request::Dispatch { pane, text }),
+                }
+            }
+            Prompt::Merge {
+                repo,
+                num,
+                branch,
+                method,
+            } => {
+                let method = MERGE_METHODS
+                    .get(method)
+                    .copied()
+                    .unwrap_or(MERGE_METHODS[0]);
+                self.busy = true;
                 self.flash_ok(format!("merging #{num} via {}…", method.short()));
                 // the branch is offered when the response arrives, never before:
                 // if the merge fails, nothing should be offered for deletion
-                self.send(Request::Merge {
+                self.ask(Request::Merge {
                     repo,
                     num,
                     method,
                     branch,
                 });
             }
-            Prompt::Close => {
+            Prompt::Close { repo, num } => {
+                self.busy = true;
                 self.flash_ok(format!("closing #{num}…"));
-                self.send(Request::Close { repo, num });
+                self.ask(Request::Close { repo, num });
             }
-            Prompt::Reopen => {
+            Prompt::Reopen { repo, num } => {
+                self.busy = true;
                 self.flash_ok(format!("reopening #{num}…"));
-                self.send(Request::Reopen { repo, num });
+                self.ask(Request::Reopen { repo, num });
             }
-            Prompt::DeleteBranch { .. } => {
+            Prompt::DeleteBranch { repo, branch, .. } => {
+                if branch.is_empty() {
+                    self.flash_warn("no branch name to delete");
+                    return;
+                }
+                self.busy = true;
                 self.flash_ok(format!("deleting {branch}…"));
-                self.send(Request::DeleteBranch { repo, branch });
+                self.ask(Request::DeleteBranch { repo, branch });
             }
-            // both handled before the pull request data is gathered
-            Prompt::Dispatch { .. } | Prompt::Clone { .. } => {}
         }
     }
 
     pub fn cancel_prompt(&mut self) {
         // a plan for a worktree only outlives the question it was asked with
         self.pending_fresh = None;
+        self.pending_clone_edit = None;
         if self.prompt.take().is_some() {
             self.flash_warn("cancelled");
-        }
-    }
-
-    fn send(&self, req: Request) {
-        if let Some(svc) = &self.service {
-            svc.send(req);
         }
     }
 }
