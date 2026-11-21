@@ -44,7 +44,7 @@ jobs:
           # No Intel Mac build: Apple Silicon is what the project is built
           # and used on, and an Intel Mac can still build from source.
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-15
 
     steps:
       # Pinned to a commit, not to the `v4` tag its owner can move. The
