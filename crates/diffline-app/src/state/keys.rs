@@ -360,6 +360,28 @@ impl Chord {
     }
 }
 
+/// Maps a bracketed key name (`esc`, `cr`, `up`, …) to its [`Key`].
+fn parse_named_key(inner: &str) -> Option<Key> {
+    Some(match inner.to_ascii_lowercase().as_str() {
+        "esc" => Key::Esc,
+        "cr" | "enter" | "return" => Key::Enter,
+        "tab" => Key::Tab,
+        "s-tab" => Key::BackTab,
+        "bs" | "backspace" => Key::Backspace,
+        "del" | "delete" => Key::Delete,
+        "space" => Key::Char(' '),
+        "up" => Key::Up,
+        "down" => Key::Down,
+        "left" => Key::Left,
+        "right" => Key::Right,
+        "home" => Key::Home,
+        "end" => Key::End,
+        "pageup" | "pgup" => Key::PageUp,
+        "pagedown" | "pgdn" => Key::PageDown,
+        _ => return None,
+    })
+}
+
 /// Reads a chord out of a config file.
 ///
 /// `j`, `<C-d>`, `<leader>n`, `gg`, `]c`, `<esc>`. Returns `None` for anything
@@ -388,29 +410,21 @@ pub fn parse_chord(spec: &str) -> Option<Chord> {
             .strip_prefix("C-")
             .or_else(|| inner.strip_prefix("c-"))
         {
-            let mut ch = parse_chord(c)?;
-            ch.press.ctrl = true;
-            return Some(ch);
+            let key = parse_named_key(c).or_else(|| {
+                let mut chars = c.chars();
+                let ch = chars.next()?;
+                chars.next().is_none().then_some(Key::Char(ch))
+            })?;
+            return Some(Chord {
+                prefix: Pending::None,
+                press: Press {
+                    key,
+                    ctrl: true,
+                    alt: false,
+                },
+            });
         }
-        let key = match inner.to_ascii_lowercase().as_str() {
-            "esc" => Key::Esc,
-            "cr" | "enter" | "return" => Key::Enter,
-            "tab" => Key::Tab,
-            "s-tab" => Key::BackTab,
-            "bs" | "backspace" => Key::Backspace,
-            "del" | "delete" => Key::Delete,
-            "space" => Key::Char(' '),
-            "up" => Key::Up,
-            "down" => Key::Down,
-            "left" => Key::Left,
-            "right" => Key::Right,
-            "home" => Key::Home,
-            "end" => Key::End,
-            "pageup" => Key::PageUp,
-            "pagedown" => Key::PageDown,
-            _ => return None,
-        };
-        return Some(Chord::plain(key));
+        return parse_named_key(inner).map(Chord::plain);
     }
 
     let mut chars = spec.chars();
@@ -557,16 +571,30 @@ impl Map {
     /// `action` of `none` unbinds, which is the only way to get a key back
     /// that the defaults have taken.
     pub fn apply(&mut self, text: &str) {
-        for (n, line) in text.lines().enumerate() {
-            let line = line.split('#').next().unwrap_or(line).trim();
-            if line.is_empty() {
+        for (n, raw) in text.lines().enumerate() {
+            let trimmed = raw.trim_start();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            let Some((spec, name)) = line.split_once('=') else {
+            // Strip inline comments that begin after whitespace so a key
+            // chord containing `#` (such as `<leader>#`) stays intact while
+            // trailing `# note with =` cannot confuse the split below.
+            let line = match trimmed
+                .as_bytes()
+                .windows(2)
+                .position(|w| matches!(w[0], b' ' | b'\t') && w[1] == b'#')
+            {
+                Some(i) => trimmed[..i].trim(),
+                None => trimmed.trim(),
+            };
+            // `rsplit_once` rather than `split_once`: an action name never
+            // contains `=`, while a key chord such as `<leader>=` or `=` does.
+            let Some((spec, rhs)) = line.rsplit_once('=') else {
                 self.problems.push(format!("line {}: no `=`", n + 1));
                 continue;
             };
-            let (spec, name) = (spec.trim(), name.trim());
+            let spec = spec.trim();
+            let name = rhs.split('#').next().unwrap_or(rhs).trim();
             let Some(chord) = parse_chord(spec) else {
                 self.problems
                     .push(format!("line {}: {spec} is not a key", n + 1));
@@ -774,5 +802,25 @@ mod tests {
     fn a_comment_does_not_take_the_binding_with_it() {
         let m = Map::with("x = quit  # because I keep hitting it\n");
         assert_eq!(m.get(parse_chord("x").unwrap()), Some(Action::Quit));
+    }
+
+    #[test]
+    fn the_shipped_keymap_template_parses_with_zero_problems() {
+        let m = Map::with(&template());
+        assert!(m.problems.is_empty(), "template problems: {:?}", m.problems);
+        assert_eq!(
+            m.get(parse_chord("<leader>=").unwrap()),
+            Some(Action::ContextMore)
+        );
+    }
+
+    #[test]
+    fn parse_chord_handles_control_over_named_keys() {
+        let up = parse_chord("<C-up>").unwrap();
+        assert_eq!(up.press, Press::ctrl(Key::Up));
+        let cr = parse_chord("<C-cr>").unwrap();
+        assert_eq!(cr.press, Press::ctrl(Key::Enter));
+        let space = parse_chord("<C-space>").unwrap();
+        assert_eq!(space.press, Press::ctrl(Key::Char(' ')));
     }
 }

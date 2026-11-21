@@ -202,9 +202,13 @@ pub enum Response {
         repo: String,
         num: i64,
         verdict: Verdict,
+        /// The exact drafts that travelled with this submission, so drafts
+        /// written while the request was in flight are never discarded.
+        submitted: Vec<Draft>,
         result: Result<(), Error>,
     },
     Search {
+        owner: String,
         query: String,
         source: FinderSource,
         result: Result<Vec<crate::data::SearchHit>, Error>,
@@ -405,6 +409,7 @@ fn handle(req: Request) -> Response {
                 repo,
                 num,
                 verdict,
+                submitted: drafts,
                 result,
             }
         }
@@ -422,6 +427,7 @@ fn handle(req: Request) -> Response {
                 _ => crate::forge::current().search_issues(&owner, &query, Kind::Issue),
             };
             Response::Search {
+                owner,
                 query,
                 source,
                 result,

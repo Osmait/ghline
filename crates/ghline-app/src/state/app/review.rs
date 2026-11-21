@@ -69,6 +69,10 @@ impl App {
         let path = self.diff_file()?.path.clone();
         let row = self.cursor_row();
         let prep = self.prepared();
+        if prep.rows.is_empty() {
+            return None;
+        }
+        let row = row.min(prep.rows.len() - 1);
         let r = prep
             .rows
             .get(..=row)?

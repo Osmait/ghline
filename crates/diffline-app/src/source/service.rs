@@ -44,7 +44,11 @@ pub enum Request {
         opts: DiffOpts,
     },
     /// Who last touched each line.
-    Blame { repo: String, path: String },
+    Blame {
+        repo: String,
+        scope: Scope,
+        path: String,
+    },
     /// The recent commits, for the history picker.
     Log { repo: String },
     /// The coding agents on this machine.
@@ -74,6 +78,7 @@ pub enum Response {
         result: Res<Vec<ChangedFile>>,
     },
     Diff {
+        scope: Scope,
         path: String,
         opts: DiffOpts,
         /// The rows, and the colour spans that go with them.
@@ -92,6 +97,7 @@ pub enum Response {
         result: Res<Vec<(String, Vec<Row>)>>,
     },
     Blame {
+        scope: Scope,
         path: String,
         result: Res<Vec<String>>,
     },
@@ -200,7 +206,12 @@ fn handle(req: Request) -> Response {
                     let spans = highlight_rows(&path, &rows);
                     (rows, spans)
                 });
-            Response::Diff { path, opts, result }
+            Response::Diff {
+                scope,
+                path,
+                opts,
+                result,
+            }
         }
 
         Request::Corpus { repo, scope, opts } => {
@@ -236,14 +247,15 @@ fn handle(req: Request) -> Response {
             }
         }
 
-        Request::Blame { repo, path } => Response::Blame {
+        Request::Blame { repo, scope, path } => Response::Blame {
             // Only asked of a backend that says it can: an empty list from
             // one that cannot would read as "nobody wrote this".
             result: if vcs(&repo).has_blame() {
-                vcs(&repo).blame(&repo, &path)
+                vcs(&repo).blame_in(&repo, &scope, &path)
             } else {
                 Ok(Vec::new())
             },
+            scope,
             path,
         },
 

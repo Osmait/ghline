@@ -463,8 +463,16 @@ impl App {
             .unwrap_or(Load::Ready)
     }
 
-    /// Load state of the selected PR's diff.
+    /// Load state of the selected PR's diff, or the selected commit's diff when
+    /// narrowed to a single commit.
     pub fn diff_status(&self) -> Load {
+        if let Some(sha) = &self.diff_commit {
+            return self
+                .commit_state
+                .get(&(self.item_repo_key(), sha.clone()))
+                .cloned()
+                .unwrap_or(Load::Ready);
+        }
         let Some(num) = self.current().map(|c| c.num) else {
             return Load::Ready;
         };
@@ -502,6 +510,8 @@ impl App {
         self.diff_commit = None;
         self.diff_folds.clear();
         self.diff_pan = 0;
+        self.diff_hit = None;
+        self.files_scroll = 0;
         self.file_idx = self.first_file();
         self.diff_scroll = 0;
         self.diff_cursor = 0;

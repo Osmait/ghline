@@ -260,7 +260,7 @@ fn a_merge_asks_gh_rather_than_editing_the_list() {
     let before = app.current().unwrap().state;
 
     app.ask_merge();
-    assert!(matches!(app.prompt, Some(Prompt::Merge(0))));
+    assert!(matches!(app.prompt, Some(Prompt::Merge { method: 0, .. })));
     app.confirm();
 
     let sent = tape.0.borrow();
@@ -282,7 +282,7 @@ fn closing_a_pr_asks_gh_to_close_it() {
     app.pane = Pane::List;
 
     app.ask_close();
-    assert!(matches!(app.prompt, Some(Prompt::Close)));
+    assert!(matches!(app.prompt, Some(Prompt::Close { .. })));
     app.confirm();
 
     assert!(matches!(
@@ -299,8 +299,10 @@ fn the_branch_prompt_remembers_which_branch_it_asked_about() {
     // response, which is a round trip this test has no worker to make.
     let cur = app.current().unwrap();
     let (num, branch) = (cur.num, cur.branch().to_string());
+    let repo = app.item_repo_key();
     assert!(!branch.is_empty(), "the fixture needs a branch to delete");
     app.prompt = Some(Prompt::DeleteBranch {
+        repo,
         num,
         branch: branch.clone(),
     });
@@ -946,7 +948,10 @@ mod mouse {
     fn the_wheel_does_not_scroll_what_lies_behind_a_question() {
         let mut app = in_the_diff();
         let r = region(&app, Target::Pane(Pane::DiffBody));
-        app.prompt = Some(crate::actions::Prompt::Close);
+        app.prompt = Some(crate::actions::Prompt::Close {
+            repo: "owner/repo".into(),
+            num: 1,
+        });
         wheel(&mut app, r.area.x + 2, r.area.y + 1, true);
         assert_eq!(app.diff_cursor, 0);
     }
@@ -1287,7 +1292,10 @@ mod mouse {
     fn a_click_cannot_answer_a_confirmation() {
         let mut app = seeded();
         render(&mut app);
-        app.prompt = Some(Prompt::Close);
+        app.prompt = Some(Prompt::Close {
+            repo: "owner/repo".into(),
+            num: 1,
+        });
 
         click_at(&mut app, 10, 10);
         assert!(app.prompt.is_some(), "a stray click is not an answer");
@@ -3543,6 +3551,7 @@ mod sending_a_review {
             repo: repo.clone(),
             num,
             verdict: Verdict::Comment,
+            submitted: app.drafts().to_vec(),
             result: Ok(()),
         });
         assert!(app.drafts().is_empty());
@@ -3560,6 +3569,7 @@ mod sending_a_review {
             repo,
             num,
             verdict: Verdict::Approve,
+            submitted: app.drafts().to_vec(),
             result: Err(crate::shared::error::Error::Command {
                 args: "api".into(),
                 status: Some(1),
@@ -3642,4 +3652,125 @@ fn open_in_editor_refuses_traversal_and_symlink_escapes() {
     assert!(app.edit_request.is_some());
 
     let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn pr_action_state_update_does_not_mutate_issues_with_the_same_number() {
+    let mut app = seeded();
+    let repo = app.repo_key();
+    let pr_num = app.lists.get(&(repo.clone(), 1)).unwrap()[0].num;
+    let mut issue = app.lists.get(&(repo.clone(), 0)).unwrap()[0].clone();
+    issue.num = pr_num;
+    issue.state = Status::Open;
+    app.lists.insert((repo.clone(), 0), vec![issue]);
+
+    app.apply(Response::Action {
+        repo: repo.clone(),
+        num: pr_num,
+        result: Ok("closed".into()),
+        merged_branch: None,
+        now: Some(Status::Closed),
+    });
+
+    assert_eq!(app.lists[&(repo.clone(), 1)][0].state, Status::Closed);
+    assert_eq!(
+        app.lists[&(repo, 0)][0].state,
+        Status::Open,
+        "closing PR #{pr_num} must not mark issue #{pr_num} as closed"
+    );
+}
+
+#[test]
+fn confirm_uses_the_pinned_repo_and_pr_even_after_selection_changes() {
+    let (mut app, tape) = recording();
+    app.pane = Pane::List;
+    let target_repo = app.item_repo_key();
+    let target_num = app.current().unwrap().num;
+
+    app.ask_close();
+    // Simulate a background reload or selection shift before confirmation.
+    app.item += 1;
+    app.confirm();
+
+    let sent = tape.0.borrow();
+    assert!(
+        matches!(
+            sent.first(),
+            Some(Request::Close { repo, num }) if *repo == target_repo && *num == target_num
+        ),
+        "expected Close for {target_repo}#{target_num}"
+    );
+}
+
+#[test]
+fn review_sent_only_removes_submitted_drafts_and_keeps_new_ones() {
+    let (mut app, _) = recording();
+    let repo = app.item_repo_key();
+    let num = app.current().unwrap().num;
+    let sent_draft = crate::data::Draft {
+        path: "src/a.rs".into(),
+        line: 10,
+        side: crate::data::DiffSide::Right,
+        body: "first".into(),
+    };
+    let in_flight_draft = crate::data::Draft {
+        path: "src/a.rs".into(),
+        line: 20,
+        side: crate::data::DiffSide::Right,
+        body: "added while sending".into(),
+    };
+    app.drafts.insert(
+        (repo.clone(), num),
+        vec![sent_draft.clone(), in_flight_draft],
+    );
+
+    app.apply(Response::ReviewSent {
+        repo,
+        num,
+        verdict: crate::data::Verdict::Comment,
+        submitted: vec![sent_draft],
+        result: Ok(()),
+    });
+
+    assert_eq!(app.drafts().len(), 1);
+    assert_eq!(app.drafts()[0].body, "added while sending");
+}
+
+#[test]
+fn scroll_past_bottom_with_g_and_j_does_not_snap_to_top() {
+    let mut app = seeded();
+    app.view = View::Detail;
+    app.pane = Pane::Body;
+    app.on_key(Press::new(Key::Char('G')));
+    assert_eq!(app.detail_scroll, usize::MAX);
+    app.on_key(Press::new(Key::Char('j')));
+    assert_eq!(
+        app.detail_scroll,
+        usize::MAX,
+        "scrolling down from usize::MAX must saturate, not wrap to 0"
+    );
+    app.on_key(Press::new(Key::Char('k')));
+    assert_eq!(app.detail_scroll, usize::MAX - 1);
+}
+
+#[test]
+fn search_response_for_another_account_is_ignored() {
+    let mut app = seeded();
+    app.finder_open = true;
+    app.finder_source = crate::data::Source::Issues;
+    app.finder_query = "bug".into();
+    app.apply(Response::Search {
+        owner: "someone-else".into(),
+        query: "bug".into(),
+        source: crate::data::Source::Issues,
+        result: Ok(vec![crate::data::SearchHit {
+            repo: "someone-else/repo".into(),
+            num: 9,
+            title: "stale".into(),
+            state: Status::Open,
+            when: "1d".into(),
+            sha: String::new(),
+        }]),
+    });
+    assert!(app.finder_hits.is_empty());
 }

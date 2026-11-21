@@ -198,20 +198,38 @@ impl App {
     /// Of the window, not of the file — that is the whole point of them, and
     /// it is why the render has to hand back the height it used.
     fn goto_screen(&mut self, where_to: Place) {
-        let rows = self.diff_rows().len();
-        if rows == 0 {
+        let rows = self.diff_rows();
+        if rows.is_empty() {
             return;
         }
-        let top = self.diff_scroll.min(rows - 1);
-        let bottom = top
-            .saturating_add(self.view_height.saturating_sub(1))
-            .min(rows - 1);
-        let target = match where_to {
-            Place::Top => top,
-            Place::Middle => top + bottom.saturating_sub(top) / 2,
-            Place::Bottom => bottom,
+        let target_row = if self.split {
+            let pairs = crate::model::pair_rows(rows);
+            if pairs.is_empty() {
+                return;
+            }
+            let top = self.diff_scroll.min(pairs.len() - 1);
+            let bottom = top
+                .saturating_add(self.view_height.saturating_sub(1))
+                .min(pairs.len() - 1);
+            let target = match where_to {
+                Place::Top => top,
+                Place::Middle => top + bottom.saturating_sub(top) / 2,
+                Place::Bottom => bottom,
+            };
+            let p = pairs[target];
+            p.right.or(p.left).or(p.header).unwrap_or(0)
+        } else {
+            let top = self.diff_scroll.min(rows.len() - 1);
+            let bottom = top
+                .saturating_add(self.view_height.saturating_sub(1))
+                .min(rows.len() - 1);
+            match where_to {
+                Place::Top => top,
+                Place::Middle => top + bottom.saturating_sub(top) / 2,
+                Place::Bottom => bottom,
+            }
         };
-        self.cursor = target.min(rows - 1);
+        self.cursor = target_row.min(rows.len() - 1);
         // A header is not a line you can sit on, so slide off it.
         if !self.diff_rows()[self.cursor].kind.is_code() {
             self.move_cursor(1);
@@ -297,10 +315,19 @@ impl App {
     /// `zz`, `zt`, `zb`: move the window rather than the cursor.
     fn scroll_cursor_to(&mut self, where_to: Place) {
         let h = self.view_height.max(1);
+        let at = if self.split {
+            let cursor = self.cursor;
+            crate::model::pair_rows(self.diff_rows())
+                .iter()
+                .position(|p| [p.left, p.right, p.header].contains(&Some(cursor)))
+                .unwrap_or(0)
+        } else {
+            self.cursor
+        };
         self.diff_scroll = match where_to {
-            Place::Top => self.cursor,
-            Place::Middle => self.cursor.saturating_sub(h / 2),
-            Place::Bottom => self.cursor.saturating_sub(h.saturating_sub(1)),
+            Place::Top => at,
+            Place::Middle => at.saturating_sub(h / 2),
+            Place::Bottom => at.saturating_sub(h.saturating_sub(1)),
         };
     }
 
@@ -433,7 +460,12 @@ impl App {
     /// `^`: the first character that is not a space.
     fn first_non_blank(&mut self) {
         let text = self.cursor_text();
-        self.hscroll = text.len() - text.trim_start().len();
+        let col: usize = text
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+            .sum();
+        self.hscroll = col.min(self.max_hscroll());
     }
 
     /// `n` and `N`: the next or previous line matching what `/` last asked
@@ -670,10 +702,16 @@ impl App {
         self.rows_state.clear();
         self.rows.clear();
         self.spans.clear();
+        self.words.clear();
+        self.forget_corpus();
         self.blame_state.clear();
         self.blame.clear();
         self.file_idx = 0;
         self.cursor = 0;
+        self.diff_scroll = 0;
+        self.hscroll = 0;
+        self.tree_scroll = 0;
+        self.row_pending = None;
         self.anchor = None;
     }
 
@@ -703,9 +741,16 @@ impl App {
         }
         self.context = ctx;
         self.forget_corpus();
-        // only the open file is re-asked; the rest when they are opened
+        // Every cached file was fetched under the old context width, so clear
+        // them all just as `toggle_whitespace` does.
+        self.rows.clear();
+        self.spans.clear();
+        self.words.clear();
+        self.rows_state.clear();
         let path = self.path().to_string();
-        self.rows_state.insert(path, Load::Idle);
+        if !path.is_empty() {
+            self.rows_state.insert(path, Load::Idle);
+        }
         self.flash(format!("context ±{ctx}"));
     }
 
@@ -799,7 +844,8 @@ impl App {
             return;
         };
         let before = self.comments.len();
-        self.comments.retain(|c| !c.anchors.contains(&a));
+        self.comments
+            .retain(|c| c.state == State::Sending || !c.anchors.contains(&a));
         if self.comments.len() < before {
             self.queue_sel = self.queue_sel.min(self.comments.len().saturating_sub(1));
             self.flash("comment removed");
@@ -826,6 +872,7 @@ impl App {
                 c.state = State::Sending;
             }
             self.busy = true;
+            self.sending_to = Some(kind.clone());
             self.flash(format!("starting a {kind}…"));
             self.ask_spawn(kind, text);
             return;
@@ -853,6 +900,7 @@ impl App {
             c.state = State::Sending;
         }
         self.busy = true;
+        self.sending_to = Some(agent.kind.clone());
         self.flash(format!("sending to {}…", agent.kind));
         self.ask_send(agent.pane, text);
     }
@@ -1161,6 +1209,7 @@ impl App {
         // level — `g5` is not a thing.
         if chord.prefix == Pending::None
             && !ctrl
+            && !press.alt
             && let Key::Char(c @ '0'..='9') = press.key
             && (c != '0' || self.count.is_some())
         {
@@ -1180,7 +1229,7 @@ impl App {
         // A prefix opens an alphabet and keeps the count for whatever
         // finishes it: `5gg` is one command, and spending the count here
         // would leave the `gg` with nothing to act on.
-        if chord.prefix == Pending::None && !ctrl && self.keys.is_prefix(press.key) {
+        if chord.prefix == Pending::None && !ctrl && !press.alt && self.keys.is_prefix(press.key) {
             self.pending = match press.key {
                 Key::Char(' ') => Pending::Leader,
                 Key::Char('g') => Pending::G,
@@ -1383,7 +1432,7 @@ impl App {
                 Key::Backspace => {
                     self.draft.pop();
                 }
-                Key::Char(c) if !ctrl => self.draft.push(c),
+                Key::Char(c) if !ctrl && !press.alt => self.draft.push(c),
                 _ => {}
             }
             return;
@@ -1465,8 +1514,11 @@ impl App {
             Key::Backspace => {
                 self.query.pop();
                 self.sel = 0;
+                if m == Modal::Finder {
+                    self.last_search = self.query.clone();
+                }
             }
-            Key::Char(c) if !ctrl => {
+            Key::Char(c) if !ctrl && !press.alt => {
                 self.query.push(c);
                 self.sel = 0;
                 // What `n` and `N` will repeat. Taken as it is typed rather
@@ -2186,6 +2238,7 @@ mod tests {
         // and lands when they do
         let rows = a.corpus["src/b.rs"].clone();
         a.apply(crate::service::Response::Diff {
+            scope: a.scope.clone(),
             path: "src/b.rs".into(),
             opts: a.opts(),
             result: Ok((rows, Vec::new())),
@@ -2704,9 +2757,65 @@ mod tests {
     #[test]
     fn changing_the_context_re_asks_only_for_the_open_file() {
         let mut a = app();
+        a.rows.insert("src/b.rs".into(), a.diff_rows().to_vec());
+        a.rows_state.insert("src/b.rs".into(), Load::Ready);
         leader(&mut a, '+');
         assert_eq!(a.context, 6);
         assert_eq!(a.rows_state.get("src/a.rs"), Some(&Load::Idle));
+        assert!(
+            !a.rows.contains_key("src/b.rs") && !a.rows_state.contains_key("src/b.rs"),
+            "other cached files must be evicted so they re-fetch at ±6 when opened"
+        );
+    }
+
+    #[test]
+    fn goto_screen_and_scroll_cursor_to_use_pair_coordinates_in_split_mode() {
+        use crate::model::{Kind, Row};
+
+        let mut a = app();
+        a.split = true;
+        a.view_height = 4;
+        // 1 header + 4 paired del/add lines (= 4 pairs) + 2 context lines (= 2 pairs) -> 7 pairs, 11 rows
+        let mut rows = vec![Row {
+            kind: Kind::Header,
+            old: None,
+            new: None,
+            text: "@@ -1,6 +1,6 @@".into(),
+        }];
+        for i in 1..=4 {
+            rows.push(Row {
+                kind: Kind::Deleted,
+                old: Some(i),
+                new: None,
+                text: format!("old {i}"),
+            });
+        }
+        for i in 1..=4 {
+            rows.push(Row {
+                kind: Kind::Added,
+                old: None,
+                new: Some(i),
+                text: format!("new {i}"),
+            });
+        }
+        for i in 5..=6 {
+            rows.push(Row {
+                kind: Kind::Context,
+                old: Some(i),
+                new: Some(i),
+                text: format!("ctx {i}"),
+            });
+        }
+        a.rows.insert("src/a.rs".into(), rows);
+        // Row 10 is the last context line, which is pair index 6.
+        a.cursor = 10;
+        a.scroll_cursor_to(Place::Top);
+        assert_eq!(a.diff_scroll, 6, "zt in split mode scrolls to pair index 6");
+
+        a.diff_scroll = 1;
+        a.goto_screen(Place::Top);
+        // Pair 1 pairs Deleted row 1 (left) with Added row 5 (right); `goto_screen` prefers right.
+        assert_eq!(a.cursor, 5);
     }
 
     #[test]

@@ -105,6 +105,10 @@ impl crate::vcs::Vcs for Git {
     fn blame(&self, repo: &str, path: &str) -> Res<Vec<String>> {
         blame(repo, path)
     }
+
+    fn blame_in(&self, repo: &str, scope: &Scope, path: &str) -> Res<Vec<String>> {
+        blame_in(repo, scope, path)
+    }
 }
 
 /// Is this a git repository at all?
@@ -181,6 +185,7 @@ pub fn changed_files(repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
         "--no-ext-diff",
         "--no-textconv",
         "--numstat",
+        "-z",
         "--no-color",
         "--end-of-options",
     ];
@@ -192,6 +197,7 @@ pub fn changed_files(repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
         "--no-ext-diff",
         "--no-textconv",
         "--name-status",
+        "-z",
         "--no-color",
         "--end-of-options",
     ];
@@ -202,17 +208,23 @@ pub fn changed_files(repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
 }
 
 /// Pairs `--numstat` rows with `--name-status` rows.
+///
+/// Accepts both NUL-delimited (`-z`) output from live `git diff` calls — where
+/// filenames containing tabs, spaces or newlines are unambiguous — and
+/// newline-delimited fixtures used in unit tests.
 fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
-    let status_of = |path: &str| -> Status {
-        names
-            .lines()
-            .filter_map(|l| l.split_once('\t'))
-            .find(|(_, rest)| {
-                // a rename is `R096\told\tnew`; the path we want is the last
-                rest.rsplit('\t').next() == Some(path)
-            })
-            .map_or(Status::Modified, |(mark, _)| Status::from(mark))
-    };
+    if numstat.contains('\0') || names.contains('\0') {
+        return join_stats_nul(numstat, names);
+    }
+
+    let mut statuses = std::collections::HashMap::new();
+    for l in names.lines() {
+        if let Some((mark, rest)) = l.split_once('\t')
+            && let Some(path) = rest.rsplit('\t').next()
+        {
+            statuses.insert(path, Status::from(mark));
+        }
+    }
 
     numstat
         .lines()
@@ -227,7 +239,7 @@ fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
                 return None;
             }
             Some(ChangedFile {
-                status: status_of(path),
+                status: statuses.get(path).copied().unwrap_or(Status::Modified),
                 // git writes `-` for a binary file, which is not zero changes
                 // but no countable ones
                 add: add.parse().unwrap_or(0),
@@ -236,6 +248,60 @@ fn join_stats(numstat: &str, names: &str) -> Vec<ChangedFile> {
             })
         })
         .collect()
+}
+
+/// Pairs `--numstat -z` and `--name-status -z` NUL-delimited streams.
+fn join_stats_nul(numstat: &str, names: &str) -> Vec<ChangedFile> {
+    let mut statuses = std::collections::HashMap::new();
+    let mut name_parts = names.split('\0');
+    while let Some(mark) = name_parts.next() {
+        if mark.is_empty() {
+            continue;
+        }
+        let path = if mark.starts_with('R') || mark.starts_with('C') {
+            let _old = name_parts.next();
+            name_parts.next()
+        } else {
+            name_parts.next()
+        };
+        if let Some(p) = path {
+            statuses.insert(p, Status::from(mark));
+        }
+    }
+
+    let mut out = Vec::new();
+    let mut parts = numstat.split('\0');
+    while let Some(entry) = parts.next() {
+        if entry.is_empty() {
+            continue;
+        }
+        let mut fields = entry.splitn(3, '\t');
+        let (Some(add), Some(del), Some(rest)) = (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        // Under `-z`, renames emit `add\tdel\t\0old\0new\0` with an empty
+        // third field before the two NUL-terminated paths.
+        let path = if rest.is_empty() {
+            let _old = parts.next();
+            let Some(new_path) = parts.next() else {
+                continue;
+            };
+            new_path
+        } else {
+            rest
+        };
+        if path.is_empty() {
+            continue;
+        }
+        out.push(ChangedFile {
+            status: statuses.get(path).copied().unwrap_or(Status::Modified),
+            add: add.parse().unwrap_or(0),
+            del: del.parse().unwrap_or(0),
+            path: path.to_string(),
+        });
+    }
+    out
 }
 
 /// The last `limit` commits reaching the checkout, newest first.
@@ -321,28 +387,65 @@ pub fn scope_diff(repo: &str, scope: &Scope, opts: DiffOpts) -> Res<Vec<(String,
 /// A many-file diff cut at its `diff --git` lines, each piece with the path
 /// it is of — the new one, `b/`, which is the path the file list uses.
 fn split_files(raw: &str) -> Vec<(String, &str)> {
-    let mut starts: Vec<(usize, String)> = Vec::new();
+    let mut starts: Vec<(usize, &str)> = Vec::new();
     let mut at = 0;
     for line in raw.split_inclusive('\n') {
         if let Some(rest) = line.strip_prefix("diff --git ") {
-            let path = rest
-                .trim_end()
-                .split(" b/")
-                .nth(1)
-                .unwrap_or_default()
-                .to_string();
-            starts.push((at, path));
+            starts.push((at, rest.trim_end_matches(['\r', '\n'])));
         }
         at += line.len();
     }
     starts
         .iter()
         .enumerate()
-        .map(|(i, (from, path))| {
+        .map(|(i, (from, header_rest))| {
             let to = starts.get(i + 1).map_or(raw.len(), |(next, _)| *next);
-            (path.clone(), &raw[*from..to])
+            let section = &raw[*from..to];
+            let path = path_from_diff_section(section, header_rest);
+            (path, section)
         })
         .collect()
+}
+
+/// Extracts the destination path from one `diff --git` section without getting
+/// tripped up by paths that contain `" b/"`.
+fn path_from_diff_section(section: &str, header_rest: &str) -> String {
+    let mut old_path: Option<&str> = None;
+    for line in section.lines().skip(1) {
+        if line.starts_with("@@") {
+            break;
+        }
+        if let Some(p) = line.strip_prefix("+++ b/") {
+            return p.to_string();
+        }
+        if let Some(p) = line.strip_prefix("rename to ") {
+            return p.to_string();
+        }
+        if let Some(p) = line.strip_prefix("--- a/") {
+            old_path = Some(p);
+        }
+    }
+    if let Some(p) = old_path {
+        return p.to_string();
+    }
+    // Mode-only or binary diff without `+++ b/`: if both sides name the same
+    // path (`a/<p> b/<p>`), the boundary sits at the exact midpoint.
+    if let Some(after_a) = header_rest.strip_prefix("a/")
+        && let Some(mid) = after_a.len().checked_sub(3)
+        && mid.is_multiple_of(2)
+    {
+        let half = mid / 2;
+        if let Some(left) = after_a.get(..half)
+            && after_a.get(half..half + 3) == Some(" b/")
+            && after_a.get(half + 3..) == Some(left)
+        {
+            return left.to_string();
+        }
+    }
+    header_rest
+        .rsplit_once(" b/")
+        .map(|(_, p)| p.to_string())
+        .unwrap_or_default()
 }
 
 /// Turns `git diff` output into rows, numbering both sides as it goes.
@@ -431,17 +534,22 @@ pub fn parse_unified(text: &str) -> Vec<Row> {
 fn parse_hunk_header(line: &str) -> (u32, u32) {
     let mut old = 0;
     let mut new = 0;
-    for tok in line.split_whitespace() {
+    // Slice between the opening and closing `@@`: the trailing function
+    // context frequently contains `->`, `-flag`, or `+` tokens that would
+    // otherwise overwrite the parsed start lines.
+    let header = line
+        .strip_prefix("@@")
+        .and_then(|rest| rest.split_once("@@"))
+        .map_or(line, |(range, _)| range);
+    for tok in header.split_whitespace() {
         let (sign, rest) = match tok.as_bytes().first() {
             Some(b'-') => ('-', &tok[1..]),
             Some(b'+') => ('+', &tok[1..]),
             _ => continue,
         };
-        let n: u32 = rest
-            .split(',')
-            .next()
-            .and_then(|d| d.parse().ok())
-            .unwrap_or(1);
+        let Some(n) = rest.split(',').next().and_then(|d| d.parse::<u32>().ok()) else {
+            continue;
+        };
         // a zero start means the side is empty; the first line is still 1
         let start = n.saturating_sub(1);
         if sign == '-' {
@@ -459,12 +567,26 @@ fn parse_hunk_header(line: &str) -> (u32, u32) {
 /// `--porcelain` because the human format wraps and truncates, and this has to
 /// fit a fixed column.
 pub fn blame(repo: &str, path: &str) -> Res<Vec<String>> {
-    let out = run(repo, &["blame", "--porcelain", "--", path])?;
+    blame_in(repo, &Scope::WorkingTree, path)
+}
+
+/// Who last touched each line of `path` at the new side of `scope`.
+pub fn blame_in(repo: &str, scope: &Scope, path: &str) -> Res<Vec<String>> {
+    let out = match scope {
+        Scope::WorkingTree => run(repo, &["blame", "--porcelain", "--", path])?,
+        Scope::Branch { .. } => run(repo, &["blame", "--porcelain", "HEAD", "--", path])?,
+        Scope::Commit { sha } => run(repo, &["blame", "--porcelain", sha, "--", path])?,
+    };
     Ok(parse_blame(&out))
 }
 
 fn parse_blame(text: &str) -> Vec<String> {
     let mut out = Vec::new();
+    // `--porcelain` emits `author` and `author-time` only the first time a
+    // commit SHA appears; later non-adjacent lines from the same commit omit
+    // those headers and reuse the cached metadata by SHA.
+    let mut meta: std::collections::HashMap<String, (String, i64)> =
+        std::collections::HashMap::new();
     let mut sha = String::new();
     let mut author = String::new();
     let mut when = 0i64;
@@ -472,8 +594,14 @@ fn parse_blame(text: &str) -> Vec<String> {
     for line in text.lines() {
         if let Some(rest) = line.strip_prefix("author ") {
             author = rest.to_string();
+            meta.entry(sha.clone())
+                .and_modify(|(a, _)| a.clone_from(&author))
+                .or_insert_with(|| (author.clone(), when));
         } else if let Some(rest) = line.strip_prefix("author-time ") {
             when = rest.trim().parse().unwrap_or(0);
+            meta.entry(sha.clone())
+                .and_modify(|(_, w)| *w = when)
+                .or_insert_with(|| (author.clone(), when));
         } else if line.starts_with('\t') {
             // the content line closes an entry
             out.push(format!(
@@ -483,10 +611,17 @@ fn parse_blame(text: &str) -> Vec<String> {
                 crate::shared::ago::since(when)
             ));
         } else if let Some(first) = line.split(' ').next()
-            && first.len() == 40
+            && (first.len() == 40 || first.len() == 64)
             && first.chars().all(|c| c.is_ascii_hexdigit())
         {
             sha = first.to_string();
+            if let Some((cached_author, cached_when)) = meta.get(&sha) {
+                author.clone_from(cached_author);
+                when = *cached_when;
+            } else {
+                author.clear();
+                when = 0;
+            }
         }
     }
     out
@@ -1074,5 +1209,75 @@ filename src/a.rs
             sha: "deadbeefdeadbeef".into(),
         };
         assert!(changed_files(r.path(), &scope).is_err());
+    }
+
+    #[test]
+    fn parse_hunk_header_ignores_trailing_function_context_with_arrows_and_signs() {
+        let rows = parse_unified(
+            "@@ -193,12 +193,76 @@ pub fn agents() -> Res<Vec<Agent>> {\n context\n-old\n+new\n",
+        );
+        let code: Vec<&Row> = rows.iter().filter(|r| r.kind.is_code()).collect();
+        assert_eq!((code[0].old, code[0].new), (Some(193), Some(193)));
+        assert_eq!((code[1].old, code[1].new), (Some(194), None));
+        assert_eq!((code[2].old, code[2].new), (None, Some(194)));
+
+        // Also test `+` in trailing context (`a + b`).
+        assert_eq!(
+            parse_hunk_header("@@ -40,3 +52,5 @@ let sum = a + b - c;"),
+            (39, 51)
+        );
+    }
+
+    #[test]
+    fn join_stats_handles_nul_delimited_renames_and_tabs_in_filenames() {
+        let numstat = "3\t1\tdir/with\ttab.rs\x005\t2\t\x00old name.rs\x00new name.rs\x00";
+        let names = "M\x00dir/with\ttab.rs\x00R100\x00old name.rs\x00new name.rs\x00";
+        let files = join_stats(numstat, names);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "dir/with\ttab.rs");
+        assert_eq!(files[0].status, Status::Modified);
+        assert_eq!((files[0].add, files[0].del), (3, 1));
+        assert_eq!(files[1].path, "new name.rs");
+        assert_eq!(files[1].status, Status::Renamed);
+        assert_eq!((files[1].add, files[1].del), (5, 2));
+    }
+
+    #[test]
+    fn split_files_preserves_paths_containing_space_b_slash() {
+        let raw = "\
+diff --git a/dir b/file.rs b/dir b/file.rs
+index 1111111..2222222 100644
+--- a/dir b/file.rs
++++ b/dir b/file.rs
+@@ -1 +1 @@
+-old
++new
+diff --git a/a b/bin.dat b/a b/bin.dat
+Binary files a/a b/bin.dat and b/a b/bin.dat differ
+";
+        let parts = split_files(raw);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0].0, "dir b/file.rs");
+        assert_eq!(parts[1].0, "a b/bin.dat");
+    }
+
+    #[test]
+    fn parse_blame_reuses_cached_metadata_across_non_adjacent_commits_and_sha256() {
+        let sha_a = "a".repeat(40);
+        let sha_b = "b".repeat(64);
+        let porcelain = format!(
+            "{sha_a} 1 1 1\nauthor Alice\nauthor-time 1700000000\n\tline 1\n\
+             {sha_b} 2 2 1\nauthor Bob\nauthor-time 1700000100\n\tline 2\n\
+             {sha_a} 3 3 1\n\tline 3\n"
+        );
+        let lines = parse_blame(&porcelain);
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].starts_with("aaaaaaa Alice "), "{}", lines[0]);
+        assert!(lines[1].starts_with("bbbbbbb Bob "), "{}", lines[1]);
+        assert!(
+            lines[2].starts_with("aaaaaaa Alice "),
+            "non-adjacent line must keep Alice, not Bob: {}",
+            lines[2]
+        );
     }
 }

@@ -426,6 +426,16 @@ pub struct App {
     /// Set when `E` was pressed before the disk had been walked. The scan is
     /// asked for and the editor opens when it lands.
     pub wants_edit: bool,
+    /// The `(repo, path)` captured when `E` started waiting on a scan.
+    pub(crate) wants_edit_target: Option<(String, String)>,
+    /// The `(repo, path)` captured when `E` offered to clone a repository.
+    pub(crate) pending_clone_edit: Option<(String, String)>,
+    /// Monotonic counter bumped whenever PR diffs, details or threads mutate so
+    /// `Prepared` never serves stale content with the same counts.
+    pub(crate) diff_rev: u64,
+    /// Last wrap width used by the log pane, so `e` lands on the wrapped error
+    /// row rather than the unwrapped line index.
+    pub(crate) log_text_width: usize,
     /// Set by `^l`. Only the main loop can act on it: ratatui draws the
     /// difference between two buffers, so nothing inside a frame can make it
     /// repaint a cell it believes is already correct.
@@ -577,6 +587,10 @@ impl App {
             file_sel: 0,
             file_scroll: 0,
             wants_edit: false,
+            wants_edit_target: None,
+            pending_clone_edit: None,
+            diff_rev: 0,
+            log_text_width: 80,
             wants_redraw: false,
             worker_gone: false,
             edit_request: None,
@@ -616,16 +630,22 @@ impl App {
     }
 
     /// Fails everything that was waiting, once, when the worker goes.
-    fn worker_died(&mut self) {
-        if self.service.is_none() {
+    pub(super) fn worker_died(&mut self) {
+        if self.service.is_none() && self.worker_gone {
             return;
         }
         // Dropped so this runs once rather than on every frame from here on.
         self.service = None;
+        self.worker_gone = true;
+        self.busy = false;
+        self.wants_edit = false;
+        self.wants_edit_target = None;
+        self.pending_clone_edit = None;
         let gone = || Load::refused("the worker thread is gone — restart ghline");
         for st in [
             &mut self.accounts_state,
             &mut self.agents_state,
+            &mut self.clones_state,
             &mut self.finder_state,
         ] {
             if st.is_loading() {
@@ -633,6 +653,31 @@ impl App {
             }
         }
         for map in [&mut self.repos_state, &mut self.trees_state] {
+            for st in map.values_mut() {
+                if st.is_loading() {
+                    *st = gone();
+                }
+            }
+        }
+        for st in self.lists_state.values_mut() {
+            if st.is_loading() {
+                *st = gone();
+            }
+        }
+        for map in [
+            &mut self.jobs_state,
+            &mut self.logs_state,
+            &mut self.diff_state,
+            &mut self.threads_state,
+            &mut self.detail_state,
+        ] {
+            for st in map.values_mut() {
+                if st.is_loading() {
+                    *st = gone();
+                }
+            }
+        }
+        for map in [&mut self.file_state, &mut self.commit_state] {
             for st in map.values_mut() {
                 if st.is_loading() {
                     *st = gone();
@@ -662,6 +707,8 @@ impl App {
                 || self.jobs_state.values().any(Load::is_loading)
                 || self.logs_state.values().any(Load::is_loading)
                 || self.diff_state.values().any(Load::is_loading)
+                || self.threads_state.values().any(Load::is_loading)
+                || self.commit_state.values().any(Load::is_loading)
                 || self.detail_state.values().any(Load::is_loading)
                 || self.finder_state.is_loading()
                 || self.agents_state.is_loading()

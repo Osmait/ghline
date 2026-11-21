@@ -7,11 +7,21 @@ use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
 use crate::data::{Kind, TABS};
 use crate::shared::nav::{Dir, Place};
 
+/// Adds a signed delta to an unsigned scroll offset without wrapping
+/// `usize::MAX` (set by `G`) into a negative `i64`.
+pub(super) fn add_scroll(cur: usize, d: i64) -> usize {
+    if d >= 0 {
+        cur.saturating_add(d as usize)
+    } else {
+        cur.saturating_sub(d.unsigned_abs() as usize)
+    }
+}
+
 impl App {
     /// Scrolls the detail body. The real limit is applied by the render, which
     /// is what knows how many lines the content takes at this width.
     pub fn scroll_detail(&mut self, d: i64) {
-        self.detail_scroll = (self.detail_scroll as i64 + d).max(0) as usize;
+        self.detail_scroll = add_scroll(self.detail_scroll, d);
     }
 
     /// The current view's panes, left to right. This is what `h` and `l` walk.
@@ -119,7 +129,7 @@ impl App {
         self.finder_open = false;
 
         // move to the repository the hit belongs to, if it is one we know
-        if let Some(i) = self
+        let matched_repo = if let Some(i) = self
             .repos()
             .iter()
             .position(|r| format!("{}/{}", self.login(), r.name) == hit.repo)
@@ -127,7 +137,16 @@ impl App {
             self.repo = i;
             self.item = 0;
             self.item_scroll = 0;
-        }
+            self.detail_scroll = 0;
+            self.fs_open.clear();
+            self.fs_sel = 0;
+            self.fs_scroll = 0;
+            self.file_sel = 0;
+            self.file_scroll = 0;
+            true
+        } else {
+            false
+        };
 
         match hit.kind {
             crate::finder::HitKind::Repo => {
@@ -145,11 +164,14 @@ impl App {
                 self.tab = usize::from(hit.kind == crate::finder::HitKind::Pr);
                 self.view = View::List;
                 self.pane = Pane::List;
-                // the list may still be on its way; remember what to select
-                if let Some(i) = self
-                    .visible()
-                    .iter()
-                    .position(|&i| self.list()[i].num == hit.num)
+                // Only jump straight into detail when we actually switched to
+                // the hit's repository; otherwise `#42` from another repo could
+                // open `#42` of the current repo.
+                if matched_repo
+                    && let Some(i) = self
+                        .visible()
+                        .iter()
+                        .position(|&i| self.list()[i].num == hit.num)
                 {
                     self.item = i;
                     self.view = View::Detail;
@@ -174,6 +196,11 @@ impl App {
         self.item = 0;
         self.item_scroll = 0;
         self.detail_scroll = 0;
+        self.fs_open.clear();
+        self.fs_sel = 0;
+        self.fs_scroll = 0;
+        self.file_sel = 0;
+        self.file_scroll = 0;
         self.view = View::List;
         self.settle_pane();
         self.flash_ok(format!(
@@ -361,12 +388,15 @@ impl App {
                 // Remembered rather than refused: `ensure` sees this and asks
                 // for the walk, and the answer comes back here.
                 self.wants_edit = true;
+                self.wants_edit_target = Some((repo, path));
                 self.flash_ok("looking for a local checkout…");
                 return;
             }
             self.wants_edit = false;
+            self.wants_edit_target = None;
             match crate::shared::clones::current().clone_dir() {
                 Some(dest) => {
+                    self.pending_clone_edit = Some((repo.clone(), path));
                     self.prompt = Some(Prompt::Clone {
                         repo,
                         dest: dest.to_string_lossy().into_owned(),
@@ -378,6 +408,7 @@ impl App {
         };
 
         self.wants_edit = false;
+        self.wants_edit_target = None;
         let rel = std::path::Path::new(&path);
         let safe_rel = !path.is_empty()
             && rel
@@ -453,12 +484,12 @@ impl App {
     /// `g` / `G`: to the start or the end of the focused pane.
     fn goto(&mut self, to: Place) {
         match self.pane {
-            Pane::Body | Pane::Log | Pane::DiffBody if to == Place::Top => {
-                if self.pane == Pane::Log {
-                    self.follow = false;
-                }
-                self.detail_scroll = 0;
+            Pane::Body if to == Place::Top => self.detail_scroll = 0,
+            Pane::Log if to == Place::Top => {
+                self.follow = false;
                 self.log_scroll = 0;
+            }
+            Pane::DiffBody if to == Place::Top => {
                 self.diff_scroll = 0;
                 self.diff_cursor = 0;
             }
@@ -533,11 +564,11 @@ impl App {
             Pane::Log => {
                 // moving through the log by hand takes over from follow mode
                 self.follow = false;
-                self.log_scroll = (self.log_scroll as i64 + d).max(0) as usize;
+                self.log_scroll = add_scroll(self.log_scroll, d);
             }
             // the cursor moves and the render brings the view along
             Pane::DiffBody => {
-                self.diff_cursor = (self.diff_cursor as i64 + d).max(0) as usize;
+                self.diff_cursor = add_scroll(self.diff_cursor, d);
             }
         }
     }
@@ -553,6 +584,12 @@ impl App {
                 self.repo = i;
                 self.item = 0;
                 self.item_scroll = 0;
+                self.detail_scroll = 0;
+                self.fs_open.clear();
+                self.fs_sel = 0;
+                self.fs_scroll = 0;
+                self.file_sel = 0;
+                self.file_scroll = 0;
                 self.view = View::List;
             }
             Pane::List => {
@@ -588,6 +625,8 @@ impl App {
         self.tab = i.min(TABS.len() - 1);
         self.view = View::List;
         self.item = 0;
+        self.item_scroll = 0;
+        self.detail_scroll = 0;
         self.pane = pane_for_tab(self.tab);
     }
 
@@ -846,6 +885,13 @@ impl App {
         self.filter.clear();
         self.repo_scroll = 0;
         self.item_scroll = 0;
+        self.detail_scroll = 0;
+        self.fs_open.clear();
+        self.fs_sel = 0;
+        self.fs_scroll = 0;
+        self.file_sel = 0;
+        self.file_scroll = 0;
+        self.settle_pane();
     }
 
     pub fn on_key(&mut self, press: Press) {
@@ -893,18 +939,48 @@ impl App {
                 Key::Enter | Key::Char('y') => self.confirm(),
                 Key::Esc | Key::Char('n' | 'q') => self.cancel_prompt(),
                 Key::Char('j') | Key::Down => {
-                    if let Prompt::Merge(m) = prompt {
-                        self.prompt = Some(Prompt::Merge((m + 1).min(2)));
+                    if let Prompt::Merge {
+                        repo,
+                        num,
+                        branch,
+                        method,
+                    } = prompt
+                    {
+                        self.prompt = Some(Prompt::Merge {
+                            repo,
+                            num,
+                            branch,
+                            method: (method + 1).min(2),
+                        });
                     }
                 }
                 Key::Char('k') | Key::Up => {
-                    if let Prompt::Merge(m) = prompt {
-                        self.prompt = Some(Prompt::Merge(m.saturating_sub(1)));
+                    if let Prompt::Merge {
+                        repo,
+                        num,
+                        branch,
+                        method,
+                    } = prompt
+                    {
+                        self.prompt = Some(Prompt::Merge {
+                            repo,
+                            num,
+                            branch,
+                            method: method.saturating_sub(1),
+                        });
                     }
                 }
                 Key::Char(c @ '1'..='3') => {
-                    if matches!(prompt, Prompt::Merge(_)) {
-                        self.prompt = Some(Prompt::Merge(c as usize - '1' as usize));
+                    if let Prompt::Merge {
+                        repo, num, branch, ..
+                    } = prompt
+                    {
+                        self.prompt = Some(Prompt::Merge {
+                            repo,
+                            num,
+                            branch,
+                            method: c as usize - '1' as usize,
+                        });
                     }
                 }
                 _ => {}
@@ -1131,6 +1207,7 @@ impl App {
                 self.view = View::List;
                 self.item = 0;
                 self.item_scroll = 0;
+                self.detail_scroll = 0;
                 self.check = 0;
                 // the Agents tab has its own pane, so landing on `List` would
                 // leave the focus on something that is not drawn
@@ -1151,11 +1228,18 @@ impl App {
             }
             Key::Char('o') if self.view == View::Logs => self.fold_job(),
             Key::Char('e') if self.view == View::Logs => {
-                if let Some(i) = self
-                    .log_lines()
-                    .iter()
-                    .position(|l| l.kind == crate::data::LogKind::Error)
-                {
+                let width = self.log_text_width.max(8);
+                let mut disp_row = 0usize;
+                let mut found = None;
+                for l in self.log_lines() {
+                    if l.kind == crate::data::LogKind::Error {
+                        found = Some(disp_row);
+                        break;
+                    }
+                    let text = if l.text.is_empty() { " " } else { &l.text };
+                    disp_row += crate::tui::wrap(text, width).len();
+                }
+                if let Some(i) = found {
                     self.log_scroll = i.saturating_sub(3);
                     self.follow = false;
                 }

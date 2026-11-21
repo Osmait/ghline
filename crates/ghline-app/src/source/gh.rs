@@ -505,8 +505,16 @@ fn rollup(v: &Value) -> Status {
         Status::Running
     } else if states.contains(&Status::Pending) {
         Status::Pending
-    } else {
+    } else if states.iter().all(|s| *s == Status::Cancelled) {
+        Status::Cancelled
+    } else if states.iter().all(|s| *s == Status::Skipped) {
+        Status::Skipped
+    } else if states.contains(&Status::Success) {
         Status::Success
+    } else if states.contains(&Status::Cancelled) {
+        Status::Cancelled
+    } else {
+        Status::Unknown
     }
 }
 
@@ -833,6 +841,25 @@ fn log_kind(line: &str) -> LogKind {
     }
 }
 
+/// True when `s` starts with an ISO-8601 date-time (`YYYY-MM-DDTHH:MM:SS`),
+/// preventing timestamp-less lines such as `error: ...` from losing their
+/// leading token when parsed as logs.
+fn is_iso_timestamp(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() >= 19
+        && b[0..4].iter().all(u8::is_ascii_digit)
+        && b[4] == b'-'
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[7] == b'-'
+        && b[8..10].iter().all(u8::is_ascii_digit)
+        && matches!(b[10], b'T' | b't')
+        && b[11..13].iter().all(u8::is_ascii_digit)
+        && b[13] == b':'
+        && b[14..16].iter().all(u8::is_ascii_digit)
+        && b[16] == b':'
+        && b[17..19].iter().all(u8::is_ascii_digit)
+}
+
 /// A run's full log. `gh` returns it as `job⇥step⇥timestamp message`, which is
 /// exactly the granularity the log view's tree needs.
 pub fn run_log(repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>> {
@@ -854,9 +881,9 @@ pub fn run_log(repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>> {
             let job = strip_ansi(parts.next().unwrap_or(""));
             let step = strip_ansi(parts.next().unwrap_or(""));
             let rest = parts.next().unwrap_or("");
-            // the remainder starts with an ISO timestamp
+            // the remainder starts with an ISO timestamp (YYYY-MM-DDTHH:MM:SS...)
             let (time, text) = match rest.find(' ') {
-                Some(i) if rest.len() > 19 => {
+                Some(i) if is_iso_timestamp(&rest[..i]) => {
                     let stamp = &rest[..i];
                     let hhmmss = stamp.get(11..19).unwrap_or("").to_string();
                     (hhmmss, strip_ansi(&rest[i + 1..]))
@@ -1895,5 +1922,36 @@ diff --git a/src/two.rs b/src/two.rs
         let lines = &files[0].hunks[0].lines;
         assert_eq!(lines.len(), 3);
         assert_eq!(lines[1], (' ', String::new()));
+    }
+
+    #[test]
+    fn rollup_reports_cancelled_and_skipped_instead_of_success() {
+        let cancelled = serde_json::json!({
+            "statusCheckRollup": [
+                {"status": "COMPLETED", "conclusion": "CANCELLED"}
+            ]
+        });
+        assert_eq!(rollup(&cancelled), Status::Cancelled);
+
+        let skipped = serde_json::json!({
+            "statusCheckRollup": [
+                {"status": "COMPLETED", "conclusion": "SKIPPED"}
+            ]
+        });
+        assert_eq!(rollup(&skipped), Status::Skipped);
+
+        let errored = serde_json::json!({
+            "statusCheckRollup": [
+                {"state": "ERROR"}
+            ]
+        });
+        assert_eq!(rollup(&errored), Status::Failure);
+    }
+
+    #[test]
+    fn is_iso_timestamp_accepts_timestamps_and_rejects_plain_error_lines() {
+        assert!(is_iso_timestamp("2026-11-21T17:45:00.123456Z"));
+        assert!(!is_iso_timestamp("error:"));
+        assert!(!is_iso_timestamp("error[E0308]:"));
     }
 }

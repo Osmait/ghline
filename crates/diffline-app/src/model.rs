@@ -339,18 +339,42 @@ impl Comment {
     }
 
     /// `router.ts:31-44`, or `router.ts:31` for a single line.
+    ///
+    /// Deleted-only and mixed-side selections keep their side explicit so an
+    /// old line number is never conflated with a new one.
     pub fn where_label(&self) -> String {
         let name = self.file.rsplit('/').next().unwrap_or(&self.file);
         let Some(first) = self.anchors.first() else {
             return format!("{name} · the file");
         };
         let name = first.path.rsplit('/').next().unwrap_or(&first.path);
-        let lo = self.anchors.iter().map(|a| a.line).min().unwrap_or(0);
-        let hi = self.anchors.iter().map(|a| a.line).max().unwrap_or(0);
-        if lo == hi {
-            format!("{name}:{lo}")
-        } else {
-            format!("{name}:{lo}-{hi}")
+        let span = |side: Side| -> Option<(u32, u32)> {
+            let mut lines = self
+                .anchors
+                .iter()
+                .filter(|a| a.side == side)
+                .map(|a| a.line);
+            let first = lines.next()?;
+            Some(lines.fold((first, first), |(lo, hi), l| (lo.min(l), hi.max(l))))
+        };
+        let fmt_range = |lo: u32, hi: u32| {
+            if lo == hi {
+                format!("{lo}")
+            } else {
+                format!("{lo}-{hi}")
+            }
+        };
+        match (span(Side::Old), span(Side::New)) {
+            (None, Some((lo, hi))) => format!("{name}:{}", fmt_range(lo, hi)),
+            (Some((lo, hi)), None) => format!("{name}:old {}", fmt_range(lo, hi)),
+            (Some((olo, ohi)), Some((nlo, nhi))) => {
+                format!(
+                    "{name}:old {}, new {}",
+                    fmt_range(olo, ohi),
+                    fmt_range(nlo, nhi)
+                )
+            }
+            (None, None) => format!("{name} · the file"),
         }
     }
 }
@@ -624,5 +648,48 @@ mod tests {
         assert!(c.is_file_note());
         assert_eq!(c.where_label(), "router.ts · the file");
         assert_eq!(c.path(), "src/server/router.ts");
+    }
+
+    #[test]
+    fn where_label_preserves_old_and_mixed_sides() {
+        let old_only = Comment {
+            file: "src/a.rs".into(),
+            anchors: vec![
+                Anchor {
+                    path: "src/a.rs".into(),
+                    side: Side::Old,
+                    line: 10,
+                },
+                Anchor {
+                    path: "src/a.rs".into(),
+                    side: Side::Old,
+                    line: 12,
+                },
+            ],
+            snippet: String::new(),
+            body: "why deleted".into(),
+            state: State::Queued,
+        };
+        assert_eq!(old_only.where_label(), "a.rs:old 10-12");
+
+        let mixed = Comment {
+            file: "src/a.rs".into(),
+            anchors: vec![
+                Anchor {
+                    path: "src/a.rs".into(),
+                    side: Side::Old,
+                    line: 10,
+                },
+                Anchor {
+                    path: "src/a.rs".into(),
+                    side: Side::New,
+                    line: 11,
+                },
+            ],
+            snippet: String::new(),
+            body: "changed".into(),
+            state: State::Queued,
+        };
+        assert_eq!(mixed.where_label(), "a.rs:old 10, new 11");
     }
 }

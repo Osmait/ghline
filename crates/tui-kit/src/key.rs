@@ -255,39 +255,56 @@ pub fn parse_keys(spec: &str) -> Vec<Press> {
     while !rest.is_empty() {
         if let Some(end) = rest.strip_prefix('<').and_then(|r| r.find('>')) {
             let name = &rest[1..end + 1];
-            // Both, in either order, before the key itself.
-            let (ctrl, name) = match name.strip_prefix("c-") {
-                Some(n) => (true, n),
-                None => (false, name),
-            };
-            let (alt, name) = match name.strip_prefix("a-") {
-                Some(n) => (true, n),
-                None => (false, name),
-            };
-            let code = match name {
-                "enter" => Some(Key::Enter),
-                "esc" => Some(Key::Esc),
-                "tab" => Some(Key::Tab),
-                "btab" => Some(Key::BackTab),
-                "bs" => Some(Key::Backspace),
-                "del" => Some(Key::Delete),
-                "down" => Some(Key::Down),
-                "up" => Some(Key::Up),
-                "left" => Some(Key::Left),
-                "right" => Some(Key::Right),
-                "home" => Some(Key::Home),
-                "end" => Some(Key::End),
-                "pgup" => Some(Key::PageUp),
-                "pgdn" => Some(Key::PageDown),
-                "lt" => Some(Key::Char('<')),
-                "gt" => Some(Key::Char('>')),
-                // A chord over an ordinary letter: `<c-a>`. Only when a
-                // modifier was given, so a bare `<a>` stays the three
-                // characters it has always been.
-                _ if (ctrl || alt) && name.chars().count() == 1 => {
-                    name.chars().next().map(Key::Char)
+            // Both modifiers may appear in either order, each at most once.
+            let (mut ctrl, mut alt, mut dup) = (false, false, false);
+            let mut key_name = name;
+            loop {
+                if let Some(n) = key_name.strip_prefix("c-") {
+                    if ctrl {
+                        dup = true;
+                        break;
+                    }
+                    ctrl = true;
+                    key_name = n;
+                } else if let Some(n) = key_name.strip_prefix("a-") {
+                    if alt {
+                        dup = true;
+                        break;
+                    }
+                    alt = true;
+                    key_name = n;
+                } else {
+                    break;
                 }
-                _ => None,
+            }
+            let code = if dup {
+                None
+            } else {
+                match key_name {
+                    "enter" => Some(Key::Enter),
+                    "esc" => Some(Key::Esc),
+                    "tab" => Some(Key::Tab),
+                    "btab" => Some(Key::BackTab),
+                    "bs" => Some(Key::Backspace),
+                    "del" => Some(Key::Delete),
+                    "down" => Some(Key::Down),
+                    "up" => Some(Key::Up),
+                    "left" => Some(Key::Left),
+                    "right" => Some(Key::Right),
+                    "home" => Some(Key::Home),
+                    "end" => Some(Key::End),
+                    "pgup" => Some(Key::PageUp),
+                    "pgdn" => Some(Key::PageDown),
+                    "lt" => Some(Key::Char('<')),
+                    "gt" => Some(Key::Char('>')),
+                    // A chord over an ordinary letter: `<c-a>`. Only when a
+                    // modifier was given, so a bare `<a>` stays the three
+                    // characters it has always been.
+                    _ if (ctrl || alt) && key_name.chars().count() == 1 => {
+                        key_name.chars().next().map(Key::Char)
+                    }
+                    _ => None,
+                }
             };
             if let Some(c) = code {
                 out.push(Press { key: c, ctrl, alt });
@@ -383,5 +400,19 @@ mod tests {
         set.insert(Press::new(Key::Char('j')));
         assert!(set.contains(&Press::new(Key::Char('j'))));
         assert!(!set.contains(&Press::ctrl(Key::Char('j'))));
+    }
+
+    #[test]
+    fn parse_keys_accepts_ctrl_and_alt_in_either_order_and_rejects_duplicates() {
+        let both = vec![Press {
+            key: Key::Char('x'),
+            ctrl: true,
+            alt: true,
+        }];
+        assert_eq!(parse_keys("<c-a-x>"), both);
+        assert_eq!(parse_keys("<a-c-x>"), both);
+        // Duplicate modifiers are rejected and read literally.
+        assert_eq!(parse_keys("<c-c-x>").len(), 7);
+        assert_eq!(parse_keys("<a-a-x>").len(), 7);
     }
 }

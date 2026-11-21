@@ -229,8 +229,8 @@ impl App {
             // the wheel moves the view, and the cursor rides along with it
             // rather than having to reach the edge before anything scrolls
             Target::Pane(Pane::DiffBody) => {
-                self.diff_scroll = (self.diff_scroll as i64 + d).max(0) as usize;
-                self.diff_cursor = (self.diff_cursor as i64 + d).max(0) as usize;
+                self.diff_scroll = super::input::add_scroll(self.diff_scroll, d);
+                self.diff_cursor = super::input::add_scroll(self.diff_cursor, d);
             }
             Target::Pane(pane) => self.move_pane_by(pane, d),
             Target::Finder => {
@@ -247,7 +247,7 @@ impl App {
                 self.commit_sel = step_sel(self.commit_sel, d, self.commits().len() + 1);
             }
             Target::Note => {}
-            Target::Help => self.help_scroll = (self.help_scroll as i64 + d).max(0) as usize,
+            Target::Help => self.help_scroll = super::input::add_scroll(self.help_scroll, d),
             Target::Review => {
                 let n = crate::data::Verdict::ALL.len() as i64;
                 let at = crate::data::Verdict::ALL

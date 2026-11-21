@@ -28,24 +28,36 @@ pub(crate) fn comment(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, head, theme::yellow());
     let hs = pill(theme::yellow(), theme::panel());
     put(buf, head.x + 1, head.y, head.right(), "COMMENT", hs);
-    let where_ = match (anchors.first(), anchors.last()) {
-        (Some(a), Some(b)) if a.line == b.line => format!("{}:{}", short_path(&a.path), a.line),
-        (Some(a), Some(b)) => format!(
-            "{}:{}-{}  ({} lines)",
-            short_path(&a.path),
-            a.line.min(b.line),
-            a.line.max(b.line),
-            anchors.len()
-        ),
-        _ => "—".into(),
+    let where_ = if app.about_file {
+        format!("{} · the file", short_path(app.path()))
+    } else {
+        match (anchors.first(), anchors.last()) {
+            (Some(a), Some(b)) if a.line == b.line => format!("{}:{}", short_path(&a.path), a.line),
+            (Some(a), Some(b)) => format!(
+                "{}:{}-{}  ({} lines)",
+                short_path(&a.path),
+                a.line.min(b.line),
+                a.line.max(b.line),
+                anchors.len()
+            ),
+            _ => "—".into(),
+        }
     };
     put_right(buf, head.right() - 1, head.y, &where_, hs);
 
-    let snippet = app
-        .diff_rows()
-        .get(app.span().0)
-        .map(|r| r.text.trim())
-        .unwrap_or("");
+    let file_summary;
+    let snippet = if app.about_file {
+        file_summary = app
+            .file()
+            .map(|f| format!("{} · +{} −{}", f.status.label(), f.add, f.del))
+            .unwrap_or_default();
+        file_summary.as_str()
+    } else {
+        app.diff_rows()
+            .get(app.span().0)
+            .map(|r| r.text.trim())
+            .unwrap_or("")
+    };
     put_trunc(
         buf,
         m.x + 3,

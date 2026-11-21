@@ -19,6 +19,8 @@ const ANIM: Duration = Duration::from_millis(110);
 const TICK: Duration = Duration::from_millis(1200);
 /// Quiet time after an editor's burst of writes before Git is asked again.
 const CHANGE_DEBOUNCE: Duration = Duration::from_millis(200);
+/// Upper bound on how long a steady stream of writes may defer a refresh.
+const CHANGE_MAX_WAIT: Duration = Duration::from_secs(2);
 
 /// diffline's borrowed state and the timers its terminal runtime advances.
 pub(super) struct Diffline<'a> {
@@ -27,7 +29,10 @@ pub(super) struct Diffline<'a> {
     anim: Instant,
     tick: Instant,
     watch: Option<Watch>,
-    changed: Option<Instant>,
+    /// `(first_event, last_event)` for the current burst: `last_event` extends
+    /// the quiet window while `first_event` caps starvation under continuous
+    /// writes.
+    changed: Option<(Instant, Instant)>,
 }
 
 impl<'a> Diffline<'a> {
@@ -70,7 +75,13 @@ impl Program for Diffline<'_> {
 
         let notice = self.watch.as_ref().map(Watch::poll);
         match notice {
-            Some(Notice::Changed) => self.changed = Some(Instant::now()),
+            Some(Notice::Changed) => {
+                let now = Instant::now();
+                self.changed = Some(match self.changed {
+                    Some((first, _)) => (first, now),
+                    None => (now, now),
+                });
+            }
             Some(Notice::Failed(error)) => {
                 self.app.flash(format!("file watch stopped: {error}"));
                 self.watch = None;
@@ -89,8 +100,10 @@ impl Program for Diffline<'_> {
         BLINK
             .saturating_sub(self.blink.elapsed())
             .min(TICK.saturating_sub(self.tick.elapsed()))
-            .min(self.changed.map_or(Duration::MAX, |at| {
-                CHANGE_DEBOUNCE.saturating_sub(at.elapsed())
+            .min(self.changed.map_or(Duration::MAX, |(first, last)| {
+                CHANGE_DEBOUNCE
+                    .saturating_sub(last.elapsed())
+                    .min(CHANGE_MAX_WAIT.saturating_sub(first.elapsed()))
             }))
             .min(if self.app.waiting() {
                 ANIM.saturating_sub(self.anim.elapsed())
@@ -100,10 +113,9 @@ impl Program for Diffline<'_> {
     }
 
     fn on_wake(&mut self) {
-        if self
-            .changed
-            .is_some_and(|at| at.elapsed() >= CHANGE_DEBOUNCE)
-        {
+        if self.changed.is_some_and(|(first, last)| {
+            last.elapsed() >= CHANGE_DEBOUNCE || first.elapsed() >= CHANGE_MAX_WAIT
+        }) {
             self.changed = None;
             self.app.refresh_live();
         }
