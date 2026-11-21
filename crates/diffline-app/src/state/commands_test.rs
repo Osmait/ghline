@@ -1743,13 +1743,19 @@ fn the_palette_writes_a_keymap_to_start_from() {
 
 #[test]
 fn the_palette_writes_a_theme_to_start_from() {
+    // Same as the keymap test above: with an in-memory store there is no
+    // config directory to write into (refusing to fall back to the working
+    // directory), and with a file store the template goes to the worker.
     let mut a = app();
     let sent = recording(&mut a);
     palette(&mut a, "write a theme to start from");
-    assert!(sent.borrow().iter().any(|r| matches!(
-        r,
-        Request::Write(Write::File { path, .. }) if path.ends_with("mine.theme")
-    )));
+    let wrote = sent.borrow().iter().any(|r| {
+        matches!(
+            r,
+            Request::Write(Write::File { path, .. }) if path.ends_with("mine.theme")
+        )
+    });
+    assert!(wrote || a.toast == "no config directory", "{}", a.toast);
 }
 
 #[test]
