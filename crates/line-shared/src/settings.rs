@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{OnceLock, RwLock};
 
 /// Somewhere settings live.
@@ -77,17 +78,28 @@ pub fn config_path() -> Option<PathBuf> {
     Some(base.join("ghline").join("config"))
 }
 
+fn validate_entry(key: &str, value: &str) -> io::Result<()> {
+    let trimmed = key.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with('#')
+        || key.contains(['=', '\n', '\r', '\0'])
+        || value.contains(['\n', '\r', '\0'])
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "setting key or value contains forbidden characters",
+        ));
+    }
+    Ok(())
+}
+
 impl Store for Files {
     fn get(&self, key: &str) -> Option<String> {
         cache().read().ok()?.get(key).cloned()
     }
 
     fn set(&self, key: &str, value: &str) -> io::Result<()> {
-        // A blank key writes a line the parser will skip on the way back, so
-        // the setting is lost silently — which looks exactly like it was
-        // never saved.
-        debug_assert!(!key.trim().is_empty(), "a setting with no name");
-        debug_assert!(!key.contains('='), "a key holding the separator");
+        validate_entry(key, value)?;
         let p = config_path()
             .ok_or_else(|| io::Error::other("no HOME or XDG_CONFIG_HOME to write to"))?;
         // Read-modify-write rather than writing the one key: two settings
@@ -106,6 +118,8 @@ impl Store for Files {
     }
 }
 
+static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
+
 /// Writes the whole file, beside the target and renamed over it, so an
 /// interrupted write cannot leave half a config where a config was.
 fn write_all(p: &std::path::Path, all: &HashMap<String, String>) -> io::Result<()> {
@@ -118,12 +132,31 @@ fn write_all(p: &std::path::Path, all: &HashMap<String, String>) -> io::Result<(
     let mut out = String::from("# ghline. Written by the application; edit freely.\n");
     for k in keys {
         if let Some(v) = all.get(k) {
+            validate_entry(k, v)?;
             out.push_str(&format!("{k} = {v}\n"));
         }
     }
-    let tmp = p.with_extension("tmp");
-    std::fs::File::create(&tmp)?.write_all(out.as_bytes())?;
-    std::fs::rename(&tmp, p)
+    let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
+    let tmp = p.with_extension(format!("tmp.{}.{seq}", std::process::id()));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    let write_res = opts
+        .open(&tmp)
+        .and_then(|mut file| file.write_all(out.as_bytes()));
+    if let Err(err) = write_res {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
+    if let Err(err) = std::fs::rename(&tmp, p) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
+    Ok(())
 }
 
 /// A store that remembers nothing beyond itself, for tests and for the
@@ -161,6 +194,10 @@ impl Store for Memory {
     }
 }
 
+fn is_plain_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', '\0'])
+}
+
 /// Reads a file that sits beside the settings — the keymap, a theme.
 ///
 /// Here because "a file under the config directory" is one responsibility
@@ -168,12 +205,15 @@ impl Store for Memory {
 /// file also owning a `std::fs` call, which is how the state layer ended up
 /// reading from disk.
 pub fn read_beside(name: &str) -> Option<String> {
-    let p = current().path()?.with_file_name(name);
+    let p = path_beside(name)?;
     std::fs::read_to_string(p).ok()
 }
 
 /// Where a file beside the settings would go.
 pub fn path_beside(name: &str) -> Option<PathBuf> {
+    if !is_plain_name(name) {
+        return None;
+    }
     Some(current().path()?.with_file_name(name))
 }
 
@@ -316,5 +356,24 @@ mod tests {
     fn writing_where_there_is_no_home_is_an_error_rather_than_a_panic() {
         let p = std::path::Path::new("/proc/nonexistent/config");
         assert!(write(p, &[("theme", "mocha")]).is_err());
+    }
+
+    #[test]
+    fn newlines_and_separators_cannot_inject_extra_config_lines() {
+        let tmp = Tmp::new("inject");
+        let p = tmp.config();
+        assert!(write(&p, &[("theme", "mocha\nagents = evil")]).is_err());
+        assert!(write(&p, &[("bad=key", "mocha")]).is_err());
+        assert!(write(&p, &[("  ", "mocha")]).is_err());
+        assert!(write(&p, &[("#comment", "mocha")]).is_err());
+    }
+
+    #[test]
+    fn plain_names_reject_traversal_for_files_beside_config() {
+        assert!(is_plain_name("keys.conf"));
+        assert!(!is_plain_name("../etc/passwd"));
+        assert!(!is_plain_name("sub/file"));
+        assert!(!is_plain_name(".."));
+        assert!(!is_plain_name(""));
     }
 }

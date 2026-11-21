@@ -22,7 +22,7 @@
 //! is never written is also never formatted.
 
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write as _;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
@@ -52,12 +52,31 @@ struct Sink {
 
 static SINK: OnceLock<Sink> = OnceLock::new();
 
+/// Opens a log file without following symlinks and with owner-only permissions
+/// on Unix, since a session log records every keystroke the user typed.
+fn create_private(path: &Path) -> std::io::Result<File> {
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "refusing to write a session log through a symlink",
+        ));
+    }
+    let mut opts = OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    opts.open(path)
+}
+
 /// Starts logging to `path`. Called once, by a binary reading its arguments.
 ///
 /// Truncates: a log from the run before is a log of a different bug, and
 /// appending would leave the reader to find where one ended.
 pub fn to(path: &Path, program: &'static str, replay_with: &'static str) -> std::io::Result<()> {
-    let file = File::create(path)?;
+    let file = create_private(path)?;
     // A second call is not an error and is not a second log — whichever
     // opened first keeps the file.
     let _ = SINK.set(Sink {
@@ -131,6 +150,25 @@ pub fn mouse(m: Mouse) {
     say(format_args!("mouse {what} at {},{}", m.col, m.row));
 }
 
+/// Quotes a replay sequence for POSIX shells so pasting the `replay:` line
+/// from a bug report cannot expand `$(...)`, backticks, or quotes.
+fn shell_quote(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len() + 2);
+    out.push('\'');
+    for ch in raw.chars() {
+        if ch.is_control() {
+            continue;
+        }
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
 /// The last line: the command that plays this session back.
 ///
 /// Written where the loop ends rather than from a `Drop`, because the thing
@@ -138,8 +176,9 @@ pub fn mouse(m: Mouse) {
 pub fn finish() {
     let Some(sink) = SINK.get() else { return };
     let keys = sink.keys.lock().map(|k| k.clone()).unwrap_or_default();
+    let quoted = shell_quote(&keys);
     say(format_args!(
-        "replay: {} {} \"{keys}\" 160 44",
+        "replay: {} {} {quoted} 160 44",
         sink.program, sink.replay_with,
     ));
 }
@@ -165,5 +204,33 @@ mod tests {
             what: Motion::ScrollUp,
         });
         finish();
+    }
+
+    #[test]
+    fn replay_command_escapes_shell_metacharacters_and_strips_controls() {
+        let dangerous = r#"j/$(id)`whoami`"a'b"#;
+        assert_eq!(shell_quote(dangerous), r#"'j/$(id)`whoami`"a'\''b'"#);
+        assert_eq!(shell_quote("a\nb\x1b[31mc"), "'ab[31mc'");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn opening_a_log_refuses_symlinks_and_sets_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = std::env::temp_dir().join(format!("ghline-log-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let real = dir.join("session.log");
+        let _f = create_private(&real).unwrap();
+        let mode = std::fs::metadata(&real).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+
+        let link = dir.join("link.log");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        assert!(create_private(&link).is_err());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

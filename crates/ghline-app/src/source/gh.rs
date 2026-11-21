@@ -90,6 +90,10 @@ fn run(args: &[&str]) -> Res<String> {
 
 /// Runs `gh` with `input` on its stdin, for a request body too shaped for
 /// flags — an array of objects, which `-f` can only spell by convention.
+///
+/// Stdin is written on a scoped thread while stdout/stderr are drained by
+/// `wait_with_output`, avoiding pipe deadlocks on payloads larger than the OS
+/// pipe buffer and ensuring `child` is always reaped even on `EPIPE`.
 fn run_with_input(args: &[&str], input: &str) -> Res<String> {
     use std::io::Write as _;
     use std::process::Stdio;
@@ -105,10 +109,16 @@ fn run_with_input(args: &[&str], input: &str) -> Res<String> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(spawn)?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input.as_bytes()).map_err(spawn)?;
-    }
-    let out = child.wait_with_output().map_err(spawn)?;
+    let stdin = child.stdin.take();
+    let out = std::thread::scope(|s| {
+        s.spawn(|| {
+            if let Some(mut pipe) = stdin {
+                let _ = pipe.write_all(input.as_bytes());
+            }
+        });
+        child.wait_with_output()
+    })
+    .map_err(spawn)?;
     if !out.status.success() {
         return Err(failure(args, &out));
     }
@@ -160,15 +170,105 @@ fn ago(iso: &str) -> String {
     crate::shared::ago::since(then)
 }
 
+/// Validates an `owner/name` repository slug before interpolating it into a
+/// GitHub REST endpoint or passing it to `gh repo clone`.
+fn validate_repo<'a>(repo: &'a str, args: &str) -> Res<(&'a str, &'a str)> {
+    let valid_part = |part: &str| {
+        !part.is_empty()
+            && part != "."
+            && part != ".."
+            && !part.starts_with('-')
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
+    };
+    if let Some((owner, name)) = repo.split_once('/')
+        && !name.contains('/')
+        && valid_part(owner)
+        && valid_part(name)
+    {
+        return Ok((owner, name));
+    }
+    Err(Error::Command {
+        args: args.into(),
+        status: None,
+        stderr: format!("refused unsafe repository name: {repo}"),
+    })
+}
+
+/// Validates a git commit SHA before interpolating it into a REST endpoint.
+fn validate_sha(sha: &str, args: &str) -> Res<()> {
+    if (4..=64).contains(&sha.len()) && sha.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Ok(());
+    }
+    Err(Error::Command {
+        args: args.into(),
+        status: None,
+        stderr: format!("refused unsafe commit sha: {sha}"),
+    })
+}
+
+/// Percent-encodes every `/`-separated segment of a git ref or repository path
+/// so characters like `#`, `?`, `%`, and spaces cannot truncate or alter a
+/// REST API URL, while rejecting `.` and `..` traversal segments.
+fn encode_path_segments(raw: &str, args: &str) -> Res<String> {
+    if raw.is_empty() || raw.starts_with('/') || raw.ends_with('/') || raw.contains('\0') {
+        return Err(Error::Command {
+            args: args.into(),
+            status: None,
+            stderr: format!("refused unsafe path: {raw}"),
+        });
+    }
+    let mut out = String::with_capacity(raw.len());
+    for (idx, seg) in raw.split('/').enumerate() {
+        if seg.is_empty() || seg == "." || seg == ".." {
+            return Err(Error::Command {
+                args: args.into(),
+                status: None,
+                stderr: format!("refused unsafe path segment in: {raw}"),
+            });
+        }
+        if idx > 0 {
+            out.push('/');
+        }
+        for &b in seg.as_bytes() {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                out.push(char::from(b));
+            } else {
+                use std::fmt::Write as _;
+                let _ = write!(out, "%{b:02X}");
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Epoch seconds of a UTC ISO-8601 date (`2026-08-13T21:45:34Z`).
 fn parse_iso(iso: &str) -> Option<i64> {
     let b = iso.as_bytes();
-    if b.len() < 19 {
+    if !iso.is_ascii() || b.len() < 19 {
         return None;
     }
-    let num = |a: usize, z: usize| iso[a..z].parse::<i64>().ok();
+    if b[4] != b'-'
+        || b[7] != b'-'
+        || !matches!(b[10], b'T' | b' ')
+        || b[13] != b':'
+        || b[16] != b':'
+    {
+        return None;
+    }
+    let num = |a: usize, z: usize| iso.get(a..z)?.parse::<i64>().ok();
     let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
     let (h, mi, se) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    if !(1..=9999).contains(&y)
+        || !(1..=12).contains(&mo)
+        || !(1..=31).contains(&d)
+        || !(0..=23).contains(&h)
+        || !(0..=59).contains(&mi)
+        || !(0..=60).contains(&se)
+    {
+        return None;
+    }
 
     // days from the civil era (Howard Hinnant's algorithm)
     let yy = if mo <= 2 { y - 1 } else { y };
@@ -585,6 +685,8 @@ pub fn pr_detail(repo: &str, num: i64) -> Res<PrFetched> {
 /// there is no `gh` command for a commit's diff, and this one returns the same
 /// unified format `gh pr diff` does, so the same parser reads it.
 pub fn commit_diff(repo: &str, sha: &str) -> Res<Vec<DiffFile>> {
+    validate_repo(repo, "gh api")?;
+    validate_sha(sha, "gh api")?;
     let raw = run(&[
         "api",
         "-H",
@@ -658,28 +760,42 @@ fn strip_ansi(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
-        // the `gh run view --log` dump writes ESC as the two literal characters
-        // `^[`, not as 0x1b
-        if c == '^' && chars.peek() == Some(&'[') {
+        // `gh run view --log` sometimes writes ESC as the two literal
+        // characters `^[` instead of 0x1b; both introduce the same sequences.
+        let is_esc = if c == '\u{1b}' {
+            true
+        } else if c == '^' && chars.peek() == Some(&'[') {
             chars.next();
-            for c in chars.by_ref() {
-                if c.is_ascii_alphabetic() {
-                    break;
-                }
-            }
-            continue;
-        }
-        if c == '\u{1b}' {
-            // CSI / OSC: discard up to the sequence's final letter
-            if chars.peek() == Some(&'[') {
-                chars.next();
-                for c in chars.by_ref() {
-                    if c.is_ascii_alphabetic() {
-                        break;
+            true
+        } else {
+            false
+        };
+        if is_esc {
+            match chars.peek().copied() {
+                // CSI: ESC [ ... final byte 0x40..=0x7E
+                Some('[') => {
+                    chars.next();
+                    for ch in chars.by_ref() {
+                        if ('@'..='~').contains(&ch) {
+                            break;
+                        }
                     }
                 }
-            } else {
-                chars.next();
+                // OSC (]), DCS (P), SOS (X), PM (^), APC (_): terminated by BEL or ST (ESC \)
+                Some(']' | 'P' | 'X' | '^' | '_') => {
+                    chars.next();
+                    let mut prev_esc = false;
+                    for ch in chars.by_ref() {
+                        if ch == '\u{07}' || (prev_esc && ch == '\\') {
+                            break;
+                        }
+                        prev_esc = ch == '\u{1b}';
+                    }
+                }
+                Some(_) => {
+                    chars.next();
+                }
+                None => {}
             }
             continue;
         }
@@ -735,8 +851,8 @@ pub fn run_log(repo: &str, run_id: i64, finished: bool) -> Res<Vec<RawLog>> {
         .map(|l| {
             let l = l.trim_start_matches('\u{feff}');
             let mut parts = l.splitn(3, '\t');
-            let job = parts.next().unwrap_or("").to_string();
-            let step = parts.next().unwrap_or("").to_string();
+            let job = strip_ansi(parts.next().unwrap_or(""));
+            let step = strip_ansi(parts.next().unwrap_or(""));
             let rest = parts.next().unwrap_or("");
             // the remainder starts with an ISO timestamp
             let (time, text) = match rest.find(' ') {
@@ -782,13 +898,15 @@ const THREADS_QUERY: &str = "query($owner:String!,$name:String!,$num:Int!){
 
 /// A PR's review threads, the comments anchored to lines of its diff.
 pub fn pr_threads(repo: &str, num: i64) -> Res<Vec<Thread>> {
-    let (owner, name) = repo.split_once('/').unwrap_or((repo, ""));
+    let (owner, name) = validate_repo(repo, "gh api graphql")?;
     let v = json(&[
         "api",
         "graphql",
-        "-F",
+        // `-f` (raw string), never `-F`: `-F` reads `@path` from disk and
+        // coerces `true`/`1234` to non-string JSON types.
+        "-f",
         &format!("owner={owner}"),
-        "-F",
+        "-f",
         &format!("name={name}"),
         "-F",
         &format!("num={num}"),
@@ -930,6 +1048,7 @@ pub fn search_issues(owner: &str, query: &str, want: Kind) -> Res<Vec<SearchHit>
     ];
     let trimmed = query.trim();
     if !trimmed.is_empty() {
+        args.push("--");
         args.push(trimmed);
     }
     let v = json(&args)?;
@@ -971,6 +1090,7 @@ pub fn search_commits(owner: &str, query: &str) -> Res<Vec<SearchHit>> {
         "40",
         "--json",
         "sha,commit,repository",
+        "--",
         trimmed,
     ])?;
 
@@ -1028,6 +1148,14 @@ pub fn submit_review(
     body: &str,
     drafts: &[Draft],
 ) -> Res<()> {
+    validate_repo(repo, "gh api")?;
+    if num <= 0 {
+        return Err(Error::Command {
+            args: "gh api".into(),
+            status: None,
+            stderr: format!("refused invalid pull request number: {num}"),
+        });
+    }
     run_with_input(
         &[
             "api",
@@ -1075,11 +1203,13 @@ pub fn reopen(repo: &str, num: i64) -> Res<()> {
 
 /// `gh` exposes no standalone branch deletion, so this goes through the API.
 pub fn delete_branch(repo: &str, branch: &str) -> Res<()> {
+    validate_repo(repo, "gh api")?;
+    let encoded = encode_path_segments(branch, "gh api")?;
     run(&[
         "api",
         "-X",
         "DELETE",
-        &format!("repos/{repo}/git/refs/heads/{branch}"),
+        &format!("repos/{repo}/git/refs/heads/{encoded}"),
     ])
     .map(|_| ())
 }
@@ -1331,8 +1461,16 @@ pub fn all_runs(repos: &[String]) -> Res<Vec<Item>> {
 /// Blocking and slow — minutes for a large repository — which is exactly why
 /// it goes through the service thread like everything else.
 pub fn clone(repo: &str, dest: &str) -> Res<String> {
-    let name = repo.rsplit('/').next().unwrap_or(repo);
-    let into = format!("{dest}/{name}");
+    let (_, name) = validate_repo(repo, "gh repo clone")?;
+    if dest.is_empty() || dest.starts_with('-') || dest.contains('\0') {
+        return Err(Error::Command {
+            args: "gh repo clone".into(),
+            status: None,
+            stderr: format!("refused unsafe clone destination: {dest}"),
+        });
+    }
+    let into = std::path::Path::new(dest).join(name);
+    let into = into.to_string_lossy().into_owned();
     run(&["repo", "clone", repo, &into])?;
     Ok(into)
 }
@@ -1346,6 +1484,7 @@ pub fn clone(repo: &str, dest: &str) -> Res<String> {
 /// makes every keypress wait on the network; a thousand entries arrive in
 /// about half a second and navigation is then instant.
 pub fn repo_tree(repo: &str) -> Res<Vec<TreeEntry>> {
+    validate_repo(repo, "gh api")?;
     let v = json(&["api", &format!("repos/{repo}/git/trees/HEAD?recursive=1")])?;
 
     let mut out: Vec<TreeEntry> = v
@@ -1383,13 +1522,18 @@ pub const FILE_LIMIT: u64 = 512 * 1024;
 /// base64, and decoding it here would be a decoder to write and get wrong for
 /// no gain.
 pub fn file_content(repo: &str, path: &str) -> Res<String> {
+    validate_repo(repo, "gh api")?;
+    let encoded = encode_path_segments(path, "gh api")?;
     let raw = run(&[
         "api",
-        &format!("repos/{repo}/contents/{path}"),
+        &format!("repos/{repo}/contents/{encoded}"),
         "-H",
         "Accept: application/vnd.github.raw",
     ])?;
 
+    if raw.len() as u64 > FILE_LIMIT {
+        return Ok(format!("(file too large to display, {} bytes)", raw.len()));
+    }
     // A binary file comes back as bytes that are not text. Saying so beats
     // painting the pane with replacement characters.
     if raw.contains('\0') {
@@ -1411,6 +1555,55 @@ mod tests {
         assert_eq!(parse_iso("1970-01-01T00:00:00Z"), Some(0));
         // leap day, which the month shift has to get right
         assert_eq!(parse_iso("2024-02-29T00:00:00Z"), Some(1709164800));
+    }
+
+    #[test]
+    fn parse_iso_rejects_multibyte_utf8_and_out_of_range_dates_without_panicking() {
+        assert_eq!(parse_iso("éééééééééé"), None);
+        assert_eq!(parse_iso("🎉🎉🎉🎉🎉"), None);
+        assert_eq!(parse_iso("2026-13-01T00:00:00Z"), None);
+        assert_eq!(parse_iso("2026/08/13T21:45:34Z"), None);
+    }
+
+    #[test]
+    fn path_encoding_stops_fragments_and_traversal_in_api_endpoints() {
+        assert_eq!(
+            encode_path_segments("main#cleanup", "gh api").unwrap(),
+            "main%23cleanup"
+        );
+        assert_eq!(
+            encode_path_segments("dir/README.md?ref=other", "gh api").unwrap(),
+            "dir/README.md%3Fref%3Dother"
+        );
+        assert_eq!(
+            encode_path_segments("a/%2e%2e/tags", "gh api").unwrap(),
+            "a/%252e%252e/tags"
+        );
+        assert!(encode_path_segments("../secret", "gh api").is_err());
+        assert!(encode_path_segments("/abs", "gh api").is_err());
+        assert!(encode_path_segments("", "gh api").is_err());
+    }
+
+    #[test]
+    fn repo_and_sha_validators_refuse_injection_shapes() {
+        assert!(validate_repo("Osmait/ghline", "gh api").is_ok());
+        assert!(validate_repo("owner/../other", "gh api").is_err());
+        assert!(validate_repo("-flag/repo", "gh api").is_err());
+        assert!(validate_repo("owner/repo?q=1", "gh api").is_err());
+        assert!(validate_sha("abcdef1", "gh api").is_ok());
+        assert!(validate_sha("../tags", "gh api").is_err());
+        assert!(validate_sha("abc", "gh api").is_err());
+    }
+
+    #[test]
+    fn strip_ansi_drops_osc_and_non_alphabetic_csi_finals() {
+        assert_eq!(strip_ansi("a\x1b]0;window title\x07b"), "ab");
+        assert_eq!(
+            strip_ansi("a\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\"),
+            "alink"
+        );
+        assert_eq!(strip_ansi("a\x1b[15~b"), "ab");
+        assert_eq!(strip_ansi("a^[[15~b"), "ab");
     }
 
     #[test]

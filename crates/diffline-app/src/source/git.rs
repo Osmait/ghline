@@ -17,7 +17,23 @@ fn run(repo: &str, args: &[&str]) -> Res<String> {
         .collect::<Vec<_>>()
         .join(" ");
     let out = Command::new("git")
-        .args(["-C", repo, "-c", "core.pager=cat", "--no-pager"])
+        .args([
+            "-C",
+            repo,
+            "-c",
+            "core.pager=cat",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "diff.external=",
+            "-c",
+            "core.quotepath=false",
+            "-c",
+            "diff.noprefix=false",
+            "-c",
+            "diff.mnemonicPrefix=false",
+            "--no-pager",
+        ])
         .args(args)
         .output()
         .map_err(|source| Error::Spawn {
@@ -132,7 +148,13 @@ fn selectors(repo: &str, scope: &Scope) -> Vec<String> {
     if let Scope::Commit { sha } = scope
         && run(
             repo,
-            &["rev-parse", "--verify", "--quiet", &format!("{sha}^")],
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                "--end-of-options",
+                &format!("{sha}^"),
+            ],
         )
         .is_err()
         && let Some(parent) = sel.first_mut()
@@ -154,11 +176,25 @@ pub fn changed_files(repo: &str, scope: &Scope) -> Res<Vec<ChangedFile>> {
     let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
 
-    let mut args = vec!["diff", "--numstat", "--no-color"];
+    let mut args = vec![
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--numstat",
+        "--no-color",
+        "--end-of-options",
+    ];
     args.extend_from_slice(&sel);
     let numstat = run(repo, &args)?;
 
-    let mut args = vec!["diff", "--name-status", "--no-color"];
+    let mut args = vec![
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--name-status",
+        "--no-color",
+        "--end-of-options",
+    ];
     args.extend_from_slice(&sel);
     let names = run(repo, &args)?;
 
@@ -238,10 +274,17 @@ pub fn file_diff(repo: &str, scope: &Scope, path: &str, opts: DiffOpts) -> Res<V
     let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
 
-    let mut args = vec!["diff", "--no-color", &unified];
+    let mut args = vec![
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        &unified,
+    ];
     if opts.ignore_ws {
         args.push("-w");
     }
+    args.push("--end-of-options");
     args.extend_from_slice(&sel);
     args.push("--");
     args.push(path);
@@ -256,10 +299,17 @@ pub fn scope_diff(repo: &str, scope: &Scope, opts: DiffOpts) -> Res<Vec<(String,
     let unified = format!("-U{}", opts.context);
     let owned = selectors(repo, scope);
     let sel: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let mut args = vec!["diff", "--no-color", &unified];
+    let mut args = vec![
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        &unified,
+    ];
     if opts.ignore_ws {
         args.push("-w");
     }
+    args.push("--end-of-options");
     args.extend_from_slice(&sel);
     let raw = run(repo, &args)?;
     Ok(split_files(&raw)

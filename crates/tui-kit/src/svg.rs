@@ -27,6 +27,8 @@ fn xml_escape(text: &str) -> String {
 pub fn render(buffer: &Buffer, width: u16, height: u16) -> String {
     const CELL_WIDTH: f32 = 9.6;
     const CELL_HEIGHT: f32 = 20.0;
+    let width = width.min(buffer.area.width);
+    let height = height.min(buffer.area.height);
     let svg_width = CELL_WIDTH * f32::from(width);
     let svg_height = CELL_HEIGHT * f32::from(height);
 
@@ -85,4 +87,18 @@ pub fn render(buffer: &Buffer, width: u16, height: u16) -> String {
 
     svg.push_str("</g></svg>\n");
     svg
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::layout::Rect;
+
+    use super::*;
+
+    #[test]
+    fn render_clamps_dimensions_to_the_buffer_area() {
+        let buf = Buffer::empty(Rect::new(0, 0, 4, 2));
+        let out = render(&buf, 20, 10);
+        assert!(out.starts_with("<svg "));
+    }
 }

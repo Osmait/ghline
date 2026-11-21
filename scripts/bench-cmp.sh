@@ -18,8 +18,8 @@ set -eu
 
 cd "$(git rev-parse --show-toplevel)"
 
-if git diff --quiet -- src; then
-	echo "  nothing is changed under src/ — there is nothing to compare against" >&2
+if git diff --quiet -- src crates && git diff --cached --quiet -- src crates; then
+	echo "  nothing is changed under src/ or crates/ — there is nothing to compare against" >&2
 	exit 1
 fi
 
@@ -27,19 +27,29 @@ before=target/bench-before.txt
 after=target/bench-after.txt
 mkdir -p target
 
-# Only `src` is stashed. The benchmarks themselves have to be the same on both
-# sides or the comparison is between two different questions, and a bench file
-# that names something the old `src` does not have would fail to build anyway.
-echo "  stashing your changes under src/ — if this is interrupted, they are in \`git stash list\`"
-git stash push --quiet -- src
+# Only `src` and `crates` are stashed. The benchmarks themselves have to be the
+# same on both sides or the comparison is between two different questions, and
+# a bench file that names something old code does not have would fail to build.
+echo "  stashing your changes under src/ and crates/ — if this is interrupted, they are in \`git stash list\`"
+stash_before="$(git rev-parse -q --verify refs/stash || true)"
+git stash push --quiet -- src crates
+stash_after="$(git rev-parse -q --verify refs/stash || true)"
+stashed=0
+if [ "$stash_after" != "$stash_before" ]; then
+	stashed=1
+fi
 
-# Restores the tree whatever happens next, including a failed build or a ^C.
-# Without it an interrupted run leaves the working tree looking like HEAD, and
-# the work sitting in a stash the reader has not been told about.
+# Restores the tree once on exit, including on a failed build or a ^C.
+# Tracking `stashed` ensures we never pop an unrelated older stash or pop twice.
 restore() {
-	git stash pop --quiet 2>/dev/null || true
+	if [ "$stashed" -eq 1 ]; then
+		stashed=0
+		git stash pop --quiet
+	fi
 }
-trap restore EXIT INT TERM
+trap restore EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "  measuring HEAD…"
 cargo bench --quiet -- "$@" >"$before" 2>&1 || {

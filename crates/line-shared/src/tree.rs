@@ -68,16 +68,20 @@ struct Node {
 
 impl Node {
     fn totals(&self, all: &[Leaf]) -> (u32, u32, usize) {
-        let mut t = (0, 0, self.files.len());
+        let mut t = (0u32, 0u32, self.files.len());
         for (_, i) in &self.files {
             if let Some(f) = all.get(*i) {
-                t.0 += f.add;
-                t.1 += f.del;
+                t.0 = t.0.saturating_add(f.add);
+                t.1 = t.1.saturating_add(f.del);
             }
         }
         for d in self.dirs.values() {
             let (a, r, n) = d.totals(all);
-            t = (t.0 + a, t.1 + r, t.2 + n);
+            t = (
+                t.0.saturating_add(a),
+                t.1.saturating_add(r),
+                t.2.saturating_add(n),
+            );
         }
         t
     }

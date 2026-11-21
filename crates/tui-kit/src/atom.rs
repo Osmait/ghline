@@ -101,11 +101,11 @@ pub fn put(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Styl
 /// Like `put`, but appends `…` when the text does not fit.
 pub fn put_trunc(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style: Style) -> u16 {
     let avail = max_x.saturating_sub(x);
-    if text.width() as u16 <= avail {
-        return put(buf, x, y, max_x, text, style);
-    }
     if avail == 0 {
         return x;
+    }
+    if text.width() <= usize::from(avail) {
+        return put(buf, x, y, max_x, text, style);
     }
     let cut = truncate_to(text, avail.saturating_sub(1) as usize);
     let end = put(buf, x, y, max_x, &cut, style);
@@ -123,7 +123,7 @@ pub fn put_trunc(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style
 /// letter takes one and a CJK glyph takes two. Text wider than `right_x` starts
 /// at column 0 and is cut on the right rather than underflowing to the left.
 pub fn put_right(buf: &mut Buffer, right_x: u16, y: u16, text: &str, style: Style) -> u16 {
-    let w = text.width() as u16;
+    let w = u16::try_from(text.width()).unwrap_or(u16::MAX);
     let x = right_x.saturating_sub(w);
     put(buf, x, y, right_x, text, style);
     x

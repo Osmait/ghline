@@ -3570,3 +3570,76 @@ mod sending_a_review {
         assert!(app.flash.is_some());
     }
 }
+
+#[test]
+fn moving_in_an_empty_account_picker_does_not_underflow() {
+    let mut app = App::new(None);
+    app.accounts.clear();
+    ch(&mut app, 'a');
+    assert!(app.accounts_open);
+    ch(&mut app, 'j');
+    press(&mut app, Key::Enter);
+    assert_eq!(app.acc_sel, 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn open_in_editor_refuses_traversal_and_symlink_escapes() {
+    use crate::data::{FILES_TAB, TreeEntry};
+
+    let base = std::env::temp_dir().join(format!("ghline-edit-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let root = base.join("checkout");
+    let outside = base.join("secret.txt");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(&outside, "secret").unwrap();
+    std::fs::write(root.join("ok.rs"), "fn main() {}\n").unwrap();
+    std::os::unix::fs::symlink(&outside, root.join("escape.rs")).unwrap();
+
+    let (mut app, _) = recording();
+    let repo = app.repo_key();
+    app.clones_state = Load::Ready;
+    app.clones.insert(repo.clone(), root);
+    app.trees.insert(
+        repo,
+        vec![
+            TreeEntry {
+                path: "../secret.txt".into(),
+                is_dir: false,
+                size: 6,
+            },
+            TreeEntry {
+                path: "escape.rs".into(),
+                is_dir: false,
+                size: 6,
+            },
+            TreeEntry {
+                path: "ok.rs".into(),
+                is_dir: false,
+                size: 13,
+            },
+        ],
+    );
+    app.fs_open.insert("..".into());
+    app.tab = FILES_TAB;
+
+    // `../secret.txt` is rejected before touching disk
+    app.fs_sel = 0;
+    assert_eq!(app.fs_selected_file().as_deref(), Some("../secret.txt"));
+    app.open_in_editor();
+    assert!(app.edit_request.is_none());
+
+    // `escape.rs` symlink pointing outside checkout is rejected
+    app.fs_sel = 1;
+    assert_eq!(app.fs_selected_file().as_deref(), Some("escape.rs"));
+    app.open_in_editor();
+    assert!(app.edit_request.is_none());
+
+    // `ok.rs` inside checkout is accepted
+    app.fs_sel = 2;
+    assert_eq!(app.fs_selected_file().as_deref(), Some("ok.rs"));
+    app.open_in_editor();
+    assert!(app.edit_request.is_some());
+
+    let _ = std::fs::remove_dir_all(&base);
+}

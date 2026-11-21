@@ -64,8 +64,10 @@ pub fn template(key: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-/// Fills the template in. An unknown placeholder is left alone rather than
-/// blanked, so a typo shows up as itself instead of vanishing.
+/// Fills the template in in a single left-to-right pass. An unknown placeholder
+/// is left alone rather than blanked, so a typo shows up as itself instead of
+/// vanishing, and a substituted value (such as an untrusted issue title) is
+/// never re-scanned for further placeholders.
 pub fn render_prompt(
     template: &str,
     repo: &str,
@@ -74,14 +76,77 @@ pub fn render_prompt(
     url: &str,
     context: &str,
 ) -> String {
-    // `{context}` is substituted last, so a body that happens to contain
-    // `{repo}` arrives as it was written rather than expanded.
-    template
-        .replace("{repo}", repo)
-        .replace("{num}", &num.to_string())
-        .replace("{title}", title)
-        .replace("{url}", url)
-        .replace("{context}", context)
+    render_single_pass(template, repo, num, title, url, context, None)
+}
+
+/// Fills the template and places `note` in a single pass, so neither `{title}`
+/// nor `{context}` can re-expand `{note}`, and `{note}` cannot expand `{repo}`.
+pub fn render_prompt_with_note(
+    template: &str,
+    repo: &str,
+    num: i64,
+    title: &str,
+    url: &str,
+    context: &str,
+    note: &str,
+) -> String {
+    let note = note.trim();
+    if template.contains("{note}") {
+        return render_single_pass(template, repo, num, title, url, context, Some(note));
+    }
+    let rendered = render_single_pass(template, repo, num, title, url, context, None);
+    if note.is_empty() {
+        return rendered;
+    }
+    format!("{note}\n\n{rendered}")
+}
+
+fn render_single_pass(
+    template: &str,
+    repo: &str,
+    num: i64,
+    title: &str,
+    url: &str,
+    context: &str,
+    note: Option<&str>,
+) -> String {
+    let num_str = num.to_string();
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open..];
+        let matched = if let Some(tail) = after.strip_prefix("{repo}") {
+            out.push_str(repo);
+            Some(tail)
+        } else if let Some(tail) = after.strip_prefix("{num}") {
+            out.push_str(&num_str);
+            Some(tail)
+        } else if let Some(tail) = after.strip_prefix("{title}") {
+            out.push_str(title);
+            Some(tail)
+        } else if let Some(tail) = after.strip_prefix("{url}") {
+            out.push_str(url);
+            Some(tail)
+        } else if let Some(tail) = after.strip_prefix("{context}") {
+            out.push_str(context);
+            Some(tail)
+        } else if let (Some(n), Some(tail)) = (note, after.strip_prefix("{note}")) {
+            out.push_str(n);
+            Some(tail)
+        } else {
+            None
+        };
+        match matched {
+            Some(tail) => rest = tail,
+            None => {
+                out.push('{');
+                rest = &after[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 const MUX: &str = "multiplexer";
@@ -267,10 +332,31 @@ mod tests {
 
     #[test]
     fn a_body_containing_braces_is_not_re_expanded() {
-        // substitution runs once per placeholder, left to right, so a body
-        // that happens to contain `{repo}` stays as it was written
-        let out = render_prompt("{context}", "a/b", 1, "t", "u", "see {repo}");
-        assert_eq!(out, "see {repo}");
+        // substitution runs in a single pass, so neither a body nor an
+        // untrusted title can trigger expansion of later placeholders
+        let out = render_prompt(
+            "{title} | {context}",
+            "a/b",
+            1,
+            "see {context} and {url}",
+            "https://x",
+            "see {repo}",
+        );
+        assert_eq!(out, "see {context} and {url} | see {repo}");
+    }
+
+    #[test]
+    fn render_prompt_with_note_does_not_re_expand_across_placeholders() {
+        let out = render_prompt_with_note(
+            "{title}\n{context}",
+            "a/b",
+            7,
+            "fix {note}",
+            "u",
+            "body {note}",
+            "check {repo}",
+        );
+        assert_eq!(out, "check {repo}\n\nfix {note}\nbody {note}");
     }
 
     #[test]

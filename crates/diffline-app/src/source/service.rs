@@ -324,10 +324,34 @@ pub fn brief(e: &Error) -> String {
 /// Puts `text` at `path`, making the directory on the way if it is not there.
 fn write_file(path: &std::path::Path, text: &str) -> std::io::Result<String> {
     use std::io::Write as _;
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "refusing to write through a symlink",
+        ));
+    }
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
-    std::fs::File::create(path)?.write_all(text.as_bytes())?;
+    let tmp = path.with_extension(format!("tmp.{}", std::process::id()));
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        opts.mode(0o600);
+    }
+    let res = opts
+        .open(&tmp)
+        .and_then(|mut file| file.write_all(text.as_bytes()));
+    if let Err(err) = res {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
+    if let Err(err) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err);
+    }
     Ok(format!("wrote {}", path.display()))
 }
 

@@ -114,8 +114,10 @@ impl Repo {
             name: Self::ALL.into(),
             private: false,
             lang: String::new(),
-            issues: repos.iter().map(|r| r.issues).sum(),
-            prs: repos.iter().map(|r| r.prs).sum(),
+            issues: repos
+                .iter()
+                .fold(0u32, |acc, r| acc.saturating_add(r.issues)),
+            prs: repos.iter().fold(0u32, |acc, r| acc.saturating_add(r.prs)),
             has_workflows: repos.iter().any(|r| r.has_workflows),
         }
     }
@@ -412,14 +414,14 @@ impl Hunk {
                     String::new()
                 } else {
                     let s = o.to_string();
-                    o += 1;
+                    o = o.saturating_add(1);
                     s
                 };
                 let ln = if kind == DiffKind::Del {
                     String::new()
                 } else {
                     let s = n.to_string();
-                    n += 1;
+                    n = n.saturating_add(1);
                     s
                 };
                 out.push(DiffRow {

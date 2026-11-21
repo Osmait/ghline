@@ -205,8 +205,17 @@ impl Terminal_ {
             previous(info);
         }));
 
-        let mut term = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-        term.hide_cursor()?;
+        let mut term = match Terminal::new(CrosstermBackend::new(io::stdout())) {
+            Ok(term) => term,
+            Err(e) => {
+                restore();
+                return Err(e);
+            }
+        };
+        if let Err(e) = term.hide_cursor() {
+            restore();
+            return Err(e);
+        }
         Ok(Self { term, mouse })
     }
 
@@ -246,7 +255,12 @@ impl Drop for Terminal_ {
 /// sending escape sequences at a shell that has no idea what they are.
 pub fn restore() {
     let _ = disable_raw_mode();
-    let _ = execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
+    let _ = execute!(
+        io::stdout(),
+        crossterm::cursor::Show,
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    );
 }
 
 /// Runs `program` until it says to stop.

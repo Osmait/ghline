@@ -637,11 +637,8 @@ impl App {
                     self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
-                    self.flash_warn(format!(
-                        "commit {}: {}",
-                        &sha[..sha.len().min(7)],
-                        e.brief()
-                    ));
+                    let short = sha.get(..7).unwrap_or(&sha);
+                    self.flash_warn(format!("commit {short}: {}", e.brief()));
                     self.commit_state.insert((repo, sha), Load::from(e));
                 }
             },

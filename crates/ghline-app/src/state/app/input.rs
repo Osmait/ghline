@@ -261,9 +261,15 @@ impl App {
             (repo, cur.num, cur.title.clone(), url)
         };
         let context = self.dispatch_context(subject);
-        let template = crate::shared::config::with_note(&subject.template(), &self.dispatch_note);
-        let text =
-            crate::shared::config::render_prompt(&template, &repo, num, &title, &url, &context);
+        let text = crate::shared::config::render_prompt_with_note(
+            &subject.template(),
+            &repo,
+            num,
+            &title,
+            &url,
+            &context,
+            &self.dispatch_note,
+        );
 
         self.dispatch_open = false;
         match dest {
@@ -372,11 +378,32 @@ impl App {
         };
 
         self.wants_edit = false;
-        let full = std::path::Path::new(&root).join(&path);
+        let rel = std::path::Path::new(&path);
+        let safe_rel = !path.is_empty()
+            && rel
+                .components()
+                .all(|c| matches!(c, std::path::Component::Normal(_)));
+        if !safe_rel {
+            self.flash_warn(format!("refused unsafe path: {path}"));
+            return;
+        }
+        let full = std::path::Path::new(&root).join(rel);
         if !full.exists() {
             self.flash_warn(format!(
                 "{path} is not in the checkout — it is probably on another branch"
             ));
+            return;
+        }
+        // Resolve symlinks on both ends so a committed symlink inside the
+        // repository cannot open a file outside the checkout.
+        let (Ok(canon_root), Ok(canon_full)) =
+            (std::fs::canonicalize(&root), std::fs::canonicalize(&full))
+        else {
+            self.flash_warn(format!("cannot resolve {path} in the checkout"));
+            return;
+        };
+        if !canon_full.starts_with(&canon_root) {
+            self.flash_warn(format!("refused path outside checkout: {path}"));
             return;
         }
 
@@ -388,7 +415,7 @@ impl App {
         if let Some(branch) = self.head_branches.get(&root) {
             self.flash_warn(format!("editing the copy on {branch}"));
         }
-        self.edit_request = Some((full, self.file_sel + 1));
+        self.edit_request = Some((canon_full, self.file_sel + 1));
     }
 
     /// Opens the theme picker, remembering what to go back to.
@@ -978,10 +1005,10 @@ impl App {
         if self.accounts_open {
             match press.key {
                 Key::Char('j') | Key::Down => {
-                    self.acc_sel = (self.acc_sel + 1).min(self.accounts.len() - 1);
+                    self.acc_sel = (self.acc_sel + 1).min(self.accounts.len().saturating_sub(1));
                 }
                 Key::Char('k') | Key::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
-                Key::Enter => self.pick_account(self.acc_sel),
+                Key::Enter if !self.accounts.is_empty() => self.pick_account(self.acc_sel),
                 Key::Esc | Key::Char('q' | 'a') => {
                     self.accounts_open = false;
                 }

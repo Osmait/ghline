@@ -41,7 +41,7 @@ pub(super) fn run() -> io::Result<()> {
 
 fn interactive(args: RunArgs) -> io::Result<()> {
     let Some(mut app) = open_repository(&args.repository) else {
-        return Ok(());
+        std::process::exit(1);
     };
 
     // Opened after the repository is known, so the first line of the log says
@@ -50,7 +50,7 @@ fn interactive(args: RunArgs) -> io::Result<()> {
     if let Some(path) = args.log {
         if let Err(error) = line_shared::log::to(&path, "diffline", "--svg") {
             eprintln!("diffline: cannot write to {}: {error}", path.display());
-            return Ok(());
+            std::process::exit(1);
         }
         line_shared::log::say(format_args!("repo {}", app.repo));
     }
@@ -73,6 +73,7 @@ fn interactive(args: RunArgs) -> io::Result<()> {
         Ok(term) => term,
         Err(error) => {
             line_shared::log::say(format_args!("could not take the terminal: {error}"));
+            line_shared::log::finish();
             return Err(error);
         }
     };
@@ -90,7 +91,7 @@ fn interactive(args: RunArgs) -> io::Result<()> {
 
 fn render(args: &RenderArgs) {
     let Some(mut app) = open_repository(&args.repository) else {
-        return;
+        std::process::exit(1);
     };
     headless(&mut app, &args.keys, args.width, args.height);
 }
