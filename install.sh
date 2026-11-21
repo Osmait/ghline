@@ -72,12 +72,23 @@ detect_target() {
 # The tag GitHub calls "latest", read off the redirect rather than the JSON
 # API: one request, no parser, and no token needed.
 latest_tag() {
-    url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
+    url="$(curl --proto '=https' --tlsv1.2 -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")"
     case "$url" in
-        */releases/tag/*) printf '%s' "${url##*/tag/}" ;;
+        "https://github.com/$REPO/releases/tag/"*) printf '%s' "${url##*/tag/}" ;;
         # With no releases at all, GitHub redirects to the releases index
         # instead of a tag — which is a real answer, not a failure to parse.
         *) return 1 ;;
+    esac
+}
+
+validate_tag() {
+    case "$1" in
+        v[0-9]*)
+            case "$1" in
+                *[!0-9A-Za-z._-]* | *..* ) die "invalid release tag: $1" ;;
+            esac
+            ;;
+        *) die "invalid release tag: $1" ;;
     esac
 }
 
@@ -96,6 +107,7 @@ main() {
         tag="$(latest_tag || true)"
         [ -n "$tag" ] || die "no published release yet — see https://github.com/$REPO/releases"
     fi
+    validate_tag "$tag"
 
     archive="$BIN-$target.tar.gz"
     base="https://github.com/$REPO/releases/download/$tag"
@@ -103,12 +115,17 @@ main() {
     say "Installing $BIN $tag ($target)"
 
     tmp="$(mktemp -d)"
+    staged=""
+    cleanup() {
+        rm -rf "$tmp"
+        [ -n "$staged" ] && rm -f "$staged"
+    }
     # Leave nothing behind, including on a failed download or a Ctrl-C.
-    trap 'rm -rf "$tmp"' EXIT INT TERM
+    trap cleanup EXIT INT TERM
 
-    curl -fsSL "$base/$archive" -o "$tmp/$archive" \
+    curl --proto '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$tmp/$archive" \
         || die "no build for $target in $tag — see https://github.com/$REPO/releases/tag/$tag"
-    curl -fsSL "$base/$archive.sha256" -o "$tmp/$archive.sha256" \
+    curl --proto '=https' --tlsv1.2 -fsSL "$base/$archive.sha256" -o "$tmp/$archive.sha256" \
         || die "release $tag has no checksum for $archive; refusing to install unverified"
 
     verify "$tmp" "$archive"
@@ -119,14 +136,20 @@ main() {
     for bin in $BINS; do
         # Releases before diffline shipped carry one binary. Installing what
         # is there beats refusing the whole thing over the one that is not.
+        if [ -L "$tmp/$bin" ]; then
+            die "$archive contains a symlink for $bin; refusing to install"
+        fi
         [ -f "$tmp/$bin" ] || { say "note: $tag has no $bin"; continue; }
 
         # Moved into place from the same directory, so a half-written binary
         # can never end up on PATH — and so replacing a copy that is currently
         # running works instead of failing with "text file busy".
         chmod +x "$tmp/$bin"
-        mv "$tmp/$bin" "$INSTALL_DIR/$bin.new"
-        mv "$INSTALL_DIR/$bin.new" "$INSTALL_DIR/$bin"
+        staged="$(mktemp "$INSTALL_DIR/.${bin}.XXXXXX")"
+        cp "$tmp/$bin" "$staged"
+        chmod +x "$staged"
+        mv "$staged" "$INSTALL_DIR/$bin"
+        staged=""
         say "Installed to $INSTALL_DIR/$bin"
     done
 
@@ -138,20 +161,29 @@ main() {
     say "Run \`$BIN\` to start, or \`diffline\` in a repository to review its diff."
 }
 
-# Checksums are published as `<sha>  <name>`, the format both tools read.
+# Checksums are published as `<sha>  <name>`. Verify the hash of `$dir/$name`
+# directly rather than trusting whatever filename is written inside `.sha256`.
 verify() {
     dir="$1"
     name="$2"
+    expected="$(awk -v target="$name" '
+        NF == 2 && ($2 == target || $2 == ("*" target)) { print $1; count++ }
+        END { if (count != 1) exit 1 }
+    ' "$dir/$name.sha256")" || die "checksum file does not name $name — refusing to install"
+
+    case "$expected" in
+        *[!0-9a-fA-F]* | "") die "invalid checksum for $name — refusing to install" ;;
+    esac
 
     if command -v sha256sum >/dev/null 2>&1; then
-        (cd "$dir" && sha256sum -c "$name.sha256" >/dev/null 2>&1) \
-            || die "checksum mismatch for $name — refusing to install"
+        actual="$(sha256sum "$dir/$name" | awk '{ print $1 }')"
     elif command -v shasum >/dev/null 2>&1; then
-        (cd "$dir" && shasum -a 256 -c "$name.sha256" >/dev/null 2>&1) \
-            || die "checksum mismatch for $name — refusing to install"
+        actual="$(shasum -a 256 "$dir/$name" | awk '{ print $1 }')"
     else
         die "neither sha256sum nor shasum found; refusing to install unverified"
     fi
+
+    [ "$actual" = "$expected" ] || die "checksum mismatch for $name — refusing to install"
 }
 
 # Say so rather than editing the user's shell config behind their back.

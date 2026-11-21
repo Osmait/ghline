@@ -193,12 +193,76 @@ pub fn agents() -> Res<Vec<Agent>> {
         .collect())
 }
 
+fn validate_arg(value: &str, name: &'static str, cmd: &'static str) -> Res<()> {
+    if value.is_empty() || value.starts_with('-') || value.contains(['\0', '\n', '\r']) {
+        return Err(Error::Command {
+            args: cmd.into(),
+            status: None,
+            stderr: format!("refused unsafe {name}"),
+        });
+    }
+    Ok(())
+}
+
+/// Strips terminal escape sequences and unsafe control bytes before sending
+/// text to an interactive agent pane. Keeps `\n` and `\t` for formatting.
+fn sanitize_pane_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            match chars.peek().copied() {
+                // CSI: ESC [ ... final byte 0x40..=0x7E
+                Some('[') => {
+                    chars.next();
+                    for ch in chars.by_ref() {
+                        if ('@'..='~').contains(&ch) {
+                            break;
+                        }
+                    }
+                }
+                // OSC (]), DCS (P), SOS (X), PM (^), APC (_): terminated by BEL or ST (ESC \)
+                Some(']' | 'P' | 'X' | '^' | '_') => {
+                    chars.next();
+                    let mut prev_esc = false;
+                    for ch in chars.by_ref() {
+                        if ch == '\u{07}' || (prev_esc && ch == '\\') {
+                            break;
+                        }
+                        prev_esc = ch == '\u{1b}';
+                    }
+                }
+                Some(_) => {
+                    chars.next();
+                }
+                None => {}
+            }
+            continue;
+        }
+        if c == '\r' || (c.is_control() && c != '\n' && c != '\t') {
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// Single-line label without terminal control characters.
+fn sanitize_label(label: &str) -> String {
+    sanitize_pane_text(label)
+        .chars()
+        .map(|c| if c == '\n' || c == '\t' { ' ' } else { c })
+        .collect()
+}
+
 /// Sends `text` to the agent in `pane`, and does not wait for it.
 ///
 /// Waiting would block the service thread for as long as the agent takes,
 /// which can be many minutes; the Agents tab is how you watch it instead.
 pub fn prompt(pane: &str, text: &str) -> Res<()> {
-    call(&["agent", "prompt", pane, text]).map(|_| ())
+    validate_arg(pane, "pane", "herdr agent prompt")?;
+    let clean = sanitize_pane_text(text);
+    call(&["agent", "prompt", "--", pane, &clean]).map(|_| ())
 }
 
 /// Creates a worktree of `repo_root` on `branch` and returns the pane herdr
@@ -207,15 +271,18 @@ pub fn prompt(pane: &str, text: &str) -> Res<()> {
 /// `--no-focus` on purpose: dispatching from here should not yank the reader's
 /// terminal over to the new workspace mid-sentence.
 pub fn create_worktree(repo_root: &str, branch: &str, label: &str) -> Res<String> {
+    validate_arg(repo_root, "cwd", "herdr worktree create")?;
+    validate_arg(branch, "branch", "herdr worktree create")?;
+    let clean_label = sanitize_label(label);
+    let cwd_flag = format!("--cwd={repo_root}");
+    let branch_flag = format!("--branch={branch}");
+    let label_flag = format!("--label={clean_label}");
     let v = call(&[
         "worktree",
         "create",
-        "--cwd",
-        repo_root,
-        "--branch",
-        branch,
-        "--label",
-        label,
+        &cwd_flag,
+        &branch_flag,
+        &label_flag,
         "--no-focus",
     ])?;
     let pane = v
@@ -237,15 +304,11 @@ pub fn create_worktree(repo_root: &str, branch: &str, label: &str) -> Res<String
 /// The counterpart to `create_worktree` for working where you already are:
 /// same shape of answer, no branch, and nothing created on disk.
 pub fn create_workspace(cwd: &str, label: &str) -> Res<String> {
-    let v = call(&[
-        "workspace",
-        "create",
-        "--cwd",
-        cwd,
-        "--label",
-        label,
-        "--no-focus",
-    ])?;
+    validate_arg(cwd, "cwd", "herdr workspace create")?;
+    let clean_label = sanitize_label(label);
+    let cwd_flag = format!("--cwd={cwd}");
+    let label_flag = format!("--label={clean_label}");
+    let v = call(&["workspace", "create", &cwd_flag, &label_flag, "--no-focus"])?;
     let pane = v
         .pointer("/root_pane/pane_id")
         .and_then(|x| x.as_str())
@@ -263,20 +326,27 @@ pub fn create_workspace(cwd: &str, label: &str) -> Res<String> {
 /// Undoes `create_workspace`. Unlike removing a worktree this touches no
 /// files: the checkout was already there and stays exactly as it was.
 pub fn close_workspace(pane: &str) -> Res<()> {
-    let workspace = pane.split(':').next().unwrap_or(pane);
-    call(&["workspace", "close", workspace]).map(|_| ())
+    let workspace = pane.split(':').next().unwrap_or("");
+    validate_arg(workspace, "workspace", "herdr workspace close")?;
+    call(&["workspace", "close", "--", workspace]).map(|_| ())
 }
 
 /// Starts an interactive agent of `kind` in an existing pane.
 pub fn start_agent(pane: &str, kind: &str) -> Res<()> {
-    call(&["agent", "start", kind, "--kind", kind, "--pane", pane]).map(|_| ())
+    validate_arg(pane, "pane", "herdr agent start")?;
+    validate_arg(kind, "kind", "herdr agent start")?;
+    let kind_flag = format!("--kind={kind}");
+    let pane_flag = format!("--pane={pane}");
+    call(&["agent", "start", kind, &kind_flag, &pane_flag]).map(|_| ())
 }
 
 /// Undoes `create_worktree`, for when what came after it failed.
 pub fn remove_worktree(pane: &str) -> Res<()> {
     // a pane id is `<workspace>:<pane>`, and removal takes the workspace
-    let workspace = pane.split(':').next().unwrap_or(pane);
-    call(&["worktree", "remove", "--workspace", workspace, "--force"]).map(|_| ())
+    let workspace = pane.split(':').next().unwrap_or("");
+    validate_arg(workspace, "workspace", "herdr worktree remove")?;
+    let ws_flag = format!("--workspace={workspace}");
+    call(&["worktree", "remove", &ws_flag, "--force"]).map(|_| ())
 }
 
 #[cfg(test)]
@@ -339,5 +409,24 @@ mod tests {
     #[test]
     fn an_unrecognised_state_does_not_panic() {
         assert_eq!(AgentStatus::parse("something-new"), AgentStatus::Unknown);
+    }
+
+    #[test]
+    fn unsafe_arguments_are_refused_before_spawning_herdr() {
+        assert!(prompt("", "hello").is_err());
+        assert!(prompt("-flag", "hello").is_err());
+        assert!(close_workspace(":p1").is_err());
+        assert!(remove_worktree(":p1").is_err());
+        assert!(remove_worktree("--evil:p1").is_err());
+        assert!(start_agent("w1:p1", "--exec").is_err());
+        assert!(create_worktree("-repo", "main", "lbl").is_err());
+        assert!(create_worktree("/repo", "--branch", "lbl").is_err());
+    }
+
+    #[test]
+    fn pane_text_strips_escape_and_control_sequences_while_keeping_layout() {
+        let dirty = "hello\x1b[31m red\x1b[0m\x1b]0;title\x07\x03\x04\n\tworld\r!";
+        assert_eq!(sanitize_pane_text(dirty), "hello red\n\tworld!");
+        assert_eq!(sanitize_label("a\nb\tc\x1b[1m"), "a b c");
     }
 }

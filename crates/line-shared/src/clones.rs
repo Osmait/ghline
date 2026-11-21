@@ -108,6 +108,23 @@ pub fn scan() -> Index {
     index
 }
 
+/// Ceiling on `.git/config` and `.git/HEAD` reads so a pathological file
+/// cannot stall the scan worker or exhaust memory.
+const MAX_GIT_META: u64 = 64 * 1024;
+
+/// Reads a regular file (never a symlink or FIFO) up to `MAX_GIT_META` bytes.
+fn read_regular_capped(path: &Path) -> Option<String> {
+    use std::io::Read as _;
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    if !meta.file_type().is_file() {
+        return None;
+    }
+    let file = std::fs::File::open(path).ok()?;
+    let mut buf = Vec::new();
+    file.take(MAX_GIT_META).read_to_end(&mut buf).ok()?;
+    String::from_utf8(buf).ok()
+}
+
 fn walk(dir: &Path, depth: usize, budget: &mut usize, out: &mut Index) {
     if depth == 0 || *budget == 0 {
         return;
@@ -126,12 +143,17 @@ fn walk(dir: &Path, depth: usize, budget: &mut usize, out: &mut Index) {
         return;
     };
     for entry in entries.flatten() {
+        // `file_type()` does not follow symlinks, keeping the scan inside the
+        // configured clone roots and away from symlink loops.
+        if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+            continue;
+        }
         let path = entry.path();
         let hidden = path
             .file_name()
             .and_then(|n| n.to_str())
             .is_some_and(|n| n.starts_with('.'));
-        if hidden || !path.is_dir() {
+        if hidden {
             continue;
         }
         walk(&path, depth - 1, budget, out);
@@ -145,10 +167,10 @@ fn walk(dir: &Path, depth: usize, budget: &mut usize, out: &mut Index) {
 /// whichever the walk happened to reach first.
 fn remote_of(dir: &Path) -> Option<String> {
     let git = dir.join(".git");
-    if !git.is_dir() {
+    if !std::fs::symlink_metadata(&git).is_ok_and(|m| m.file_type().is_dir()) {
         return None;
     }
-    let config = std::fs::read_to_string(git.join("config")).ok()?;
+    let config = read_regular_capped(&git.join("config"))?;
     origin_url(&config).as_deref().and_then(slug_of)
 }
 
@@ -194,7 +216,7 @@ pub fn slug_of(url: &str) -> Option<String> {
 /// whatever is there — usually `main`, sometimes not, and the difference is
 /// the reader's to know before they agree to it.
 pub fn head_branch(repo_root: &str) -> Option<String> {
-    let head = std::fs::read_to_string(Path::new(repo_root).join(".git").join("HEAD")).ok()?;
+    let head = read_regular_capped(&Path::new(repo_root).join(".git").join("HEAD"))?;
     branch_of_head(&head)
 }
 
@@ -454,5 +476,22 @@ mod tests {
         let mut budget = MAX_DIRS;
         walk(Path::new("/nowhere/at/all"), DEPTH, &mut budget, &mut out);
         assert!(out.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_not_followed_during_scan_or_head_read() {
+        let t = Tree::new("symlinks");
+        let outside = Tree::new("symlinks-outside");
+        let real = outside.repo("target", "Osmait/escaped");
+        std::os::unix::fs::symlink(&real, t.0.join("linked")).unwrap();
+        assert!(t.index().is_empty());
+
+        let dir = t.plain("bad-head");
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        let target_head = outside.0.join("HEAD");
+        std::fs::write(&target_head, "ref: refs/heads/main\n").unwrap();
+        std::os::unix::fs::symlink(&target_head, dir.join(".git").join("HEAD")).unwrap();
+        assert_eq!(head_branch(dir.to_str().unwrap()), None);
     }
 }

@@ -4,6 +4,7 @@
 //! command dispatch remain in `runtime`.
 
 use std::io;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tui_kit::run::{Handover, Program};
@@ -30,6 +31,7 @@ pub(super) struct Ghline {
     blink: Instant,
     anim: Instant,
     find: Instant,
+    handover_error: Arc<Mutex<Option<String>>>,
 }
 
 impl Ghline {
@@ -42,6 +44,7 @@ impl Ghline {
             blink: now,
             anim: now,
             find: now,
+            handover_error: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -66,6 +69,11 @@ impl Program for Ghline {
     }
 
     fn drain(&mut self) {
+        if let Ok(mut slot) = self.handover_error.lock()
+            && let Some(msg) = slot.take()
+        {
+            self.app.flash_warn(msg);
+        }
         while let Some(response) = self.app.poll_service() {
             self.app.apply(response);
         }
@@ -116,7 +124,15 @@ impl Program for Ghline {
     /// between frames rather than in the middle of one.
     fn take_handover(&mut self) -> Option<Handover> {
         let (path, line) = self.app.edit_request.take()?;
-        Some(Box::new(move || edit(&path, line)))
+        let slot = Arc::clone(&self.handover_error);
+        Some(Box::new(move || {
+            if let Err(err) = edit(&path, line)
+                && let Ok(mut guard) = slot.lock()
+            {
+                *guard = Some(format!("could not start editor: {err}"));
+            }
+            Ok(())
+        }))
     }
 
     fn should_quit(&self) -> bool {
@@ -149,6 +165,7 @@ fn edit(path: &std::path::Path, line: usize) -> io::Result<()> {
     std::process::Command::new(bin)
         .args(parts)
         .arg(format!("+{line}"))
+        .arg("--")
         .arg(path)
         .status()
         .map(|_| ())

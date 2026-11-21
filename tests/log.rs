@@ -41,13 +41,13 @@ fn the_last_line_replays_the_session() -> io::Result<()> {
 
     let last = written.lines().last().unwrap_or_default();
     let keys = last
-        .split_once('"')
-        .and_then(|(_, rest)| rest.rsplit_once('"'))
-        .map(|(k, _)| k)
+        .split_once('\'')
+        .and_then(|(_, rest)| rest.rsplit_once('\''))
+        .map(|(k, _)| k.replace("'\\''", "'"))
         .unwrap_or_default();
 
     assert_eq!(
-        parse_keys(keys),
+        parse_keys(&keys),
         session.to_vec(),
         "the replay line says {keys:?}, which is not what was pressed",
     );

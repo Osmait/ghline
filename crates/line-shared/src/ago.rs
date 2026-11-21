@@ -25,7 +25,7 @@ pub fn since(then: i64) -> String {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    let secs = (now - then).max(0);
+    let secs = now.saturating_sub(then).max(0);
     match secs {
         s if s < 60 => "just now".to_string(),
         s if s < 3600 => format!("{}m ago", s / 60),
@@ -59,5 +59,10 @@ mod tests {
     fn a_time_in_the_future_is_not_negative() {
         // clock skew between a server and this machine is ordinary
         assert_eq!(since(now() + 600), "just now");
+    }
+
+    #[test]
+    fn an_extreme_timestamp_does_not_overflow() {
+        assert!(since(i64::MIN).ends_with("w ago"));
     }
 }

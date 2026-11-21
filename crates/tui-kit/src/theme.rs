@@ -389,6 +389,14 @@ fn load_custom() -> Vec<Custom> {
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };
+        // Reject stems with control characters or config delimiters so saving
+        // `theme = <stem>` can never inject extra lines into the config file.
+        if stem.trim().is_empty()
+            || stem.chars().any(char::is_control)
+            || stem.contains(['=', '/', '\\'])
+        {
+            continue;
+        }
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };

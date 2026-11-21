@@ -138,7 +138,7 @@ impl App {
     /// viewport cannot disagree on which part of the diff is being read.
     pub(crate) fn move_diff_by(&mut self, d: i64) {
         let step = d.signum();
-        for _ in 0..d.abs() {
+        for _ in 0..d.unsigned_abs() {
             let before = self.cursor;
             self.move_cursor(step);
             if self.cursor == before {
@@ -202,11 +202,13 @@ impl App {
         if rows == 0 {
             return;
         }
-        let top = self.diff_scroll;
-        let bottom = (top + self.view_height.saturating_sub(1)).min(rows - 1);
+        let top = self.diff_scroll.min(rows - 1);
+        let bottom = top
+            .saturating_add(self.view_height.saturating_sub(1))
+            .min(rows - 1);
         let target = match where_to {
             Place::Top => top,
-            Place::Middle => top + (bottom - top) / 2,
+            Place::Middle => top + bottom.saturating_sub(top) / 2,
             Place::Bottom => bottom,
         };
         self.cursor = target.min(rows - 1);
@@ -263,6 +265,9 @@ impl App {
     /// diffs it is for.
     fn change(&mut self, d: i64) {
         let rows = self.diff_rows();
+        if rows.is_empty() {
+            return;
+        }
         let changed = |i: usize| matches!(rows[i].kind, Kind::Added | Kind::Deleted);
         let mut i = self.cursor as i64;
         let mut left_current = !changed(self.cursor.min(rows.len().saturating_sub(1)));
@@ -1054,8 +1059,12 @@ impl App {
                 None => self.flash("no config directory"),
             },
             "write a theme to start from" => {
-                let (path, text) = crate::tui::theme::template("mine");
-                self.ask_write(Write::File { path, text });
+                if crate::shared::settings::path_beside("themes").is_none() {
+                    self.flash("no config directory");
+                } else {
+                    let (path, text) = crate::tui::theme::template("mine");
+                    self.ask_write(Write::File { path, text });
+                }
             }
             // each one the action its key runs, so the two cannot drift: the
             // palette's split view did not say which view it had left you in
@@ -1156,7 +1165,15 @@ impl App {
             && (c != '0' || self.count.is_some())
         {
             let d = c.to_digit(10).unwrap_or(0) as usize;
-            self.count = Some(self.count.unwrap_or(0) * 10 + d);
+            // Cap the repeat count so holding or pasting digits can never
+            // overflow `usize` or turn negative when cast to `i64`.
+            self.count = Some(
+                self.count
+                    .unwrap_or(0)
+                    .saturating_mul(10)
+                    .saturating_add(d)
+                    .min(1_000_000),
+            );
             return;
         }
 
@@ -1238,7 +1255,10 @@ impl App {
 
             // --- along the line ---
             Action::ScrollRight if self.pane == Pane::Diff => {
-                self.hscroll = (self.hscroll + n as usize).min(self.max_hscroll());
+                self.hscroll = self
+                    .hscroll
+                    .saturating_add(n.max(0) as usize)
+                    .min(self.max_hscroll());
             }
             Action::ScrollLeft if self.pane == Pane::Diff && self.hscroll > 0 => {
                 self.hscroll = self.hscroll.saturating_sub(n as usize);
@@ -2968,5 +2988,36 @@ mod tests {
                 "{label} is offered in the palette but nothing runs it"
             );
         }
+    }
+
+    #[test]
+    fn change_motions_do_not_panic_on_an_empty_diff() {
+        let mut a = app();
+        a.rows.insert(a.path().to_string(), Vec::new());
+        a.run(Action::ChangeNext, 1);
+        a.run(Action::ChangePrev, 1);
+    }
+
+    #[test]
+    fn screen_middle_does_not_underflow_when_scroll_exceeds_rows() {
+        let mut a = app();
+        a.diff_scroll = 500;
+        a.view_height = 20;
+        a.run(Action::ScreenMiddle, 1);
+        assert!(a.cursor < a.diff_rows().len());
+    }
+
+    #[test]
+    fn typing_many_digits_saturates_the_count_without_overflowing() {
+        let mut a = app();
+        for _ in 0..25 {
+            press(&mut a, Key::Char('9'));
+        }
+        assert!(a.count.is_some());
+        press(&mut a, Key::Char('j'));
+        for _ in 0..25 {
+            press(&mut a, Key::Char('9'));
+        }
+        press(&mut a, Key::Char('l'));
     }
 }

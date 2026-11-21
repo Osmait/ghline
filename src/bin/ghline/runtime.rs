@@ -47,7 +47,7 @@ pub(super) fn run() -> io::Result<()> {
     if !gh::available() {
         eprintln!("ghline: gh is unavailable or not signed in.");
         eprintln!("        install it from https://cli.github.com, then `gh auth login`.");
-        return Ok(());
+        std::process::exit(1);
     }
 
     // Before the terminal is taken: a file that cannot be opened is worth
@@ -55,7 +55,7 @@ pub(super) fn run() -> io::Result<()> {
     if let Some(path) = args.log {
         if let Err(error) = line_shared::log::to(&path, "ghline", "--svg-live") {
             eprintln!("ghline: cannot write to {}: {error}", path.display());
-            return Ok(());
+            std::process::exit(1);
         }
         line_shared::log::say(format_args!("source gh"));
     }
@@ -67,6 +67,7 @@ pub(super) fn run() -> io::Result<()> {
         Ok(term) => term,
         Err(error) => {
             line_shared::log::say(format_args!("could not take the terminal: {error}"));
+            line_shared::log::finish();
             return Err(error);
         }
     };
