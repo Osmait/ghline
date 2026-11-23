@@ -48,11 +48,28 @@ pub fn annotate(
         let map = (0..base.len()).map(Some).collect();
         return (base, map);
     }
+    // Index `(side, line) -> first row index` once in O(R) so anchoring T
+    // threads is O(T + R) without per-thread string allocations.
+    let mut anchors: std::collections::HashMap<(DiffSide, u32), usize> =
+        std::collections::HashMap::with_capacity(base.len());
+    for (i, r) in base.iter().enumerate() {
+        if matches!(r.kind, DiffKind::Add | DiffKind::Ctx)
+            && let Ok(n) = r.ln.parse::<u32>()
+        {
+            anchors.entry((DiffSide::Right, n)).or_insert(i);
+        }
+        if matches!(r.kind, DiffKind::Del | DiffKind::Ctx)
+            && let Ok(n) = r.lo.parse::<u32>()
+        {
+            anchors.entry((DiffSide::Left, n)).or_insert(i);
+        }
+    }
+
     // where each thread goes: after a row, or at the top
     let mut after: Vec<Vec<&Thread>> = vec![Vec::new(); base.len()];
     let mut top: Vec<&Thread> = Vec::new();
     for t in threads {
-        match t.line.and_then(|l| anchor(&base, l, t.side)) {
+        match t.line.and_then(|l| anchors.get(&(t.side, l)).copied()) {
             Some(i) => after[i].push(t),
             None => top.push(t),
         }
@@ -77,17 +94,6 @@ pub fn annotate(
         }
     }
     (rows, map)
-}
-
-/// The row a comment on `line` of `side` sits under. A comment on the new
-/// file is on an added or unchanged line; one on the old, a deleted or
-/// unchanged one.
-fn anchor(rows: &[DiffRow], line: u32, side: DiffSide) -> Option<usize> {
-    let want = line.to_string();
-    rows.iter().position(|r| match side {
-        DiffSide::Right => matches!(r.kind, DiffKind::Add | DiffKind::Ctx) && r.ln == want,
-        DiffSide::Left => matches!(r.kind, DiffKind::Del | DiffKind::Ctx) && r.lo == want,
-    })
 }
 
 fn note(kind: DiffKind, text: String) -> DiffRow {

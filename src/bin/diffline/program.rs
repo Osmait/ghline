@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use tui_kit::run::Program;
 
-use diffline_app::app::App;
+use diffline_app::app::{App, Modal};
 use diffline_app::view as ui;
 use diffline_app::watch::{Notice, Watch};
 
@@ -33,6 +33,7 @@ pub(super) struct Diffline<'a> {
     /// the quiet window while `first_event` caps starvation under continuous
     /// writes.
     changed: Option<(Instant, Instant)>,
+    dirty: bool,
 }
 
 impl<'a> Diffline<'a> {
@@ -45,7 +46,15 @@ impl<'a> Diffline<'a> {
             tick: now,
             watch,
             changed: None,
+            dirty: true,
         }
+    }
+
+    fn shows_caret(&self) -> bool {
+        matches!(
+            self.app.modal,
+            Some(Modal::Comment | Modal::Finder | Modal::Palette | Modal::History)
+        )
     }
 }
 
@@ -71,6 +80,7 @@ impl Program for Diffline<'_> {
     fn drain(&mut self) {
         while let Some(response) = self.app.poll() {
             self.app.apply(response);
+            self.dirty = true;
         }
 
         let notice = self.watch.as_ref().map(Watch::poll);
@@ -85,31 +95,40 @@ impl Program for Diffline<'_> {
             Some(Notice::Failed(error)) => {
                 self.app.flash(format!("file watch stopped: {error}"));
                 self.watch = None;
+                self.dirty = true;
             }
             Some(Notice::Gone) => {
                 self.app.flash("file watch stopped");
                 self.watch = None;
+                self.dirty = true;
             }
             Some(Notice::Quiet) | None => {}
         }
     }
 
-    /// The soonest of the three, and only the skeletons when something is
-    /// actually on its way: an idle program has nothing to animate.
+    /// The soonest of the active timers: an idle program with no open input
+    /// cursor, toast or pending work sleeps without waking to redraw.
     fn next_wake(&self) -> Duration {
-        BLINK
-            .saturating_sub(self.blink.elapsed())
-            .min(TICK.saturating_sub(self.tick.elapsed()))
-            .min(self.changed.map_or(Duration::MAX, |(first, last)| {
-                CHANGE_DEBOUNCE
-                    .saturating_sub(last.elapsed())
-                    .min(CHANGE_MAX_WAIT.saturating_sub(first.elapsed()))
-            }))
-            .min(if self.app.waiting() {
-                ANIM.saturating_sub(self.anim.elapsed())
-            } else {
-                Duration::MAX
-            })
+        (if self.shows_caret() {
+            BLINK.saturating_sub(self.blink.elapsed())
+        } else {
+            Duration::MAX
+        })
+        .min(if self.app.toast_ttl > 0 {
+            TICK.saturating_sub(self.tick.elapsed())
+        } else {
+            Duration::MAX
+        })
+        .min(self.changed.map_or(Duration::MAX, |(first, last)| {
+            CHANGE_DEBOUNCE
+                .saturating_sub(last.elapsed())
+                .min(CHANGE_MAX_WAIT.saturating_sub(first.elapsed()))
+        }))
+        .min(if self.app.waiting() {
+            ANIM.saturating_sub(self.anim.elapsed())
+        } else {
+            Duration::MAX
+        })
     }
 
     fn on_wake(&mut self) {
@@ -118,19 +137,27 @@ impl Program for Diffline<'_> {
         }) {
             self.changed = None;
             self.app.refresh_live();
+            self.dirty = true;
         }
         if self.app.waiting() && self.anim.elapsed() >= ANIM {
             self.app.anim = self.app.anim.wrapping_add(1);
             self.anim = Instant::now();
+            self.dirty = true;
         }
-        if self.blink.elapsed() >= BLINK {
+        if self.shows_caret() && self.blink.elapsed() >= BLINK {
             self.app.blink = !self.app.blink;
             self.blink = Instant::now();
+            self.dirty = true;
         }
-        if self.tick.elapsed() >= TICK {
+        if self.app.toast_ttl > 0 && self.tick.elapsed() >= TICK {
             self.app.tick();
             self.tick = Instant::now();
+            self.dirty = true;
         }
+    }
+
+    fn take_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.dirty)
     }
 
     fn wants_redraw(&mut self) -> bool {

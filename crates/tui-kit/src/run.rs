@@ -129,6 +129,15 @@ pub trait Program {
     /// events are captured at all is `Terminal_::enter`'s argument.
     fn on_mouse(&mut self, _mouse: Mouse) {}
 
+    /// Whether `drain` or `on_wake` changed state that needs a repaint.
+    ///
+    /// Defaults to `true` for programs that do not track dirtiness; programs
+    /// that return `false` avoid repainting on idle ticks or dropped events
+    /// such as pointer motion.
+    fn take_dirty(&mut self) -> bool {
+        true
+    }
+
     /// Take whatever the worker has answered since the last pass.
     fn drain(&mut self) {}
 
@@ -299,26 +308,45 @@ pub fn restore() {
 /// wait is applied before the loop comes back round to `draw`, which is the
 /// very next thing it does.
 pub fn run(term: &mut Terminal_, program: &mut impl Program) -> io::Result<()> {
+    let mut dirty = true;
     loop {
-        program.ensure();
-        term.term.draw(|f| program.draw(f))?;
+        if dirty {
+            program.ensure();
+            term.term.draw(|f| program.draw(f))?;
+            dirty = false;
+        }
 
         // Never longer than the program asked for, never shorter than the
         // floor: a zero here would spin the CPU on a program with a timer
         // that has already fallen due.
         let timeout = program.next_wake().max(FLOOR);
         if event::poll(timeout)? {
-            match event::read()? {
-                Event::Key(key) if key.kind == KeyEventKind::Press => {
-                    program.on_key(press(key));
+            // Drain a burst of ready events (such as fast wheel ticks or mouse
+            // motion) before repainting so one frame answers the whole burst
+            // instead of queuing lag behind it.
+            let mut batch = 0u8;
+            loop {
+                match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        program.on_key(press(key));
+                        dirty = true;
+                    }
+                    // Motion arrives for every cell the pointer crosses whether
+                    // or not anything is pressed, and nothing here follows a
+                    // pointer. Dropped before it can cost a frame.
+                    Event::Mouse(event) if event.kind != MouseEventKind::Moved => {
+                        program.on_mouse(mouse(event));
+                        dirty = true;
+                    }
+                    Event::Resize(_, _) => {
+                        dirty = true;
+                    }
+                    _ => {}
                 }
-                // Motion arrives for every cell the pointer crosses whether
-                // or not anything is pressed, and nothing here follows a
-                // pointer. Dropped before it can cost a frame.
-                Event::Mouse(event) if event.kind != MouseEventKind::Moved => {
-                    program.on_mouse(mouse(event));
+                batch += 1;
+                if batch >= 64 || !event::poll(Duration::ZERO)? {
+                    break;
                 }
-                _ => {}
             }
         }
 
@@ -330,15 +358,18 @@ pub fn run(term: &mut Terminal_, program: &mut impl Program) -> io::Result<()> {
         // thought was on screen, so the next frame paints every cell.
         if program.wants_redraw() {
             term.term.clear()?;
+            dirty = true;
         }
 
         // Between frames rather than inside one: whatever this is wants the
         // terminal, and we are in the middle of drawing to it.
         if let Some(job) = program.take_handover() {
             term.handover(job)??;
+            dirty = true;
         }
 
         program.on_wake();
+        dirty |= program.take_dirty();
 
         if program.should_quit() {
             return Ok(());

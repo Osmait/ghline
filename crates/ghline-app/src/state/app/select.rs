@@ -76,7 +76,7 @@ impl App {
                 if filtering {
                     !e.is_dir && self.matches(&e.path)
                 } else {
-                    e.ancestors().iter().all(|a| self.fs_open.contains(*a))
+                    e.ancestors_open(&self.fs_open)
                 }
             })
             .collect()
@@ -523,11 +523,10 @@ impl App {
         self.current().map(|c| c.id).unwrap_or(0)
     }
 
-    pub fn jobs(&self) -> Vec<Job> {
+    pub fn jobs(&self) -> &[Job] {
         self.jobs_by_run
             .get(&(self.item_repo_key(), self.run_id()))
-            .cloned()
-            .unwrap_or_default()
+            .map_or(&[], Vec::as_slice)
     }
 
     pub fn jobs_status(&self) -> Load {

@@ -424,6 +424,14 @@ impl App {
 
             Response::Tree { repo, result } => match result {
                 Ok(entries) => {
+                    if !self.trees.contains_key(&repo) {
+                        while self.trees.len() >= 32
+                            && let Some(evict) = self.trees.keys().next().cloned()
+                        {
+                            self.trees.remove(&evict);
+                            self.trees_state.remove(&evict);
+                        }
+                    }
                     self.trees.insert(repo.clone(), entries);
                     self.trees_state.insert(repo, Load::Ready);
                 }
@@ -434,10 +442,20 @@ impl App {
 
             Response::FileText { repo, path, result } => match result {
                 Ok((text, spans)) => {
-                    if !spans.is_empty() {
-                        self.file_spans.insert((repo.clone(), path.clone()), spans);
+                    let key = (repo.clone(), path.clone());
+                    if !self.file_text.contains_key(&key) {
+                        while self.file_text.len() >= 64
+                            && let Some(evict) = self.file_text.keys().next().cloned()
+                        {
+                            self.file_text.remove(&evict);
+                            self.file_spans.remove(&evict);
+                            self.file_state.remove(&evict);
+                        }
                     }
-                    self.file_text.insert((repo.clone(), path.clone()), text);
+                    if !spans.is_empty() {
+                        self.file_spans.insert(key.clone(), spans);
+                    }
+                    self.file_text.insert(key, text);
                     self.file_state.insert((repo, path), Load::Ready);
                 }
                 Err(e) => {
@@ -562,9 +580,16 @@ impl App {
                         if let Some(pr) = it.as_pr_mut() {
                             // The diff may have come first: its hunks are kept
                             // rather than replaced by a list that has none.
+                            let prev_by_path: std::collections::HashMap<&str, usize> = pr
+                                .file_list
+                                .iter()
+                                .enumerate()
+                                .map(|(i, o)| (o.path.as_str(), i))
+                                .collect();
                             let mut merged = files.clone();
                             for f in &mut merged {
-                                if let Some(old) = pr.file_list.iter().find(|o| o.path == f.path) {
+                                if let Some(&idx) = prev_by_path.get(f.path.as_str()) {
+                                    let old = &pr.file_list[idx];
                                     f.hunks = old.hunks.clone();
                                     f.from = old.from.clone();
                                 }
@@ -632,13 +657,19 @@ impl App {
                     // match the hunks against the already-loaded file list, or
                     // stand in for it when the diff got here first; the
                     // detail fills in what only it knows when it arrives
+                    let by_path: std::collections::HashMap<&str, usize> = files
+                        .iter()
+                        .enumerate()
+                        .map(|(i, d)| (d.path.as_str(), i))
+                        .collect();
                     self.for_each_item_mut(&repo, 1, num, |it| {
                         if let Some(pr) = it.as_pr_mut() {
                             if pr.file_list.is_empty() {
                                 pr.file_list = files.iter().map(from_diff).collect();
                             }
                             for f in &mut pr.file_list {
-                                if let Some(d) = files.iter().find(|d| d.path == f.path) {
+                                if let Some(&idx) = by_path.get(f.path.as_str()) {
+                                    let d = &files[idx];
                                     f.hunks = d.hunks.clone();
                                     f.from = d.from.clone();
                                 }
@@ -707,10 +738,18 @@ impl App {
             Response::CommitDiff { repo, sha, result } => match result {
                 Ok(files) => {
                     let was_empty = self.diff_files().is_empty();
-                    self.commit_state
-                        .insert((repo.clone(), sha.clone()), Load::Ready);
+                    let key = (repo.clone(), sha.clone());
+                    if !self.commit_files.contains_key(&key) {
+                        while self.commit_files.len() >= 32
+                            && let Some(evict) = self.commit_files.keys().next().cloned()
+                        {
+                            self.commit_files.remove(&evict);
+                            self.commit_state.remove(&evict);
+                        }
+                    }
+                    self.commit_state.insert(key.clone(), Load::Ready);
                     self.commit_files
-                        .insert((repo, sha), files.iter().map(from_diff).collect());
+                        .insert(key, files.iter().map(from_diff).collect());
                     self.diff_rev = self.diff_rev.wrapping_add(1);
                     self.land_on_first_file(was_empty);
                 }
@@ -759,8 +798,17 @@ impl App {
                 result,
             } => match result {
                 Ok(raw) => {
-                    self.raw_logs.insert((repo.clone(), run_id), raw);
-                    self.logs_state.insert((repo, run_id), Load::Ready);
+                    let key = (repo.clone(), run_id);
+                    if !self.raw_logs.contains_key(&key) {
+                        while self.raw_logs.len() >= 16
+                            && let Some(evict) = self.raw_logs.keys().next().cloned()
+                        {
+                            self.raw_logs.remove(&evict);
+                            self.logs_state.remove(&evict);
+                        }
+                    }
+                    self.raw_logs.insert(key.clone(), raw);
+                    self.logs_state.insert(key, Load::Ready);
                 }
                 Err(e) => {
                     self.logs_state.insert((repo, run_id), Load::from(e));

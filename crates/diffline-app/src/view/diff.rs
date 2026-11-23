@@ -509,11 +509,15 @@ fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
     marks.dedup();
 
     let mut cx = x;
+    let mut si = 0usize;
     for pair in marks.windows(2) {
         let (from, to) = (pair[0], pair[1]);
+        while si < spans.len() && spans[si].to <= from {
+            si += 1;
+        }
         let mut style = spans
-            .iter()
-            .find(|s| s.from <= from && to <= s.to)
+            .get(si)
+            .filter(|s| s.from <= from && to <= s.to)
             .map_or(plain, |s| plain.fg(kind_color(s.kind)));
         // reversed, as git's diff-highlight does: it reads in every theme
         if word

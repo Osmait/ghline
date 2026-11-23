@@ -353,8 +353,9 @@ pub struct App {
     /// The diff's file tree: which folders are folded, and whether the
     /// cursor is on one rather than on `file_idx`.
     pub diff_folds: crate::shared::tree::Folds,
-    /// The open file's rows, colours and changed words. See `prepared`.
-    pub diff_cache: Option<(prepared::Key, std::rc::Rc<prepared::Prepared>)>,
+    /// Recently prepared files (rows, colours and changed words). Bounded MRU
+    /// cache so stepping between files in a PR does not re-lex on every hop.
+    pub diff_cache: Vec<(prepared::Key, std::rc::Rc<prepared::Prepared>)>,
     /// What `/` looks for in the diff, across every file.
     pub diff_query: String,
     /// The line the last search landed on, so `n` moves on from it.
@@ -552,7 +553,7 @@ impl App {
             log_scroll: 0,
             file_idx: 0,
             diff_folds: crate::shared::tree::Folds::default(),
-            diff_cache: None,
+            diff_cache: Vec::new(),
             diff_query: String::new(),
             diff_hit: None,
             diff_pan: 0,

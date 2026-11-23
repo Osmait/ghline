@@ -291,7 +291,7 @@ pub struct FileChange {
 
 /// Which side of a diff a review comment is on: the old file's lines or the
 /// new one's. A comment on a deleted line is on the left.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum DiffSide {
     Left,
     #[default]
@@ -1250,6 +1250,20 @@ impl TreeEntry {
             at += 1;
         }
         out
+    }
+
+    /// True when every directory above this entry is in `open`, without
+    /// allocating a temporary `Vec` of ancestor slices.
+    pub fn ancestors_open(&self, open: &std::collections::HashSet<String>) -> bool {
+        let mut at = 0;
+        while let Some(i) = self.path[at..].find('/') {
+            at += i;
+            if !open.contains(&self.path[..at]) {
+                return false;
+            }
+            at += 1;
+        }
+        true
     }
 }
 

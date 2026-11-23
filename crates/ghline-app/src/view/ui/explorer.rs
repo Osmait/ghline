@@ -81,13 +81,13 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     fill(buf, area, theme::panel_alt());
     let state = app.tree_state();
     let rows = app.fs_rows().len();
+    let sel = app.fs_sel.min(rows.saturating_sub(1));
     Section::new("FILES")
         .count(rows)
         .ground(theme::panel_alt())
         .open(buf, area);
 
     let list_h = area.height.saturating_sub(2) as usize;
-    let sel = app.fs_idx();
     scroll_into_view(&mut app.fs_scroll, sel, list_h, rows);
     let list = Rect {
         x: area.x,
@@ -141,7 +141,9 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
     // rows sit relative to each other.
     let flat = !app.filter.trim().is_empty();
     let icon_style = crate::shared::config::file_icons();
-    let entries: Vec<crate::data::TreeEntry> = app.fs_rows().into_iter().cloned().collect();
+    // Borrow entries directly from `app` without cloning every `TreeEntry`.
+    let app = &*app;
+    let entries = app.fs_rows();
     let focused = app.pane == Pane::FileTree;
 
     for (row, i) in (app.fs_scroll..entries.len()).enumerate() {
@@ -254,8 +256,27 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     app.hits
         .push(Region::plain(Target::Pane(Pane::FileView), body));
 
-    let text = match app.file_body() {
-        Ok(text) => text.to_string(),
+    // Wrapped rather than cut: a long line in a config file is still worth
+    // reading, and there is no horizontal scroll in this program. Compute the
+    // byte-range wrap table while borrowing `app.file_body()` immutably so the
+    // file (up to 512 KiB) is never cloned per frame.
+    let gutter = 6u16;
+    let width = body.width.saturating_sub(gutter + 2) as usize;
+    let (rendered, num_lines) = match app.file_body() {
+        Ok(text) => {
+            let mut rendered: Vec<(usize, usize, usize)> = Vec::new();
+            let mut num_lines = 0usize;
+            for (n, line) in text.lines().enumerate() {
+                num_lines = n + 1;
+                for (i, (from, to)) in crate::shared::syntax::wrap_ranges(line, width.max(1))
+                    .into_iter()
+                    .enumerate()
+                {
+                    rendered.push((if i == 0 { n + 1 } else { 0 }, from, to));
+                }
+            }
+            (rendered, num_lines)
+        }
         Err(Load::Loading) => {
             let avail = body.width.saturating_sub(10);
             let widths = [72, 48, 84, 30, 66, 54, 78, 41, 60];
@@ -292,33 +313,13 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
     };
 
-    // Wrapped rather than cut: a long line in a config file is still worth
-    // reading, and there is no horizontal scroll in this program. Wrapped by
-    // byte range rather than by text, so a colour span survives the wrap.
-    let gutter = 6u16;
-    let width = body.width.saturating_sub(gutter + 2) as usize;
-    // The one mutation, taken before the shared borrow below rather than
-    // paying for a copy of every colour span to get around it.
-    let sel_line_for_scroll = app.file_sel;
-    let source: Vec<&str> = text.lines().collect();
-
-    let mut rendered: Vec<(usize, usize, usize)> = Vec::new(); // line, from, to
-    for (n, line) in source.iter().enumerate() {
-        for (i, (from, to)) in crate::shared::syntax::wrap_ranges(line, width.max(1))
-            .into_iter()
-            .enumerate()
-        {
-            rendered.push((if i == 0 { n + 1 } else { 0 }, from, to));
-        }
-    }
-
     // The cursor is on a source line; the scroll is in rendered rows, which a
     // wrapped line spans several of. Finding the first row of the selected
     // line is what keeps the two in step.
     let height = body.height as usize;
     // what `^d/^u` pages by, as the diff and the log record theirs
     app.detail_height = body.height;
-    let sel_line = sel_line_for_scroll.min(source.len().saturating_sub(1));
+    let sel_line = app.file_sel.min(num_lines.saturating_sub(1));
     let sel_row = rendered
         .iter()
         .position(|(n, _, _)| *n == sel_line + 1)
@@ -349,6 +350,8 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
     ));
 
     let app = &*app;
+    let Ok(text) = app.file_body() else { return };
+    let source: Vec<&str> = text.lines().collect();
     let empty = Vec::new();
     let spans = app.file_spans().unwrap_or(&empty);
     let focused = app.pane == Pane::FileView;

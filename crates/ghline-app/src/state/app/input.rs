@@ -891,6 +891,17 @@ impl App {
         self.fs_scroll = 0;
         self.file_sel = 0;
         self.file_scroll = 0;
+        // Release heavyweight per-account caches when switching accounts.
+        self.raw_logs.clear();
+        self.logs_state.clear();
+        self.file_text.clear();
+        self.file_spans.clear();
+        self.file_state.clear();
+        self.trees.clear();
+        self.trees_state.clear();
+        self.commit_files.clear();
+        self.commit_state.clear();
+        self.diff_cache.clear();
         self.settle_pane();
     }
 
@@ -1324,31 +1335,31 @@ fn step(current: usize, d: i64, len: usize) -> usize {
 /// Drops the +/- pairs whose contents differ only in whitespace, which is what
 /// "ignore whitespace" is expected to do.
 pub(super) fn strip_ws_only(h: &crate::data::Hunk) -> crate::data::Hunk {
-    let mut lines: Vec<(char, String)> = Vec::new();
+    let mut lines: Vec<(char, String)> = Vec::with_capacity(h.lines.len());
     let mut i = 0;
     while i < h.lines.len() {
         let (sign, text) = &h.lines[i];
         if *sign == '-' {
-            // look for the matching additions within the same block
-            let dels: Vec<&(char, String)> =
-                h.lines[i..].iter().take_while(|(s, _)| *s == '-').collect();
-            let adds: Vec<&(char, String)> = h.lines[i + dels.len()..]
+            let del_len = h.lines[i..].iter().take_while(|(s, _)| *s == '-').count();
+            let add_len = h.lines[i + del_len..]
                 .iter()
                 .take_while(|(s, _)| *s == '+')
-                .collect();
-            if dels.len() == adds.len()
-                && dels
-                    .iter()
-                    .zip(&adds)
-                    .all(|(d, a)| squeeze(&d.1) == squeeze(&a.1))
-            {
+                .count();
+            let dels = &h.lines[i..i + del_len];
+            let adds = &h.lines[i + del_len..i + del_len + add_len];
+            if del_len == add_len && dels.iter().zip(adds).all(|(d, a)| squeeze_eq(&d.1, &a.1)) {
                 // same content bar whitespace: keep it as context only
-                for d in &dels {
-                    lines.push((' ', d.1.clone()));
+                for (_, t) in dels {
+                    lines.push((' ', t.clone()));
                 }
-                i += dels.len() + adds.len();
-                continue;
+            } else {
+                // Emit the entire `-`/`+` block at once so a long deleted-only
+                // block advances in O(B) instead of re-scanning in O(B^2).
+                lines.extend(dels.iter().cloned());
+                lines.extend(adds.iter().cloned());
             }
+            i += del_len + add_len;
+            continue;
         }
         lines.push((*sign, text.clone()));
         i += 1;
@@ -1359,7 +1370,9 @@ pub(super) fn strip_ws_only(h: &crate::data::Hunk) -> crate::data::Hunk {
     }
 }
 
-/// The text with no whitespace, so it can be compared ignoring it.
-fn squeeze(s: &str) -> String {
-    s.chars().filter(|c| !c.is_whitespace()).collect()
+/// True when `a` and `b` are identical ignoring whitespace, without allocating.
+fn squeeze_eq(a: &str, b: &str) -> bool {
+    a.chars()
+        .filter(|c| !c.is_whitespace())
+        .eq(b.chars().filter(|c| !c.is_whitespace()))
 }
