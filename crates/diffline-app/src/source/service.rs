@@ -17,6 +17,8 @@ use crate::shared::mux::Agent;
 /// Diff rows paired with the syntax spans computed for each one.
 pub type HighlightedRows = (Vec<Row>, Vec<Vec<crate::shared::syntax::Span>>);
 
+/// What the interface asks the worker thread to do.
+#[derive(Debug)]
 pub enum Request {
     /// Which files a scope touches.
     Files { repo: String, scope: Scope },
@@ -72,6 +74,7 @@ pub enum Request {
     },
 }
 
+#[derive(Debug)]
 pub enum Response {
     Files {
         scope: Scope,
@@ -125,6 +128,7 @@ pub enum Write {
     },
 }
 
+#[derive(Debug)]
 pub struct Service {
     tx: Sender<Request>,
     rx: Receiver<Response>,
@@ -325,14 +329,6 @@ pub fn brief(e: &Error) -> String {
     e.brief()
 }
 
-/// The next answer, if one has arrived.
-///
-/// `Disconnected` is not the same as `Empty` and must not be flattened
-/// into it: the send side already refuses to leave a request in the air,
-/// but a worker that dies *after* taking one would otherwise leave that
-/// one loading for ever — `poll` returning `None` looks exactly like an
-/// answer that has not come yet.
-/// A service whose worker is already gone, for testing what happens then.
 /// Puts `text` at `path`, making the directory on the way if it is not there.
 fn write_file(path: &std::path::Path, text: &str) -> std::io::Result<String> {
     use std::io::Write as _;

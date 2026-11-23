@@ -24,6 +24,7 @@ pub use fuzzy_match as fuzzy;
 pub use process_error as error;
 pub mod icons;
 pub use tui_kit::key;
+pub mod load;
 pub mod log;
 pub mod mux;
 pub mod nav;

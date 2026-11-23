@@ -44,6 +44,23 @@ pub enum Place {
     Bottom,
 }
 
+/// Steps `current` by `delta` within `[0, len - 1]`, clamping at both ends.
+#[must_use]
+pub fn step(current: usize, delta: i64, len: usize) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    let last = len - 1;
+    let clamped = current.min(last);
+    if delta >= 0 {
+        let inc = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
+        clamped.saturating_add(inc).min(last)
+    } else {
+        let dec = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
+        clamped.saturating_sub(dec)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
@@ -58,5 +75,16 @@ mod tests {
     fn a_direction_steps_one_either_way() {
         assert_eq!(Dir::Prev.step(), -1);
         assert_eq!(Dir::Next.step(), 1);
+    }
+
+    #[test]
+    fn step_clamps_to_empty_and_bounds() {
+        assert_eq!(step(3, 1, 0), 0);
+        assert_eq!(step(0, -5, 5), 0);
+        assert_eq!(step(4, 5, 5), 4);
+        assert_eq!(step(2, -1, 5), 1);
+        assert_eq!(step(2, 2, 5), 4);
+        assert_eq!(step(2, i64::MIN, 5), 0);
+        assert_eq!(step(2, i64::MAX, 5), 4);
     }
 }

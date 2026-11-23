@@ -6,48 +6,58 @@ use super::{App, Load, LogRow, NodeKind, Pane, TreeNode, View};
 use crate::data::{self, Account, Item, Job, Kind, LogLine, Repo, Status};
 
 impl App {
+    #[must_use]
     pub fn account(&self) -> Option<&Account> {
         self.accounts.get(self.acc)
     }
 
+    #[must_use]
     pub fn login(&self) -> &str {
         self.account().map(|a| a.login.as_str()).unwrap_or("—")
     }
 
+    #[must_use]
     pub fn repos(&self) -> &[Repo] {
         self.account().map(|a| a.repos.as_slice()).unwrap_or(&[])
     }
 
+    #[must_use]
     pub fn repo_idx(&self) -> usize {
         self.repo.min(self.repos().len().saturating_sub(1))
     }
 
+    #[must_use]
     pub fn repo(&self) -> Option<&Repo> {
         self.repos().get(self.repo_idx())
     }
 
+    #[must_use]
     pub fn repo_name(&self) -> &str {
         self.repo().map(|r| r.name.as_str()).unwrap_or("—")
     }
 
     /// What to print for the selected repository, which for the pseudo-repo is
     /// not its name.
+    #[must_use]
     pub fn repo_label(&self) -> &str {
         self.repo().map(crate::data::Repo::label).unwrap_or("—")
     }
 
     /// The `owner/repo` key that indexes lists, jobs and logs.
+    #[must_use]
     pub fn repo_key(&self) -> String {
         format!("{}/{}", self.login(), self.repo_name())
     }
 
     /// Is the pseudo-repository that gathers every repository selected?
+    #[must_use]
     pub fn is_all(&self) -> bool {
         self.repo().is_some_and(crate::data::Repo::is_all)
     }
 
     // --- the file explorer ---
 
+    #[must_use]
     pub fn repo_tree(&self) -> &[crate::data::TreeEntry] {
         self.trees
             .get(&self.repo_key())
@@ -55,6 +65,7 @@ impl App {
             .unwrap_or(&[])
     }
 
+    #[must_use]
     pub fn tree_state(&self) -> Load {
         self.trees_state
             .get(&self.repo_key())
@@ -68,6 +79,7 @@ impl App {
     /// A filter flattens the tree on purpose. Someone typing `parser` wants
     /// the file, not the three directories they would have to open to reach
     /// it, and the path is shown in full so the location is not lost.
+    #[must_use]
     pub fn fs_rows(&self) -> Vec<&crate::data::TreeEntry> {
         let filtering = !self.filter.trim().is_empty();
         self.repo_tree()
@@ -82,28 +94,33 @@ impl App {
             .collect()
     }
 
+    #[must_use]
     pub fn fs_idx(&self) -> usize {
         self.fs_sel.min(self.fs_rows().len().saturating_sub(1))
     }
 
+    #[must_use]
     pub fn fs_current(&self) -> Option<&crate::data::TreeEntry> {
         let rows = self.fs_rows();
         rows.get(self.fs_idx()).copied()
     }
 
     /// The path under the cursor, if it is a file worth fetching.
+    #[must_use]
     pub fn fs_selected_file(&self) -> Option<String> {
         let e = self.fs_current()?;
         (!e.is_dir && e.size <= crate::gh::FILE_LIMIT).then(|| e.path.clone())
     }
 
     /// Colour spans for the open file, if its language is one we know.
+    #[must_use]
     pub fn file_spans(&self) -> Option<&Vec<Vec<crate::shared::syntax::Span>>> {
         let e = self.fs_current()?;
         self.file_spans.get(&(self.repo_key(), e.path.clone()))
     }
 
     /// How many lines the open file has.
+    #[must_use]
     pub fn file_lines(&self) -> usize {
         self.file_body().map(|t| t.lines().count()).unwrap_or(0)
     }
@@ -138,6 +155,7 @@ impl App {
     /// Decided by where the reader is, not chosen from a menu: `x` acts on the
     /// pane you are in, the same as every other key. Standing in a log means
     /// the log, standing in a diff means that file.
+    #[must_use]
     pub fn dispatch_subject(&self) -> Option<crate::subject::Subject> {
         use crate::subject::Subject;
         // Checked before the selection, because the explorer has no issue or
@@ -159,6 +177,7 @@ impl App {
 
     /// The body of what is being sent: the part that is not the title, the
     /// number or the link.
+    #[must_use]
     pub fn dispatch_context(&self, subject: crate::subject::Subject) -> String {
         use crate::subject::Subject;
         match subject {
@@ -251,6 +270,7 @@ impl App {
     /// Ordered by what you are most likely to want: an agent that is free, an
     /// agent that is busy, then the fresh worktrees. The refused ones stay in
     /// the list because knowing *why* nothing is available beats an empty box.
+    #[must_use]
     pub fn dispatch_dests(&self) -> Vec<crate::app::Dest> {
         use crate::app::Dest;
 
@@ -292,6 +312,7 @@ impl App {
     }
 
     /// Where a repository is checked out, if it is.
+    #[must_use]
     pub fn clone_path(&self, repo: &str) -> Option<String> {
         self.clones
             .get(repo)
@@ -305,6 +326,7 @@ impl App {
     /// the gathering row, all of them. Matched on the path ending in the
     /// repository's name, which is what a checkout looks like and also what a
     /// worktree of it looks like.
+    #[must_use]
     pub fn agents_visible(&self) -> Vec<&crate::shared::mux::Agent> {
         let all = self.is_all();
         let name = self.repo_name().to_string();
@@ -315,6 +337,7 @@ impl App {
             .collect()
     }
 
+    #[must_use]
     pub fn agent_idx(&self) -> usize {
         self.agent_sel
             .min(self.agents_visible().len().saturating_sub(1))
@@ -322,6 +345,7 @@ impl App {
 
     /// The `owner/repo` of every repository that has any workflows, which is
     /// the only set worth asking for runs.
+    #[must_use]
     pub fn workflow_repos(&self) -> Vec<String> {
         let login = self.login();
         self.repos()
@@ -339,6 +363,7 @@ impl App {
     /// rather than the pane it happened to be listed in. An item with no
     /// repository of its own came from a single-repository list, where the two
     /// are the same thing.
+    #[must_use]
     pub fn item_repo_key(&self) -> String {
         match self.current() {
             Some(c) if !c.repo.is_empty() => c.repo.clone(),
@@ -352,6 +377,7 @@ impl App {
     }
 
     /// The full, unfiltered list for the active repo and tab.
+    #[must_use]
     pub fn list(&self) -> &[Item] {
         self.lists
             .get(&(self.repo_key(), self.tab))
@@ -359,6 +385,7 @@ impl App {
             .unwrap_or(&[])
     }
 
+    #[must_use]
     pub fn list_state(&self) -> Load {
         self.lists_state
             .get(&(self.repo_key(), self.tab))
@@ -367,6 +394,7 @@ impl App {
     }
 
     /// Indices into `list()` that pass the filter, in order.
+    #[must_use]
     pub fn visible(&self) -> Vec<usize> {
         self.list()
             .iter()
@@ -379,22 +407,26 @@ impl App {
             .collect()
     }
 
+    #[must_use]
     pub fn item_idx(&self, len: usize) -> usize {
         self.item.min(len.saturating_sub(1))
     }
 
     /// Position in `list()` of the selected item.
+    #[must_use]
     pub fn current_index(&self) -> Option<usize> {
         let vis = self.visible();
         vis.get(self.item_idx(vis.len())).copied()
     }
 
+    #[must_use]
     pub fn current(&self) -> Option<&Item> {
         self.current_index().map(|i| &self.list()[i])
     }
 
     /// Changed files of the selected PR — or of the one commit of it the
     /// diff is showing, which is what every pane of the diff then works on.
+    #[must_use]
     pub fn diff_files(&self) -> &[crate::data::FileChange] {
         match &self.diff_commit {
             Some(sha) => self
@@ -406,18 +438,21 @@ impl App {
     }
 
     /// The selected PR's commits, oldest first.
+    #[must_use]
     pub fn commits(&self) -> &[crate::data::Commit] {
         self.current()
             .and_then(Item::as_pr)
             .map_or(&[], |p| p.commits.as_slice())
     }
 
+    #[must_use]
     pub fn file_idx(&self) -> usize {
         self.file_idx.min(self.diff_files().len().saturating_sub(1))
     }
 
     /// The rows the finder is showing. Repositories are ranked here; the rest
     /// arrive already ranked by GitHub.
+    #[must_use]
     pub fn finder_results(&self) -> Vec<crate::finder::Hit> {
         if !self.finder_source.is_local() {
             return self.finder_hits.clone();
@@ -444,6 +479,7 @@ impl App {
             .collect()
     }
 
+    #[must_use]
     pub fn finder_len(&self) -> usize {
         if self.finder_source.is_local() {
             self.finder_results().len()
@@ -453,6 +489,7 @@ impl App {
     }
 
     /// Load state of the selected item's body, files and reviews.
+    #[must_use]
     pub fn detail_status(&self) -> Load {
         let Some(num) = self.current().map(|c| c.num) else {
             return Load::Ready;
@@ -465,6 +502,7 @@ impl App {
 
     /// Load state of the selected PR's diff, or the selected commit's diff when
     /// narrowed to a single commit.
+    #[must_use]
     pub fn diff_status(&self) -> Load {
         if let Some(sha) = &self.diff_commit {
             return self
@@ -482,11 +520,13 @@ impl App {
             .unwrap_or(Load::Ready)
     }
 
+    #[must_use]
     pub fn diff_file(&self) -> Option<&crate::data::FileChange> {
         self.diff_files().get(self.file_idx())
     }
 
     /// Lines of the selected file, numbered and with `w` already applied.
+    #[must_use]
     pub fn diff_rows(&self) -> Vec<crate::data::DiffRow> {
         let Some(f) = self.diff_file() else {
             return Vec::new();
@@ -519,16 +559,19 @@ impl App {
     }
 
     /// Id of the workflow run tied to the selection (0 if there is none).
+    #[must_use]
     pub fn run_id(&self) -> i64 {
         self.current().map(|c| c.id).unwrap_or(0)
     }
 
+    #[must_use]
     pub fn jobs(&self) -> &[Job] {
         self.jobs_by_run
             .get(&(self.item_repo_key(), self.run_id()))
             .map_or(&[], Vec::as_slice)
     }
 
+    #[must_use]
     pub fn jobs_status(&self) -> Load {
         self.jobs_state
             .get(&(self.item_repo_key(), self.run_id()))
@@ -536,6 +579,7 @@ impl App {
             .unwrap_or(Load::Ready)
     }
 
+    #[must_use]
     pub fn logs_status(&self) -> Load {
         self.logs_state
             .get(&(self.item_repo_key(), self.run_id()))
@@ -543,6 +587,7 @@ impl App {
             .unwrap_or(Load::Ready)
     }
 
+    #[must_use]
     pub fn flat_tree(&self) -> Vec<TreeNode> {
         let mut out = Vec::new();
         for (ji, j) in self.jobs().iter().enumerate() {
@@ -568,10 +613,12 @@ impl App {
         out
     }
 
+    #[must_use]
     pub fn tree_sel_idx(&self, len: usize) -> usize {
         self.tree_sel.min(len.saturating_sub(1))
     }
 
+    #[must_use]
     pub fn log_lines(&self) -> Vec<LogRow> {
         self.live_log_lines()
     }

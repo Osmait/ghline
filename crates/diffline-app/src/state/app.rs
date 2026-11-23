@@ -12,64 +12,7 @@ use crate::service::{Request, Response};
 use crate::shared::mux::Agent;
 use crate::shared::worker::Worker;
 
-/// Load state of one piece of data.
-#[derive(Clone, Debug, Default)]
-pub enum Load {
-    #[default]
-    Idle,
-    Loading,
-    Ready,
-    /// What went wrong, kept whole.
-    ///
-    /// The error rather than a sentence about it: `Error` knows whether it is
-    /// worth retrying and what caused it, and flattening it to a `String` at
-    /// this boundary threw both away — `is_transient` was unreachable from
-    /// here and `source` was never walked anywhere in the program.
-    ///
-    /// `Arc` because the state is cloned to be rendered and `io::Error` is
-    /// not `Clone`; sharing it is right anyway, since there is one failure and
-    /// several places that describe it.
-    Failed(Arc<Failure>),
-}
-
-impl Load {
-    pub fn is_loading(&self) -> bool {
-        *self == Self::Loading
-    }
-
-    /// The failure, for anything that wants more than a sentence.
-    pub fn failure(&self) -> Option<&Failure> {
-        match self {
-            Self::Failed(e) => Some(e),
-            _ => None,
-        }
-    }
-
-    /// One line for the status bar or an empty pane.
-    pub fn error(&self) -> Option<String> {
-        self.failure().map(Failure::brief)
-    }
-
-    /// Whether trying again might work. A network blip is worth a retry; a
-    /// missing `git` is not, and offering one would be a lie.
-    pub fn is_transient(&self) -> bool {
-        self.failure().is_some_and(Failure::is_transient)
-    }
-}
-
-impl PartialEq for Load {
-    /// Two failures are the same state for the interface's purposes: it is
-    /// asking "am I loading, ready, or broken", not which error it was.
-    fn eq(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (Self::Idle, Self::Idle)
-                | (Self::Loading, Self::Loading)
-                | (Self::Ready, Self::Ready)
-                | (Self::Failed(_), Self::Failed(_))
-        )
-    }
-}
+pub use crate::shared::load::Load;
 
 /// The panes, left to right. `h`/`l` walk them and `j`/`k` act on the one with
 /// focus — the same bargain the GitHub browser makes, so the hands transfer.
@@ -139,7 +82,7 @@ impl FinderTab {
 }
 
 /// One row of the finder's result list.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Hit {
     pub label: String,
     pub meta: String,
@@ -224,14 +167,14 @@ pub struct App {
     /// Set when the queue is bound for an agent that is not running yet: the
     /// kind to start. `None` means send to `agent_idx`, one already up.
     pub new_kind: Option<String>,
-    /// Whether the file tree is on screen. Open to begin with: which files
-    /// changed is the first question a review asks.
-    /// The comment being drafted is about the file, not about any line in
-    /// it. Set when a note is started with the tree in focus.
     /// Side by side rather than one column: old on the left, new on the
     /// right. `␣v` switches.
     pub split: bool,
+    /// The comment being drafted is about the file, not about any line in
+    /// it. Set when a note is started with the tree in focus.
     pub about_file: bool,
+    /// Whether the file tree is on screen. Open to begin with: which files
+    /// changed is the first question a review asks.
     pub tree_shown: bool,
     /// Whether the review queue is on screen. Closed to begin with: it is
     /// empty until there is something to put in it, and until then it is a
@@ -260,7 +203,6 @@ pub struct App {
     pub anim: u64,
     pub should_quit: bool,
     pub wants_redraw: bool,
-    /// Half of a `gg`. Cleared by any other key, so `g` then `j` is a `j`.
     /// What the keys mean. Read once at startup from `<config>/keys`, or
     /// the shipped map when there is no file.
     pub keys: crate::keys::Map,

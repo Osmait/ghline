@@ -39,11 +39,6 @@
 //! carries the spans with the rows because they are one thing: a pane that
 //! had rows but not yet colour would either flash uncoloured or index a spans
 //! list that is shorter than its rows.
-//!
-//! One exception, named rather than quietly true: `source::service` calls
-//! `state::keys::write_template`. Writing a file is infrastructure and
-//! belongs here, but the file's shape is the keymap's, so the writer lives
-//! with what it writes.
 
 /// Application configuration and services shared with `ghline`.
 pub use line_shared as shared;

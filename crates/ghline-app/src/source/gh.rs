@@ -16,11 +16,10 @@ use crate::data::{Kind, LogKind};
 
 pub use crate::shared::error::{Error, Result as Res};
 
-/// The leading arguments identify the call in error messages; the rest is
-/// usually a long query that adds nothing.
-/// How a failed call is named in an error. Includes the program, because
-/// three of them share one error type and "`pr list` failed" does not say
-/// which of them was run.
+/// How a failed call is named in an error, keeping only leading arguments
+/// because the rest is usually a long query that adds nothing. Includes the
+/// program, because three of them share one error type and "`pr list` failed"
+/// does not say which of them was run.
 fn label(args: &[&str]) -> String {
     std::iter::once("gh")
         .chain(
@@ -118,7 +117,11 @@ fn run_with_input(args: &[&str], input: &str) -> Res<String> {
         });
         child.wait_with_output()
     })
-    .map_err(spawn)?;
+    .map_err(|e| Error::Command {
+        args: label(args),
+        status: None,
+        stderr: e.to_string(),
+    })?;
     if !out.status.success() {
         return Err(failure(args, &out));
     }
@@ -155,11 +158,10 @@ fn n(v: &Value, key: &str) -> i64 {
     v.get(key).and_then(serde_json::Value::as_i64).unwrap_or(0)
 }
 
-fn arr(v: &Value, key: &str) -> Vec<Value> {
+fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key)
-        .and_then(|x| x.as_array())
-        .cloned()
-        .unwrap_or_default()
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
 }
 
 /// ISO-8601 date → "3h ago", in the design's compact format.
@@ -470,7 +472,7 @@ pub fn issues(repo: &str) -> Res<Vec<Item>> {
 /// its logs.
 fn rollup_run_id(v: &Value) -> i64 {
     for c in arr(v, "statusCheckRollup") {
-        let url = s(&c, "detailsUrl");
+        let url = s(c, "detailsUrl");
         if let Some(rest) = url.split("/actions/runs/").nth(1) {
             let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
             if let Ok(id) = digits.parse::<i64>() {

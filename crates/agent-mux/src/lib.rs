@@ -94,7 +94,7 @@ impl std::fmt::Display for AgentStatus {
 }
 
 /// A coding agent running somewhere on this machine.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Agent {
     /// `claude`, `codex`, `pi` — what is running, not what it is called.
     pub kind: String,

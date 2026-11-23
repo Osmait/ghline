@@ -27,6 +27,7 @@ pub enum Status {
 
 impl Status {
     /// The lowercase name the interface prints, matching the design's strings.
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Open => "open",
@@ -45,6 +46,7 @@ impl Status {
 
     /// Reads the API's spelling, which arrives in any case and sometimes with
     /// underscores (`TIMED_OUT`).
+    #[must_use]
     pub fn parse(raw: &str) -> Self {
         match raw.to_lowercase().replace('_', " ").as_str() {
             "open" => Self::Open,
@@ -64,11 +66,13 @@ impl Status {
     }
 
     /// Is this a pull request that can still be acted on?
+    #[must_use]
     pub fn is_open(self) -> bool {
         matches!(self, Self::Open | Self::Draft)
     }
 
     /// Has this check, job or run finished running?
+    #[must_use]
     pub fn is_settled(self) -> bool {
         !matches!(self, Self::Running | Self::Pending)
     }
@@ -87,7 +91,7 @@ pub enum Kind {
     Run,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Repo {
     pub name: String,
     pub private: bool,
@@ -111,6 +115,7 @@ impl Repo {
     pub const ALL: &'static str = "*";
 
     /// The row that gathers every repository into one list.
+    #[must_use]
     pub fn all(repos: &[Self]) -> Self {
         Self {
             name: Self::ALL.into(),
@@ -124,11 +129,13 @@ impl Repo {
         }
     }
 
+    #[must_use]
     pub fn is_all(&self) -> bool {
         self.name == Self::ALL
     }
 
     /// What to show for it, since `*` is a key rather than a name.
+    #[must_use]
     pub fn label(&self) -> &str {
         if self.is_all() {
             "all repositories"
@@ -138,6 +145,7 @@ impl Repo {
     }
 
     /// An empty repo to draw while there is no data yet.
+    #[must_use]
     pub fn empty() -> Self {
         Self {
             name: "—".into(),
@@ -150,7 +158,7 @@ impl Repo {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Account {
     pub login: String,
     pub kind: String,
@@ -160,13 +168,14 @@ pub struct Account {
 
 /// An issue or pull request label. The colour travels as plain RGB, which is
 /// data; turning it into a terminal colour is the view's job.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Label {
     pub name: String,
     pub rgb: (u8, u8, u8),
 }
 
 impl Label {
+    #[must_use]
     pub fn new(name: &str, rgb: (u8, u8, u8)) -> Self {
         Self {
             name: name.to_string(),
@@ -175,7 +184,7 @@ impl Label {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Comment {
     pub author: String,
     pub when: String,
@@ -194,6 +203,7 @@ pub enum ReviewState {
 
 impl ReviewState {
     /// The label GitHub itself uses, which is what the detail pane prints.
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Approved => "approved",
@@ -204,6 +214,7 @@ impl ReviewState {
     }
 
     /// Parses the API's `APPROVED` / `CHANGES_REQUESTED` / … spelling.
+    #[must_use]
     pub fn parse(raw: &str) -> Self {
         match raw.to_lowercase().replace('_', " ").as_str() {
             "approved" => Self::Approved,
@@ -214,7 +225,7 @@ impl ReviewState {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Review {
     pub author: String,
     pub state: ReviewState,
@@ -236,13 +247,14 @@ pub struct Commit {
 
 impl Commit {
     /// The seven characters a sha is written with.
+    #[must_use]
     pub fn short(&self) -> &str {
         self.sha.get(..7).unwrap_or(&self.sha)
     }
 }
 
 /// What the detail of a pull request brings, beyond what its list row had.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct PrFetched {
     pub body: String,
     pub files: Vec<FileChange>,
@@ -265,6 +277,7 @@ pub enum Change {
 impl Change {
     /// `gh`'s `changeType`. Anything it adds later reads as a modification,
     /// which is the one that claims nothing.
+    #[must_use]
     pub fn parse(s: &str) -> Self {
         match s {
             "ADDED" => Self::Added,
@@ -275,7 +288,7 @@ impl Change {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct FileChange {
     pub path: String,
     pub add: String,
@@ -336,6 +349,7 @@ impl Verdict {
     pub const ALL: [Self; 3] = [Self::Comment, Self::Approve, Self::RequestChanges];
 
     /// What GitHub's API calls it.
+    #[must_use]
     pub fn event(self) -> &'static str {
         match self {
             Self::Comment => "COMMENT",
@@ -344,6 +358,7 @@ impl Verdict {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Comment => "Comment",
@@ -364,6 +379,7 @@ pub struct Draft {
 }
 
 /// One file of a unified diff, as `gh pr diff` gives it.
+#[derive(Debug)]
 pub struct DiffFile {
     pub path: String,
     /// Its old path, when the diff says it was renamed.
@@ -372,13 +388,14 @@ pub struct DiffFile {
 }
 
 /// One diff hunk: its `@@ … @@` header and its signed lines.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Hunk {
     pub hdr: String,
     pub lines: Vec<(char, String)>,
 }
 
 /// The same shape with static data, which is how the design's diffs arrive.
+#[derive(Debug)]
 pub struct StaticHunk {
     pub hdr: &'static str,
     pub lines: &'static [(char, &'static str)],
@@ -396,6 +413,7 @@ impl From<&StaticHunk> for Hunk {
 impl Hunk {
     /// Expands a file's hunks into numbered lines, deriving both numberings
     /// from the `@@ -o,x +n,y @@` header.
+    #[must_use]
     pub fn rows(hunks: &[Self]) -> Vec<DiffRow> {
         let mut out = Vec::new();
         for h in hunks {
@@ -467,13 +485,14 @@ pub enum DiffKind {
 
 impl DiffKind {
     /// A review comment's row rather than a line of the file.
+    #[must_use]
     pub fn is_note(self) -> bool {
         matches!(self, Self::NoteHead | Self::Note)
     }
 }
 
 /// A line ready to draw, with both of its line numbers.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DiffRow {
     pub kind: DiffKind,
     pub text: String,
@@ -486,20 +505,20 @@ pub struct DiffRow {
 /// The parts of an item that only make sense for one kind. Keeping them inside
 /// the variant is what stops an issue from carrying check results, or a run
 /// from carrying a branch to delete.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Detail {
     Issue(IssueDetail),
     Pr(Box<PrDetail>),
     Run(RunDetail),
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct IssueDetail {
     pub comments: u32,
     pub comment_list: Vec<Comment>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct PrDetail {
     pub checks: Status,
     pub add: String,
@@ -524,7 +543,7 @@ pub struct PrDetail {
     pub branch_deleted: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct RunDetail {
     pub event: String,
     pub workflow: String,
@@ -533,7 +552,7 @@ pub struct RunDetail {
 
 /// An issue, a pull request or a workflow run. The fields every kind shares
 /// live here; the rest are in `detail`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Item {
     pub num: i64,
     /// Internal identifier (the run's databaseId); 0 for issues.
@@ -554,6 +573,7 @@ pub struct Item {
 impl Item {
     /// A blank item of the given shape. Callers fill in the shared fields and
     /// reach into `detail` for the rest.
+    #[must_use]
     pub fn new(detail: Detail) -> Self {
         Self {
             num: 0,
@@ -569,18 +589,22 @@ impl Item {
         }
     }
 
+    #[must_use]
     pub fn issue() -> Self {
         Self::new(Detail::Issue(IssueDetail::default()))
     }
 
+    #[must_use]
     pub fn pr() -> Self {
         Self::new(Detail::Pr(Box::default()))
     }
 
+    #[must_use]
     pub fn run() -> Self {
         Self::new(Detail::Run(RunDetail::default()))
     }
 
+    #[must_use]
     pub fn kind(&self) -> Kind {
         match self.detail {
             Detail::Issue(_) => Kind::Issue,
@@ -589,6 +613,7 @@ impl Item {
         }
     }
 
+    #[must_use]
     pub fn as_issue(&self) -> Option<&IssueDetail> {
         match &self.detail {
             Detail::Issue(i) => Some(i),
@@ -603,6 +628,7 @@ impl Item {
         }
     }
 
+    #[must_use]
     pub fn as_pr(&self) -> Option<&PrDetail> {
         match &self.detail {
             Detail::Pr(p) => Some(p),
@@ -625,6 +651,7 @@ impl Item {
         }
     }
 
+    #[must_use]
     pub fn as_run(&self) -> Option<&RunDetail> {
         match &self.detail {
             Detail::Run(r) => Some(r),
@@ -635,16 +662,19 @@ impl Item {
     // --- shorthands for the fields the shared render reaches for most ---
 
     /// Rolled-up check state of a pull request; `Unknown` for anything else.
+    #[must_use]
     pub fn checks(&self) -> Status {
         self.as_pr().map_or(Status::Unknown, |p| p.checks)
     }
 
     /// Head branch of a pull request; empty for anything else.
+    #[must_use]
     pub fn branch(&self) -> &str {
         self.as_pr().map_or("", |p| p.branch.as_str())
     }
 
     /// Base branch of a pull request; empty for anything else, or unknown.
+    #[must_use]
     pub fn base(&self) -> &str {
         self.as_pr().map_or("", |p| p.base.as_str())
     }
@@ -654,6 +684,7 @@ impl Item {
     /// One place, because there were three that each wrote `→ main` by hand,
     /// and so told a PR into `develop` that it was going somewhere else —
     /// the merge confirmation among them. With no base it says only the head.
+    #[must_use]
     pub fn onto(&self) -> String {
         match (self.branch(), self.base()) {
             (head, "") => head.to_string(),
@@ -662,6 +693,7 @@ impl Item {
     }
 
     /// Workflow name, which both a pull request's checks and a run carry.
+    #[must_use]
     pub fn workflow(&self) -> &str {
         match &self.detail {
             Detail::Pr(p) => &p.workflow,
@@ -671,12 +703,14 @@ impl Item {
     }
 
     /// The changed files of a pull request; empty for anything else.
+    #[must_use]
     pub fn files(&self) -> &[FileChange] {
         self.as_pr().map_or(&[], |p| p.file_list.as_slice())
     }
 
     /// The design's `cur.body || 'Workflow run triggered by …'`. The filler
     /// only applies to runs, which have no body of their own.
+    #[must_use]
     pub fn body_text(&self) -> String {
         let Detail::Run(run) = &self.detail else {
             return if self.body.is_empty() {
@@ -698,14 +732,14 @@ impl Item {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Step {
     pub name: String,
     pub status: Status,
     pub dur: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Job {
     pub name: String,
     pub status: Status,
@@ -714,17 +748,28 @@ pub struct Job {
 }
 
 /// A log line ready to draw.
+#[derive(Debug)]
 pub struct LogLine {
     pub time: String,
     pub text: String,
     pub kind: LogKind,
 }
 
+#[derive(Debug)]
 pub struct Tab {
     pub id: &'static str,
     pub label: &'static str,
     pub key: &'static str,
 }
+
+/// Index of the Issues tab in [`TABS`].
+pub const ISSUES_TAB: usize = 0;
+
+/// Index of the Pull Requests tab in [`TABS`].
+pub const PRS_TAB: usize = 1;
+
+/// Index of the Actions workflow runs tab in [`TABS`].
+pub const RUNS_TAB: usize = 2;
 
 /// The repository's file tree.
 /// Written by hand, and checked against the table by a test: a `const` that
@@ -831,6 +876,7 @@ pub const HELP: &[(&str, &str)] = &[
 ];
 
 /// A log line already split by job and step.
+#[derive(Debug)]
 pub struct RawLog {
     pub job: String,
     pub step: String,
@@ -900,6 +946,7 @@ pub const MERGE_METHODS: [MergeMethod; 3] =
     [MergeMethod::Merge, MergeMethod::Squash, MergeMethod::Rebase];
 
 impl MergeMethod {
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Merge => "create a merge commit",
@@ -909,6 +956,7 @@ impl MergeMethod {
     }
 
     /// Short name, the one recorded against the PR.
+    #[must_use]
     pub fn short(self) -> &'static str {
         match self {
             Self::Merge => "merge commit",
@@ -924,6 +972,7 @@ impl PrDetail {
     /// Here rather than counted where it is drawn: whether a pull request is
     /// approved is a fact about the pull request, and a view that works it
     /// out is a view that could work it out differently somewhere else.
+    #[must_use]
     pub fn approvals(&self) -> usize {
         self.reviews
             .iter()
@@ -932,6 +981,7 @@ impl PrDetail {
     }
 
     /// How many asked for changes — the ones that stop a merge.
+    #[must_use]
     pub fn blocking(&self) -> usize {
         self.reviews
             .iter()
@@ -951,6 +1001,7 @@ pub struct Tally {
 }
 
 impl Tally {
+    #[must_use]
     pub fn of(jobs: &[Job]) -> Self {
         let count = |want: &[Status]| jobs.iter().filter(|j| want.contains(&j.status)).count();
         let t = Self {
@@ -976,6 +1027,7 @@ impl Tally {
 // shape of the answer.
 
 /// A row as the search API returns it, before the finder shapes it.
+#[derive(Debug)]
 pub struct SearchHit {
     pub title: String,
     pub repo: String,
@@ -1086,6 +1138,9 @@ mod tests {
         // They are positions in `TABS`, written out. Reordering the table
         // would move the tab and leave the constant behind, and the symptom
         // would be the file explorer opening the agents pane.
+        assert_eq!(TABS[ISSUES_TAB].id, "issues");
+        assert_eq!(TABS[PRS_TAB].id, "prs");
+        assert_eq!(TABS[RUNS_TAB].id, "actions");
         assert_eq!(TABS[FILES_TAB].id, "files");
         assert_eq!(TABS[AGENTS_TAB].id, "agents");
     }
@@ -1219,7 +1274,7 @@ mod tests {
 }
 
 /// One entry of a repository's file tree, as GitHub reports it.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TreeEntry {
     /// Full path from the repository root; the only identity an entry has.
     pub path: String,

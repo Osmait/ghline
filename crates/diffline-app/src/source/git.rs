@@ -56,6 +56,7 @@ fn run(repo: &str, args: &[&str]) -> Res<String> {
 ///
 /// A unit struct: a call is a process, and every bit of state lives in the
 /// repository rather than here.
+#[derive(Debug)]
 pub struct Git;
 
 impl crate::vcs::Vcs for Git {
