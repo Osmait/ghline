@@ -32,6 +32,7 @@ use crate::tui::diff::{Pair, Side, pair};
 pub const SIGN: usize = 2;
 
 /// The open file, ready to draw.
+#[derive(Debug)]
 pub struct Prepared {
     pub rows: Vec<DiffRow>,
     /// Syntax runs for each row, against its code. Empty for a language the
@@ -43,7 +44,7 @@ pub struct Prepared {
 }
 
 /// What a `Prepared` was built from.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Key {
     item: (String, i64),
     commit: Option<String>,

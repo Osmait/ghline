@@ -533,11 +533,6 @@ fn draw_code(buf: &mut Buffer, x: u16, y: u16, max: u16, code: Code<'_>) {
     }
 }
 
-/// The byte index at which `text` would exceed `cols` columns, if it does.
-///
-/// A byte index rather than a character count because the colour spans are
-/// written in bytes, and a cut landing inside a character would slice a string
-/// Rust will not slice.
 /// The byte index `cols` columns into `text`, or its end if it is shorter.
 ///
 /// The counterpart of `cut_at`: that one finds where to stop, this one finds

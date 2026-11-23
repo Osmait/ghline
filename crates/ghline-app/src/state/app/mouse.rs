@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use ratatui::layout::Position;
 
 use crate::shared::key::{Button, Motion, Mouse};
+use crate::shared::nav::step as step_sel;
 
 use super::hit::{Region, Target};
 use super::{App, NodeKind, Pane};
@@ -67,14 +68,7 @@ impl App {
 
     /// Is something up that owns the input while it is there?
     pub(super) fn modal_open(&self) -> bool {
-        self.finder_open
-            || self.themes_open
-            || self.accounts_open
-            || self.help_open
-            || self.dispatch_open
-            || self.commits_open
-            || self.note_open.is_some()
-            || self.review_open
+        self.active_modal().is_some()
     }
 
     fn click(&mut self, at: Position, now: Instant) {
@@ -269,8 +263,4 @@ impl App {
 /// Panes that hold text rather than entries.
 fn is_text(pane: Pane) -> bool {
     matches!(pane, Pane::Body | Pane::Log | Pane::DiffBody)
-}
-
-fn step_sel(current: usize, d: i64, len: usize) -> usize {
-    (current as i64 + d).clamp(0, (len as i64 - 1).max(0)) as usize
 }

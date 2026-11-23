@@ -129,7 +129,7 @@ impl App {
             // so the repositories worth asking travel with the request — the
             // ones that have any workflows, which the repository query already
             // told us.
-            if self.is_all() && tab == 2 {
+            if self.is_all() && tab == crate::data::RUNS_TAB {
                 let repos = self.workflow_repos();
                 self.ask(Request::AllRuns { key, repos });
             } else {
@@ -550,7 +550,7 @@ impl App {
                 };
                 self.detail_state.insert((repo.clone(), num), state);
                 if let Some((body, comments)) = got {
-                    self.for_each_item_mut(&repo, 0, num, |it| {
+                    self.for_each_item_mut(&repo, crate::data::ISSUES_TAB, num, |it| {
                         it.body.clone_from(&body);
                         if let Some(d) = it.as_issue_mut() {
                             d.comments = comments.len() as u32;
@@ -575,7 +575,7 @@ impl App {
                     commits,
                 }) = got
                 {
-                    self.for_each_item_mut(&repo, 1, num, |it| {
+                    self.for_each_item_mut(&repo, crate::data::PRS_TAB, num, |it| {
                         it.body.clone_from(&body);
                         if let Some(pr) = it.as_pr_mut() {
                             // The diff may have come first: its hunks are kept
@@ -662,7 +662,7 @@ impl App {
                         .enumerate()
                         .map(|(i, d)| (d.path.as_str(), i))
                         .collect();
-                    self.for_each_item_mut(&repo, 1, num, |it| {
+                    self.for_each_item_mut(&repo, crate::data::PRS_TAB, num, |it| {
                         if let Some(pr) = it.as_pr_mut() {
                             if pr.file_list.is_empty() {
                                 pr.file_list = files.iter().map(from_diff).collect();
@@ -731,7 +731,7 @@ impl App {
                         self.threads_state.remove(&(repo.clone(), num));
                         self.detail_state.remove(&(repo, num));
                     }
-                    Err(e) => self.flash_warn(format!("review not sent: {}", e.brief())),
+                    Err(e) => self.flash_warn(self.advice(&e)),
                 }
             }
 
@@ -754,8 +754,7 @@ impl App {
                     self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
-                    let short = sha.get(..7).unwrap_or(&sha);
-                    self.flash_warn(format!("commit {short}: {}", e.brief()));
+                    self.flash_warn(self.advice(&e));
                     self.commit_state.insert((repo, sha), Load::from(e));
                 }
             },
@@ -763,7 +762,7 @@ impl App {
             Response::PrThreads { repo, num, result } => match result {
                 Ok(threads) => {
                     self.threads_state.insert((repo.clone(), num), Load::Ready);
-                    self.for_each_item_mut(&repo, 1, num, |it| {
+                    self.for_each_item_mut(&repo, crate::data::PRS_TAB, num, |it| {
                         if let Some(pr) = it.as_pr_mut() {
                             pr.threads.clone_from(&threads);
                         }
@@ -773,7 +772,7 @@ impl App {
                 // Comments are an extra on the diff, not the diff: their
                 // failure says so once and leaves the diff to be read.
                 Err(e) => {
-                    self.flash_warn(format!("review comments: {}", e.brief()));
+                    self.flash_warn(self.advice(&e));
                     self.threads_state.insert((repo, num), Load::from(e));
                 }
             },
@@ -837,7 +836,9 @@ impl App {
                                 // (`tab == 1`) for the same repository or its
                                 // gathered `owner/*` list — never another repo
                                 // or an issue with the same number.
-                                if *tab == 1 && (list_repo == &repo || list_repo.ends_with("/*")) {
+                                if *tab == crate::data::PRS_TAB
+                                    && (list_repo == &repo || list_repo.ends_with("/*"))
+                                {
                                     for item in items {
                                         if is_it(item, &repo, num) {
                                             item.state = state;

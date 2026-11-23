@@ -24,6 +24,7 @@ use crate::data::TABS;
 use crate::tui::theme;
 use crate::tui::{bold, fill, put, put_right};
 
+#[derive(Debug)]
 pub(crate) struct Crumb {
     pub label: String,
     pub color: Color,

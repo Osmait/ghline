@@ -25,79 +25,11 @@ use std::time::Instant;
 
 use self::hit::Region;
 use crate::actions::{Flash, Prompt};
-use std::sync::Arc;
-
-use crate::shared::error::{Error, Failure};
+pub use crate::shared::load::Load;
 
 use crate::data::{Account, Item, Job, RawLog, Status};
 use crate::service::{Request, Response};
 use crate::shared::worker::Worker;
-
-/// Load state of one piece of data.
-#[derive(Clone, Debug, Default)]
-pub enum Load {
-    #[default]
-    Idle,
-    Loading,
-    Ready,
-    /// Why it is not here, kept whole.
-    ///
-    /// The failure rather than a sentence about it: an `Error` knows whether
-    /// it is worth retrying and what caused it, and flattening it here threw
-    /// both away. `Arc` because the state is cloned to be rendered and
-    /// `io::Error` is not `Clone`; sharing is right anyway, since there is one
-    /// failure and several places that describe it.
-    Failed(Arc<Failure>),
-}
-
-impl Load {
-    pub fn is_loading(&self) -> bool {
-        *self == Self::Loading
-    }
-
-    /// The failure, for anything that wants more than a sentence.
-    pub fn failure(&self) -> Option<&Failure> {
-        match self {
-            Self::Failed(f) => Some(f),
-            _ => None,
-        }
-    }
-
-    /// One line for a status bar or an empty pane.
-    pub fn error(&self) -> Option<String> {
-        self.failure().map(Failure::brief)
-    }
-
-    /// Whether trying again might work.
-    pub fn is_transient(&self) -> bool {
-        self.failure().is_some_and(Failure::is_transient)
-    }
-
-    /// A failure this program decided on, with no error underneath.
-    pub fn refused(msg: impl Into<String>) -> Self {
-        Self::Failed(Arc::new(Failure::Refused(msg.into())))
-    }
-}
-
-impl From<Error> for Load {
-    fn from(e: Error) -> Self {
-        Self::Failed(Arc::new(Failure::Ran(e)))
-    }
-}
-
-impl PartialEq for Load {
-    /// Two failures are the same state as far as the interface is concerned:
-    /// it asks "loading, ready, or broken", not which error it was.
-    fn eq(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (Self::Idle, Self::Idle)
-                | (Self::Loading, Self::Loading)
-                | (Self::Ready, Self::Ready)
-                | (Self::Failed(_), Self::Failed(_))
-        )
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum View {
@@ -106,6 +38,19 @@ pub enum View {
     /// A PR's changed files and their diff.
     Diff,
     Logs,
+}
+
+/// Which modal overlay is currently open, if any.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Modal {
+    Accounts,
+    Finder,
+    Themes,
+    Help,
+    Dispatch,
+    Commits,
+    Note,
+    Review,
 }
 
 /// The navigable panes. `h`/`l` move between the ones the current view has,
@@ -137,7 +82,7 @@ pub enum Pane {
 }
 
 /// Somewhere an issue can be sent.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Dest {
     /// An agent already running, addressed by the pane it lives in.
     Running(crate::shared::mux::Agent),
@@ -226,7 +171,7 @@ impl Dest {
 /// `Prompt::Dispatch` carries what the reader is being asked about; this
 /// carries what the service needs if they say yes. Kept apart so the dialog
 /// stays about the question.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Fresh {
     pub repo_root: String,
     /// The branch to create, or `None` to work in the checkout as it is.
@@ -255,6 +200,7 @@ pub struct TreeNode {
     pub dur: String,
 }
 
+#[derive(Clone, Debug)]
 pub struct LogRow {
     pub n: usize,
     /// The HH:MM:SS GitHub stamped the line with.
@@ -511,7 +457,7 @@ impl App {
             flash: None,
             acc: 0,
             repo: 0,
-            tab: 1, // 'prs'
+            tab: crate::data::PRS_TAB,
             pane: Pane::List,
             item: 0,
             view: View::List,
@@ -694,8 +640,33 @@ impl App {
     /// worker and every load goes through it; a fixture-seeded `App` has none,
     /// so it has its data already and asking for more would mark half the
     /// interface `Loading` with nothing on the way back.
+    #[must_use]
     pub fn has_worker(&self) -> bool {
         self.service.is_some()
+    }
+
+    /// Which modal overlay currently owns input, if any.
+    #[must_use]
+    pub fn active_modal(&self) -> Option<Modal> {
+        if self.finder_open {
+            Some(Modal::Finder)
+        } else if self.note_open.is_some() {
+            Some(Modal::Note)
+        } else if self.review_open {
+            Some(Modal::Review)
+        } else if self.dispatch_open {
+            Some(Modal::Dispatch)
+        } else if self.commits_open {
+            Some(Modal::Commits)
+        } else if self.themes_open {
+            Some(Modal::Themes)
+        } else if self.accounts_open {
+            Some(Modal::Accounts)
+        } else if self.help_open {
+            Some(Modal::Help)
+        } else {
+            None
+        }
     }
 
     /// Is anything requested and still unanswered? The loop waits less if so.

@@ -17,6 +17,7 @@ use crate::data::{
 };
 use crate::shared::error::Error;
 
+#[derive(Debug)]
 pub enum Request {
     Accounts,
     Repos {
@@ -134,6 +135,7 @@ pub enum Request {
     },
 }
 
+#[derive(Debug)]
 pub enum Response {
     Accounts(Result<Vec<Account>, Error>),
     Agents {
@@ -236,6 +238,7 @@ pub enum Response {
     },
 }
 
+#[derive(Debug)]
 pub struct Service {
     tx: Sender<Request>,
     rx: Receiver<Response>,
@@ -294,14 +297,14 @@ fn handle(req: Request) -> Response {
             // stays one request on one thread, skeleton and all.
             let all = repo.strip_suffix('*').and_then(|o| o.strip_suffix('/'));
             let result = match (all, tab) {
-                (Some(owner), 0) => crate::forge::current().all_issues(owner),
-                (Some(owner), 1) => crate::forge::current().all_prs(owner),
+                (Some(owner), crate::data::ISSUES_TAB) => crate::forge::current().all_issues(owner),
+                (Some(owner), crate::data::PRS_TAB) => crate::forge::current().all_prs(owner),
                 // Runs never reach here: there is no cross-repository
                 // Actions API, so they travel as their own request carrying
                 // the repositories worth asking.
                 (Some(_), _) => Ok(Vec::new()),
-                (None, 0) => crate::forge::current().issues(&repo),
-                (None, 1) => crate::forge::current().prs(&repo),
+                (None, crate::data::ISSUES_TAB) => crate::forge::current().issues(&repo),
+                (None, crate::data::PRS_TAB) => crate::forge::current().prs(&repo),
                 (None, _) => crate::forge::current().runs(&repo),
             };
             Response::List { repo, tab, result }
@@ -371,7 +374,7 @@ fn handle(req: Request) -> Response {
 
         Request::AllRuns { key, repos } => Response::List {
             repo: key,
-            tab: 2,
+            tab: crate::data::RUNS_TAB,
             result: crate::forge::current().all_runs(&repos),
         },
 

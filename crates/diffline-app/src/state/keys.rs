@@ -531,6 +531,7 @@ pub const DEFAULTS: &[(&str, Action)] = &[
 ];
 
 /// A keymap: the defaults, with whatever the reader's file says over the top.
+#[derive(Debug)]
 pub struct Map {
     pub binds: HashMap<Chord, Action>,
     /// Lines the file got wrong, kept so the program can say so rather than

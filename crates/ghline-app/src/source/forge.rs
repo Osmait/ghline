@@ -85,6 +85,7 @@ pub trait Forge: Send + Sync + 'static {
 ///
 /// A unit struct: a call is a process, and every bit of state lives in `gh`'s
 /// own configuration rather than here.
+#[derive(Debug)]
 pub struct Cli;
 
 impl Forge for Cli {

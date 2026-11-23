@@ -9,7 +9,7 @@
 use crate::data::Status;
 
 /// One row of results.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Hit {
     /// What the row is called: a repository name, an issue title, a commit
     /// subject.

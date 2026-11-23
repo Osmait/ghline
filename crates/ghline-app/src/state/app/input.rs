@@ -3,9 +3,9 @@
 
 use crate::shared::key::{Key, Press};
 
-use super::{App, Cmd, Load, NodeKind, Pane, Prompt, View};
+use super::{App, Cmd, Load, Modal, NodeKind, Pane, Prompt, View};
 use crate::data::{Kind, TABS};
-use crate::shared::nav::{Dir, Place};
+use crate::shared::nav::{Dir, Place, step};
 
 /// Adds a signed delta to an unsigned scroll offset without wrapping
 /// `usize::MAX` (set by `G`) into a negative `i64`.
@@ -161,7 +161,11 @@ impl App {
                 self.flash_ok(format!("{} · {}", hit.repo, hit.detail));
             }
             crate::finder::HitKind::Issue | crate::finder::HitKind::Pr => {
-                self.tab = usize::from(hit.kind == crate::finder::HitKind::Pr);
+                self.tab = if hit.kind == crate::finder::HitKind::Pr {
+                    crate::data::PRS_TAB
+                } else {
+                    crate::data::ISSUES_TAB
+                };
                 self.view = View::List;
                 self.pane = Pane::List;
                 // Only jump straight into detail when we actually switched to
@@ -756,36 +760,23 @@ impl App {
             self.cmd_text.clear();
             return;
         }
-        if self.accounts_open || self.help_open {
-            self.accounts_open = false;
-            self.help_open = false;
-            return;
-        }
-        if self.finder_open {
-            self.finder_open = false;
-            return;
-        }
-        if self.dispatch_open {
-            self.dispatch_open = false;
-            return;
-        }
-        if self.note_open.is_some() {
-            self.note_open = None;
-            self.note_text.clear();
-            return;
-        }
-        if self.review_open {
-            self.review_open = false;
-            return;
-        }
-
-        if self.themes_open {
-            crate::tui::theme::set(self.theme_before);
-            self.themes_open = false;
-            return;
-        }
-        if self.commits_open {
-            self.commits_open = false;
+        if let Some(modal) = self.active_modal() {
+            match modal {
+                Modal::Accounts => self.accounts_open = false,
+                Modal::Help => self.help_open = false,
+                Modal::Finder => self.finder_open = false,
+                Modal::Dispatch => self.dispatch_open = false,
+                Modal::Note => {
+                    self.note_open = None;
+                    self.note_text.clear();
+                }
+                Modal::Review => self.review_open = false,
+                Modal::Themes => {
+                    crate::tui::theme::set(self.theme_before);
+                    self.themes_open = false;
+                }
+                Modal::Commits => self.commits_open = false,
+            }
             return;
         }
         match self.view {
@@ -1032,86 +1023,74 @@ impl App {
             return;
         }
 
-        if self.finder_open {
-            self.finder_key(press);
-            return;
-        }
-
-        if self.note_open.is_some() {
-            self.note_key(press);
-            return;
-        }
-        if self.review_open {
-            self.review_key(press);
-            return;
-        }
-
-        if self.dispatch_open {
-            self.dispatch_key(press);
-            return;
-        }
-
-        if self.commits_open {
-            let last = self.commits().len();
-            match press.key {
-                Key::Char('j') | Key::Down => self.commit_sel = (self.commit_sel + 1).min(last),
-                Key::Char('k') | Key::Up => self.commit_sel = self.commit_sel.saturating_sub(1),
-                Key::Enter => self.pick_commit(self.commit_sel),
-                Key::Esc | Key::Char('q' | 'v') => self.commits_open = false,
-                _ => {}
-            }
-            return;
-        }
-
-        if self.themes_open {
-            let last = crate::tui::theme::Theme::all().len() - 1;
-            match press.key {
-                Key::Char('j') | Key::Down => {
-                    self.theme_sel = (self.theme_sel + 1).min(last);
-                    self.preview_theme();
+        if let Some(modal) = self.active_modal() {
+            match modal {
+                Modal::Finder => self.finder_key(press),
+                Modal::Note => self.note_key(press),
+                Modal::Review => self.review_key(press),
+                Modal::Dispatch => self.dispatch_key(press),
+                Modal::Commits => {
+                    let last = self.commits().len();
+                    match press.key {
+                        Key::Char('j') | Key::Down => {
+                            self.commit_sel = (self.commit_sel + 1).min(last);
+                        }
+                        Key::Char('k') | Key::Up => {
+                            self.commit_sel = self.commit_sel.saturating_sub(1);
+                        }
+                        Key::Enter => self.pick_commit(self.commit_sel),
+                        Key::Esc | Key::Char('q' | 'v') => self.commits_open = false,
+                        _ => {}
+                    }
                 }
-                Key::Char('k') | Key::Up => {
-                    self.theme_sel = self.theme_sel.saturating_sub(1);
-                    self.preview_theme();
+                Modal::Themes => {
+                    let last = crate::tui::theme::Theme::all().len() - 1;
+                    match press.key {
+                        Key::Char('j') | Key::Down => {
+                            self.theme_sel = (self.theme_sel + 1).min(last);
+                            self.preview_theme();
+                        }
+                        Key::Char('k') | Key::Up => {
+                            self.theme_sel = self.theme_sel.saturating_sub(1);
+                            self.preview_theme();
+                        }
+                        Key::Enter => {
+                            self.themes_open = false;
+                            self.accept_theme();
+                        }
+                        Key::Esc | Key::Char('q' | 't') => {
+                            // the picker previews as you move, so leaving it puts back
+                            // whatever was on when it opened
+                            crate::tui::theme::set(self.theme_before);
+                            self.themes_open = false;
+                        }
+                        _ => {}
+                    }
                 }
-                Key::Enter => {
-                    self.themes_open = false;
-                    self.accept_theme();
+                Modal::Accounts => match press.key {
+                    Key::Char('j') | Key::Down => {
+                        self.acc_sel =
+                            (self.acc_sel + 1).min(self.accounts.len().saturating_sub(1));
+                    }
+                    Key::Char('k') | Key::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
+                    Key::Enter if !self.accounts.is_empty() => self.pick_account(self.acc_sel),
+                    Key::Esc | Key::Char('q' | 'a') => {
+                        self.accounts_open = false;
+                    }
+                    _ => {}
+                },
+                Modal::Help => {
+                    // longer than a short terminal, so it scrolls
+                    match press.key {
+                        Key::Esc | Key::Char('q') => self.help_open = false,
+                        Key::Char('?') => self.help_open = false,
+                        Key::Char('j') | Key::Down => self.help_scroll += 1,
+                        Key::Char('k') | Key::Up => {
+                            self.help_scroll = self.help_scroll.saturating_sub(1);
+                        }
+                        _ => {}
+                    }
                 }
-                Key::Esc | Key::Char('q' | 't') => {
-                    // the picker previews as you move, so leaving it puts back
-                    // whatever was on when it opened
-                    crate::tui::theme::set(self.theme_before);
-                    self.themes_open = false;
-                }
-                _ => {}
-            }
-            return;
-        }
-
-        if self.accounts_open {
-            match press.key {
-                Key::Char('j') | Key::Down => {
-                    self.acc_sel = (self.acc_sel + 1).min(self.accounts.len().saturating_sub(1));
-                }
-                Key::Char('k') | Key::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
-                Key::Enter if !self.accounts.is_empty() => self.pick_account(self.acc_sel),
-                Key::Esc | Key::Char('q' | 'a') => {
-                    self.accounts_open = false;
-                }
-                _ => {}
-            }
-            return;
-        }
-
-        if self.help_open {
-            // longer than a short terminal, so it scrolls
-            match press.key {
-                Key::Esc | Key::Char('q') => self.help_open = false,
-                Key::Char('?') => self.help_open = false,
-                Key::Char('j') | Key::Down => self.help_scroll += 1,
-                Key::Char('k') | Key::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
-                _ => {}
             }
             return;
         }
@@ -1324,12 +1303,6 @@ fn permalink(repo: &str, kind: crate::data::Kind, num: i64, id: i64) -> String {
         crate::data::Kind::Pr => format!("https://github.com/{repo}/pull/{num}"),
         crate::data::Kind::Run => format!("https://github.com/{repo}/actions/runs/{id}"),
     }
-}
-
-/// Moves an index by `d` within `len`, staying inside it. An empty list has
-/// nowhere to go, and index 0 is the honest answer for it.
-fn step(current: usize, d: i64, len: usize) -> usize {
-    (current as i64 + d).clamp(0, (len as i64 - 1).max(0)) as usize
 }
 
 /// Drops the +/- pairs whose contents differ only in whitespace, which is what

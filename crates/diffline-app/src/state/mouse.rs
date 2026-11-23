@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use ratatui::layout::Position;
 
 use crate::shared::key::{Button, Motion, Mouse};
+use crate::shared::nav::step;
 
 use crate::app::{App, Modal, Pane};
 use crate::hit::Target;
@@ -273,10 +274,6 @@ impl App {
             crate::tui::theme::set(t);
         }
     }
-}
-
-fn step(current: usize, d: i64, len: usize) -> usize {
-    (current as i64 + d).clamp(0, (len as i64 - 1).max(0)) as usize
 }
 
 #[cfg(test)]

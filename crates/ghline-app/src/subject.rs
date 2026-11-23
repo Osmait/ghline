@@ -93,6 +93,7 @@ const BEFORE: usize = 6;
 const AFTER: usize = 3;
 
 /// One line of a log, as far as excerpting is concerned.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Line<'a> {
     pub text: &'a str,
     pub is_error: bool,

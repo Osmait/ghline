@@ -56,12 +56,13 @@ pub enum Prompt {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FlashKind {
     Ok,
     Warn,
 }
 
+#[derive(Clone, Debug)]
 pub struct Flash {
     pub text: String,
     pub kind: FlashKind,
