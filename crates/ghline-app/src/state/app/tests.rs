@@ -557,14 +557,14 @@ fn the_picker_previews_as_you_move_and_esc_puts_it_back() {
     set(Theme::Default);
     let mut app = seeded();
     ch(&mut app, 't');
-    assert!(app.themes_open);
+    assert!(app.modal == Some(Modal::Themes));
     assert_eq!(current(), Theme::Default, "opening changes nothing yet");
 
     ch(&mut app, 'j');
     assert_eq!(current(), Theme::Mocha, "moving applies it straight away");
 
     press(&mut app, Key::Esc);
-    assert!(!app.themes_open);
+    assert!(app.modal != Some(Modal::Themes));
     assert_eq!(current(), Theme::Default, "leaving puts back what was on");
     set(Theme::Default);
 }
@@ -579,7 +579,7 @@ fn enter_keeps_the_previewed_theme() {
     ch(&mut app, 't');
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
-    assert!(!app.themes_open);
+    assert!(app.modal != Some(Modal::Themes));
     assert_eq!(current(), Theme::Mocha);
     set(Theme::Default);
 }
@@ -701,7 +701,7 @@ fn the_logs_and_diff_views_never_show_it() {
 fn p_opens_the_finder_on_repositories() {
     let mut app = seeded();
     ch(&mut app, 'p');
-    assert!(app.finder_open);
+    assert!(app.modal == Some(Modal::Finder));
     assert_eq!(app.finder_source, crate::data::Source::Repos);
     assert_eq!(
         app.finder_len(),
@@ -745,7 +745,7 @@ fn enter_on_a_repository_goes_there() {
         ch(&mut app, c);
     }
     press(&mut app, Key::Enter);
-    assert!(!app.finder_open);
+    assert!(app.modal != Some(Modal::Finder));
     assert_eq!(app.repo_name(), target);
     assert_eq!(app.view, View::List);
 }
@@ -784,7 +784,7 @@ fn the_finder_swallows_the_keys_beneath_it() {
     assert_eq!(app.item, before);
     assert_eq!(app.finder_query, "j");
     press(&mut app, Key::Esc);
-    assert!(!app.finder_open);
+    assert!(app.modal != Some(Modal::Finder));
 }
 
 #[test]
@@ -923,7 +923,7 @@ mod mouse {
         let now = Instant::now();
         app.on_mouse_at(event(Motion::Down(Button::Left), x, y), now);
         app.on_mouse_at(event(Motion::Down(Button::Left), x, y), now);
-        assert!(app.note_open.is_some());
+        assert!(app.modal == Some(Modal::Note));
     }
 
     #[test]
@@ -941,7 +941,7 @@ mod mouse {
         render(&mut app);
         click_row(&mut app, Target::Review, 2);
         assert_eq!(app.review_verdict, crate::data::Verdict::RequestChanges);
-        assert!(app.review_open, "choosing is not sending");
+        assert!(app.modal == Some(Modal::Review), "choosing is not sending");
     }
 
     #[test]
@@ -968,7 +968,7 @@ mod mouse {
         let r = region(&app, Target::Help);
         wheel(&mut app, r.area.x + 3, r.area.y + 4, true);
         assert!(app.help_scroll > 2, "and the wheel scrolls it too");
-        assert!(app.help_open);
+        assert!(app.modal == Some(Modal::Help));
     }
 
     #[test]
@@ -981,7 +981,7 @@ mod mouse {
         click_at(&mut app, r.area.x, r.area.y);
         assert_eq!(app.finder_source, crate::data::Source::ALL[1]);
         assert_ne!(app.finder_source, first);
-        assert!(app.finder_open, "and the finder stays");
+        assert!(app.modal == Some(Modal::Finder), "and the finder stays");
     }
 
     #[test]
@@ -991,18 +991,18 @@ mod mouse {
         render(&mut app);
         let r = region(&app, Target::Help);
         click_at(&mut app, r.area.x + 3, r.area.y + 3);
-        assert!(app.help_open);
+        assert!(app.modal == Some(Modal::Help));
     }
 
     #[test]
     fn a_click_on_the_agent_pickers_frame_keeps_the_note_typed_there() {
         let mut app = seeded();
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_note = "only the parser".into();
         render(&mut app);
         let r = region(&app, Target::Dispatch);
         click_at(&mut app, r.area.x + 2, r.area.y);
-        assert!(app.dispatch_open);
+        assert!(app.modal == Some(Modal::Dispatch));
         assert_eq!(app.dispatch_note, "only the parser");
     }
 
@@ -1230,7 +1230,10 @@ mod mouse {
 
         click_row(&mut app, Target::Finder, 2);
         assert_eq!(app.finder_sel, 2);
-        assert!(app.finder_open, "one click selects, it does not accept");
+        assert!(
+            app.modal == Some(Modal::Finder),
+            "one click selects, it does not accept"
+        );
     }
 
     #[test]
@@ -1240,7 +1243,7 @@ mod mouse {
         render(&mut app);
 
         click_at(&mut app, 1, 3); // the far top left, outside the modal
-        assert!(!app.finder_open);
+        assert!(app.modal != Some(Modal::Finder));
     }
 
     #[test]
@@ -1252,7 +1255,10 @@ mod mouse {
 
         let r = region(&app, Target::Finder);
         click_at(&mut app, r.area.x + 2, r.area.y.saturating_sub(2)); // its header
-        assert!(app.finder_open, "the modal absorbed the click");
+        assert!(
+            app.modal == Some(Modal::Finder),
+            "the modal absorbed the click"
+        );
         assert_eq!(app.finder_sel, before);
     }
 
@@ -1344,10 +1350,18 @@ mod mouse {
         let cases: [Case; 6] = [
             ("finder", |a| a.open_finder(), Target::Finder),
             ("themes", |a| a.open_themes(), Target::Themes),
-            ("accounts", |a| a.accounts_open = true, Target::Accounts),
-            ("help", |a| a.help_open = true, Target::Help),
-            ("agents", |a| a.dispatch_open = true, Target::Dispatch),
-            ("review", |a| a.review_open = true, Target::Note),
+            (
+                "accounts",
+                |a| a.modal = Some(Modal::Accounts),
+                Target::Accounts,
+            ),
+            ("help", |a| a.modal = Some(Modal::Help), Target::Help),
+            (
+                "agents",
+                |a| a.modal = Some(Modal::Dispatch),
+                Target::Dispatch,
+            ),
+            ("review", |a| a.modal = Some(Modal::Review), Target::Note),
         ];
         for (name, open, target) in cases {
             let mut app = seeded();
@@ -1668,21 +1682,24 @@ mod dispatch {
     #[test]
     fn accepting_a_refused_destination_does_not_send_it() {
         let mut app = with(vec![agent("a", AgentStatus::Working, false)]);
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_sel = 0;
         app.dispatch_accept();
 
         assert!(app.prompt.is_none(), "nothing was queued");
-        assert!(app.dispatch_open, "and the picker stayed open to say so");
+        assert!(
+            app.modal == Some(Modal::Dispatch),
+            "and the picker stayed open to say so"
+        );
     }
 
     #[test]
     fn accepting_a_free_destination_asks_first() {
         let mut app = with(vec![agent("claude", AgentStatus::Idle, false)]);
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_accept();
 
-        assert!(!app.dispatch_open, "the picker closed");
+        assert!(app.modal != Some(Modal::Dispatch), "the picker closed");
         match app.prompt {
             Some(Prompt::Dispatch {
                 ref pane, ref text, ..
@@ -1750,7 +1767,7 @@ mod dispatch {
     fn a_repository_that_is_not_here_cannot_be_dispatched_to() {
         let mut app = with(vec![]);
         scanned(&mut app, None);
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_sel = 0;
         app.dispatch_accept();
 
@@ -1763,7 +1780,7 @@ mod dispatch {
         let mut app = with(vec![]);
         let repo = app.item_repo_key();
         scanned(&mut app, Some(&repo));
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         // past the agents (there are none here) onto the first worktree
         app.dispatch_sel = 0;
         app.dispatch_accept();
@@ -1847,7 +1864,7 @@ mod dispatch {
                 )
             })
             .expect("the checkout should be offered");
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_sel = i;
         app.dispatch_accept();
 
@@ -1894,13 +1911,13 @@ mod dispatch {
         let repo = app.item_repo_key();
         scanned(&mut app, Some(&repo));
 
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_sel = 1; // the first worktree, after the idle agent
         app.dispatch_accept();
         assert!(app.pending_fresh.is_some());
 
         app.cancel_prompt();
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_sel = 0; // the agent
         app.dispatch_accept();
         assert!(app.pending_fresh.is_none(), "the plan did not survive");
@@ -1911,7 +1928,7 @@ mod dispatch {
         let mut app = with(vec![]);
         let repo = app.item_repo_key();
         scanned(&mut app, Some(&repo));
-        app.dispatch_open = true;
+        app.modal = Some(Modal::Dispatch);
         app.dispatch_accept();
         app.cancel_prompt();
 
@@ -2151,7 +2168,7 @@ mod explorer {
         assert_eq!(app.fs_selected_file(), None, "it is never asked for");
         match app.file_body() {
             Err(st) => {
-                let msg = st.error().unwrap_or_default();
+                let msg = st.brief().unwrap_or_default();
                 assert!(msg.contains("too large"), "{msg}");
                 assert!(
                     !st.is_transient(),
@@ -2184,7 +2201,7 @@ mod explorer {
         let mut app = with_tree();
         app.fs_sel = 1;
         app.open_dispatch();
-        assert!(!app.dispatch_open);
+        assert!(app.modal != Some(Modal::Dispatch));
         assert!(app.flash.is_some(), "and says why");
     }
 }
@@ -2518,9 +2535,12 @@ mod residue {
             ch(&mut app, 'j');
         }
         ch(&mut app, 'i');
-        assert!(app.note_open.is_some());
+        assert!(app.modal == Some(Modal::Note));
         app.on_key(Press::ctrl(Key::Char('p')));
-        assert!(!app.finder_open, "the finder does not open over the note");
+        assert!(
+            app.modal != Some(Modal::Finder),
+            "the finder does not open over the note"
+        );
     }
 
     #[test]
@@ -2702,7 +2722,7 @@ mod note {
     fn escape_still_closes_the_picker_rather_than_typing() {
         let mut app = open_picker();
         press(&mut app, Key::Esc);
-        assert!(!app.dispatch_open);
+        assert!(app.modal != Some(Modal::Dispatch));
     }
 }
 
@@ -3182,6 +3202,24 @@ mod review_threads {
         });
         assert_eq!(heads(&mut app).len(), 0, "the cache noticed: {before} → 0");
     }
+
+    #[test]
+    fn a_review_threads_failure_names_review_comments_in_the_flash() {
+        let mut app = reading();
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.apply(Response::PrThreads {
+            repo,
+            num,
+            result: Err(crate::shared::error::Error::Command {
+                args: "api".into(),
+                status: Some(1),
+                stderr: "connection reset by peer".into(),
+            }),
+        });
+        let msg = app.flash.as_ref().map(|f| f.text.as_str()).unwrap_or("");
+        assert!(msg.contains("review comments:"), "{msg}");
+        assert!(msg.contains("press r to retry"), "{msg}");
+    }
 }
 
 mod commits {
@@ -3217,7 +3255,7 @@ mod commits {
     fn v_opens_the_picker_on_all_changes() {
         let (mut app, _) = reading();
         ch(&mut app, 'v');
-        assert!(app.commits_open);
+        assert!(app.modal == Some(Modal::Commits));
         assert_eq!(app.commit_sel, 0, "all changes, which is what is on");
     }
 
@@ -3227,7 +3265,7 @@ mod commits {
         ch(&mut app, 'v');
         ch(&mut app, 'j');
         press(&mut app, Key::Enter);
-        assert!(!app.commits_open);
+        assert!(app.modal != Some(Modal::Commits));
         assert_eq!(app.diff_commit.as_deref(), Some("4f1c2a9e0b7d"));
         app.ensure();
         assert!(
@@ -3273,7 +3311,7 @@ mod commits {
         ch(&mut app, 'v');
         ch(&mut app, 'j');
         press(&mut app, Key::Esc);
-        assert!(!app.commits_open);
+        assert!(app.modal != Some(Modal::Commits));
         assert_eq!(app.diff_commit, None);
     }
 
@@ -3363,7 +3401,7 @@ mod drafts {
 
     fn write(app: &mut App, text: &str) {
         ch(app, 'i');
-        assert!(app.note_open.is_some(), "the editor is up");
+        assert!(app.modal == Some(Modal::Note), "the editor is up");
         for c in text.chars() {
             ch(app, c);
         }
@@ -3374,7 +3412,7 @@ mod drafts {
     fn i_writes_a_draft_against_the_cursors_line() {
         let mut app = on_added_line();
         write(&mut app, "why max?");
-        assert!(app.note_open.is_none());
+        assert!(app.modal != Some(Modal::Note));
         let d = &app.drafts()[0];
         assert_eq!(
             (d.path.as_str(), d.line, d.side),
@@ -3427,7 +3465,7 @@ mod drafts {
         ch(&mut app, 'i');
         ch(&mut app, 'x');
         press(&mut app, Key::Esc);
-        assert!(app.note_open.is_none());
+        assert!(app.modal != Some(Modal::Note));
         assert!(app.drafts().is_empty());
     }
 
@@ -3455,7 +3493,7 @@ mod drafts {
         let mut app = on_added_line();
         ch(&mut app, 'g');
         ch(&mut app, 'i');
-        assert!(app.note_open.is_none());
+        assert!(app.modal != Some(Modal::Note));
         assert!(app.flash.is_some());
     }
 
@@ -3464,7 +3502,7 @@ mod drafts {
         let mut app = on_added_line();
         app.diff_commit = Some("4f1c2a9e0b7d".into());
         ch(&mut app, 'i');
-        assert!(app.note_open.is_none());
+        assert!(app.modal != Some(Modal::Note));
     }
 }
 
@@ -3509,14 +3547,14 @@ mod sending_a_review {
     fn capital_r_sends_the_drafts_with_the_verdict_and_the_words() {
         let (mut app, tape) = with_a_draft();
         ch(&mut app, 'R');
-        assert!(app.review_open);
+        assert!(app.modal == Some(Modal::Review));
         press(&mut app, Key::Tab);
         assert_eq!(app.review_verdict, Verdict::Approve);
         for c in "lgtm".chars() {
             ch(&mut app, c);
         }
         press(&mut app, Key::Enter);
-        assert!(!app.review_open);
+        assert!(app.modal != Some(Modal::Review));
         assert_eq!(sent(&tape), Some((Verdict::Approve, "lgtm".into(), 1)));
         assert!(app.busy);
     }
@@ -3527,7 +3565,10 @@ mod sending_a_review {
         app.drafts.clear();
         ch(&mut app, 'R');
         press(&mut app, Key::Enter);
-        assert!(app.review_open, "still open, to be finished");
+        assert!(
+            app.modal == Some(Modal::Review),
+            "still open, to be finished"
+        );
         assert!(sent(&tape).is_none());
     }
 
@@ -3579,6 +3620,26 @@ mod sending_a_review {
         assert_eq!(app.drafts().len(), 1);
         assert!(app.flash.is_some());
     }
+
+    #[test]
+    fn a_transient_review_failure_says_not_sent_without_offering_refresh_retry() {
+        let (mut app, _) = with_a_draft();
+        let (repo, num) = (app.item_repo_key(), app.current().map(|c| c.num).unwrap());
+        app.apply(Response::ReviewSent {
+            repo,
+            num,
+            verdict: Verdict::Comment,
+            submitted: app.drafts().to_vec(),
+            result: Err(crate::shared::error::Error::Command {
+                args: "api".into(),
+                status: Some(1),
+                stderr: "connection reset by peer".into(),
+            }),
+        });
+        let msg = app.flash.as_ref().map(|f| f.text.as_str()).unwrap_or("");
+        assert!(msg.contains("review not sent:"), "{msg}");
+        assert!(!msg.contains("press r"), "{msg}");
+    }
 }
 
 #[test]
@@ -3586,7 +3647,7 @@ fn moving_in_an_empty_account_picker_does_not_underflow() {
     let mut app = App::new(None);
     app.accounts.clear();
     ch(&mut app, 'a');
-    assert!(app.accounts_open);
+    assert!(app.modal == Some(Modal::Accounts));
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
     assert_eq!(app.acc_sel, 0);
@@ -3756,7 +3817,7 @@ fn scroll_past_bottom_with_g_and_j_does_not_snap_to_top() {
 #[test]
 fn search_response_for_another_account_is_ignored() {
     let mut app = seeded();
-    app.finder_open = true;
+    app.modal = Some(Modal::Finder);
     app.finder_source = crate::data::Source::Issues;
     app.finder_query = "bug".into();
     app.apply(Response::Search {

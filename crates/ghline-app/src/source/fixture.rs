@@ -533,8 +533,10 @@ pub fn app() -> App {
     for a in &accounts {
         for (r, repo) in a.repos.iter().enumerate() {
             let key = format!("{}/{}", a.login, repo.name);
-            app.lists.insert((key.clone(), 0), issues(r));
-            app.lists.insert((key.clone(), 1), prs(r));
+            app.lists
+                .insert((key.clone(), crate::data::ISSUES_TAB), issues(r));
+            app.lists
+                .insert((key.clone(), crate::data::PRS_TAB), prs(r));
             let runs = runs(r);
             for run in &runs {
                 app.jobs_by_run.insert((key.clone(), run.id), jobs());
@@ -542,8 +544,8 @@ pub fn app() -> App {
                 app.raw_logs.insert((key.clone(), run.id), raw_log());
                 app.logs_state.insert((key.clone(), run.id), Load::Ready);
             }
-            app.lists.insert((key.clone(), 2), runs);
-            for tab in 0..3 {
+            app.lists.insert((key.clone(), crate::data::RUNS_TAB), runs);
+            for tab in crate::data::LIST_TABS {
                 app.lists_state.insert((key.clone(), tab), Load::Ready);
             }
         }

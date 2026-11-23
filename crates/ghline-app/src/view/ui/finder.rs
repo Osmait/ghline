@@ -86,14 +86,14 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
     if hits.is_empty() {
         let msg = if app.finder_state.is_loading() {
             "searching…".to_string()
-        } else if let Some(e) = app.finder_state.error() {
+        } else if let Some(e) = app.finder_state.brief() {
             e.to_string()
         } else if app.finder_source.needs_query() && app.finder_query.trim().is_empty() {
             app.finder_source.placeholder().to_string()
         } else {
             "nothing matches".to_string()
         };
-        let color = if app.finder_state.error().is_some() {
+        let color = if app.finder_state.brief().is_some() {
             theme::red()
         } else {
             theme::dimmer()

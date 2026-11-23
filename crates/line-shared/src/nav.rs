@@ -44,7 +44,8 @@ pub enum Place {
     Bottom,
 }
 
-/// Steps `current` by `delta` within `[0, len - 1]`, clamping at both ends.
+/// Steps `current` by `delta` over a list of `len` rows, clamping at both
+/// ends. An empty list has nowhere to go, so `0` is returned when `len == 0`.
 #[must_use]
 pub fn step(current: usize, delta: i64, len: usize) -> usize {
     if len == 0 {
@@ -52,12 +53,11 @@ pub fn step(current: usize, delta: i64, len: usize) -> usize {
     }
     let last = len - 1;
     let clamped = current.min(last);
+    let by = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
     if delta >= 0 {
-        let inc = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
-        clamped.saturating_add(inc).min(last)
+        clamped.saturating_add(by).min(last)
     } else {
-        let dec = usize::try_from(delta.unsigned_abs()).unwrap_or(usize::MAX);
-        clamped.saturating_sub(dec)
+        clamped.saturating_sub(by)
     }
 }
 
@@ -86,5 +86,10 @@ mod tests {
         assert_eq!(step(2, 2, 5), 4);
         assert_eq!(step(2, i64::MIN, 5), 0);
         assert_eq!(step(2, i64::MAX, 5), 4);
+    }
+
+    #[test]
+    fn step_moves_from_the_drawn_row_when_the_index_is_past_the_end() {
+        assert_eq!(step(10, -1, 5), 3);
     }
 }

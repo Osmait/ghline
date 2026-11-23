@@ -248,7 +248,7 @@ pub struct App {
     pub tree_sel: usize,
     pub collapsed: HashSet<usize>,
     pub follow: bool,
-    pub accounts_open: bool,
+    pub modal: Option<Modal>,
     pub acc_sel: usize,
     /// Whether the repository pane is wanted. The view and the terminal width
     /// have the last word: see `sidebar_shown`.
@@ -256,8 +256,6 @@ pub struct App {
     /// Whether the last frame actually drew it. The pane list reads this, so
     /// `h` can never land on a sidebar that is not on screen.
     pub sidebar_shown: bool,
-    /// The finder, open over everything else while it is up.
-    pub finder_open: bool,
     pub finder_source: crate::data::Source,
     pub finder_query: String,
     pub finder_sel: usize,
@@ -270,10 +268,8 @@ pub struct App {
     pub finder_sent: String,
     /// Theme picker. It previews as you move, so the theme active when it
     /// opened is kept in order to put it back on `esc`.
-    pub themes_open: bool,
     pub theme_sel: usize,
     pub theme_before: crate::tui::theme::Theme,
-    pub help_open: bool,
     pub cmd: Option<Cmd>,
     pub cmd_text: String,
     pub filter: String,
@@ -318,15 +314,13 @@ pub struct App {
     pub commit_state: HashMap<(String, String), Load>,
     /// Notes not yet sent, per pull request, by `(repo, number)`.
     pub drafts: HashMap<(String, i64), Vec<crate::data::Draft>>,
-    /// The note being written, and where it goes; `None` when no editor is up.
-    pub note_open: Option<review::Anchor>,
+    /// Where the drafted note goes; `Some` while the note modal has an anchor.
+    pub note_anchor: Option<review::Anchor>,
     pub note_text: String,
-    /// The review being sent: its dialog, its verdict and its body.
-    pub review_open: bool,
+    /// The review being sent: its verdict and its body.
     pub review_verdict: crate::data::Verdict,
     pub review_text: String,
-    /// The commit picker, and the row it is on: 0 is "all changes".
-    pub commits_open: bool,
+    /// The commit picker row: 0 is "all changes".
     pub commit_sel: usize,
     /// The diff pane's width, which only the render knows; comments fold to it.
     pub diff_width: usize,
@@ -406,7 +400,6 @@ pub struct App {
     /// Kept rather than read when wanted: reading it when wanted meant the
     /// dispatch picker read `.git/HEAD` off the disk once per frame.
     pub head_branches: std::collections::HashMap<String, String>,
-    pub dispatch_open: bool,
     /// A specific instruction typed into the picker, or empty for the
     /// template on its own.
     pub dispatch_note: String,
@@ -465,9 +458,8 @@ impl App {
             tree_sel: 0,
             collapsed: HashSet::new(),
             follow: true,
-            accounts_open: false,
+            modal: None,
             acc_sel: 0,
-            finder_open: false,
             finder_source: crate::data::Source::Repos,
             finder_query: String::new(),
             finder_sel: 0,
@@ -479,10 +471,8 @@ impl App {
             // `[`/`]` plus the finder reach any of them without it
             sidebar: false,
             sidebar_shown: false,
-            themes_open: false,
             theme_sel: 0,
             theme_before: crate::tui::theme::current(),
-            help_open: false,
             cmd: None,
             cmd_text: String::new(),
             filter: String::new(),
@@ -508,12 +498,10 @@ impl App {
             commit_files: HashMap::new(),
             commit_state: HashMap::new(),
             drafts: HashMap::new(),
-            note_open: None,
+            note_anchor: None,
             note_text: String::new(),
-            review_open: false,
             review_verdict: crate::data::Verdict::Comment,
             review_text: String::new(),
-            commits_open: false,
             commit_sel: 0,
             diff_width: 100,
             split: false,
@@ -545,7 +533,6 @@ impl App {
             clones_state: Load::Idle,
             pending_fresh: None,
             head_branches: std::collections::HashMap::new(),
-            dispatch_open: false,
             dispatch_note: String::new(),
             dispatch_sel: 0,
             dispatch_scroll: 0,
@@ -648,25 +635,7 @@ impl App {
     /// Which modal overlay currently owns input, if any.
     #[must_use]
     pub fn active_modal(&self) -> Option<Modal> {
-        if self.finder_open {
-            Some(Modal::Finder)
-        } else if self.note_open.is_some() {
-            Some(Modal::Note)
-        } else if self.review_open {
-            Some(Modal::Review)
-        } else if self.dispatch_open {
-            Some(Modal::Dispatch)
-        } else if self.commits_open {
-            Some(Modal::Commits)
-        } else if self.themes_open {
-            Some(Modal::Themes)
-        } else if self.accounts_open {
-            Some(Modal::Accounts)
-        } else if self.help_open {
-            Some(Modal::Help)
-        } else {
-            None
-        }
+        self.modal
     }
 
     /// Is anything requested and still unanswered? The loop waits less if so.

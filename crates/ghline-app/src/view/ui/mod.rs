@@ -100,29 +100,17 @@ pub fn draw(f: &mut Frame<'_>, app: &mut App) {
 
     status::draw(buf, footer, app);
 
-    if app.accounts_open {
-        overlay::accounts(buf, area, app);
-    }
-    if app.finder_open {
-        finder::draw(buf, area, app);
-    }
-    if app.dispatch_open {
-        dispatch::draw(buf, area, app);
-    }
-    if app.themes_open {
-        overlay::themes(buf, area, app);
-    }
-    if app.commits_open {
-        overlay::commits(buf, area, app);
-    }
-    if app.note_open.is_some() {
-        overlay::note(buf, area, app);
-    }
-    if app.review_open {
-        overlay::review(buf, area, app);
-    }
-    if app.help_open {
-        overlay::help(buf, area, app);
+    if let Some(modal) = app.modal {
+        match modal {
+            crate::app::Modal::Accounts => overlay::accounts(buf, area, app),
+            crate::app::Modal::Finder => finder::draw(buf, area, app),
+            crate::app::Modal::Dispatch => dispatch::draw(buf, area, app),
+            crate::app::Modal::Themes => overlay::themes(buf, area, app),
+            crate::app::Modal::Commits => overlay::commits(buf, area, app),
+            crate::app::Modal::Note => overlay::note(buf, area, app),
+            crate::app::Modal::Review => overlay::review(buf, area, app),
+            crate::app::Modal::Help => overlay::help(buf, area, app),
+        }
     }
     if let Some(prompt) = app.prompt.clone() {
         confirm::draw(buf, area, app, &prompt);

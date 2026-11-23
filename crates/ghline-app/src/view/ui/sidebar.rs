@@ -94,7 +94,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
         let (msg, color) = match app
             .repos_state
             .get(app.login())
-            .and_then(crate::app::Load::error)
+            .and_then(crate::app::Load::brief)
         {
             Some(e) => (e.to_string(), theme::red()),
             None => ("no repositories".to_string(), theme::dimmer()),

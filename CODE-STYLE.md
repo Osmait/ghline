@@ -304,7 +304,7 @@ them, the commands are in the header of each row.
 | `unreachable_pub` | **0** | Done. Enabled in `Cargo.toml`; twenty-four items became `pub(crate)`. |
 | `missing_docs`, `line-shared` and reusable crates | **0** | Done. Enabled at each multi-consumer boundary. |
 | doctests | **8** | Done, in the pure layer. The `cargo test --doc` step is no longer running nothing. |
-| `clippy::must_use_candidate` | 264 | Partly done: the pure layer has nine. The rest is a judgement call per item, so the lint stays off — enabling it would mark every getter in the crate. |
+| `clippy::must_use_candidate` | 238 | Partly done: the pure layer plus `ghline-app`'s `data.rs` and `select.rs` queries carry `#[must_use]`. The rest is a judgement call per item, so the lint stays off — enabling it would mark every getter in the crate. |
 | `missing_docs`, application crates | 637 | Deliberately out of scope. These are read by whoever is changing them, not by callers. Revisit only if either grows a second consumer. |
 | `clippy::indexing_slicing` | 260 | Not enabling. The panic policy above is the answer instead, and it is the harder half — it needs reading, not a lint. |
 | `clippy::redundant_clone` | 13 | Not enabling — it is a nursery lint and twelve of the thirteen are it misreading `Display::to_string` on a borrowed error. Checked one by one. The two real ones, in `gh.rs` and `bin/diffline.rs`, are fixed; the survivor at `load.rs:321` is a genuine clone kept on purpose, because it is the last of four identical `insert` lines and breaking the symmetry to save one allocation reads worse than the allocation costs. |

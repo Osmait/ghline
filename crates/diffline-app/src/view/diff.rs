@@ -112,7 +112,7 @@ pub(super) fn diff(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = match state.error() {
+        let (msg, color) = match state.brief() {
             Some(e) => (e.to_string(), theme::red()),
             None if app.files.is_empty() => ("nothing to review".into(), theme::dimmer()),
             None => ("no textual changes in this file".into(), theme::dimmer()),

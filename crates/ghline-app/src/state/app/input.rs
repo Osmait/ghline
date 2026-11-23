@@ -57,7 +57,7 @@ impl App {
 
     /// Opens the finder. It starts on repositories, which need no network.
     pub fn open_finder(&mut self) {
-        self.finder_open = true;
+        self.modal = Some(Modal::Finder);
         self.finder_query.clear();
         self.finder_sent = "\u{0}".into(); // forces the first fetch
         self.finder_sel = 0;
@@ -71,7 +71,7 @@ impl App {
         let ctrl = press.ctrl;
         let len = self.finder_len();
         match press.key {
-            Key::Esc => self.finder_open = false,
+            Key::Esc => self.modal = None,
             Key::Enter => self.finder_accept(),
             Key::Tab => self.finder_source_by(Dir::Next),
             Key::BackTab => self.finder_source_by(Dir::Prev),
@@ -126,7 +126,7 @@ impl App {
         let Some(hit) = self.finder_results().get(self.finder_sel).cloned() else {
             return;
         };
-        self.finder_open = false;
+        self.modal = None;
 
         // move to the repository the hit belongs to, if it is one we know
         let matched_repo = if let Some(i) = self
@@ -259,7 +259,7 @@ impl App {
         // The list is only as fresh as the last look at it, and this is a
         // decision about which agent is free right now.
         self.agents_state = Load::Idle;
-        self.dispatch_open = true;
+        self.modal = Some(Modal::Dispatch);
         self.dispatch_note.clear();
         self.dispatch_sel = 0;
         self.dispatch_scroll = 0;
@@ -302,7 +302,7 @@ impl App {
             &self.dispatch_note,
         );
 
-        self.dispatch_open = false;
+        self.modal = None;
         match dest {
             crate::app::Dest::Running(a) => {
                 self.pending_fresh = None;
@@ -352,7 +352,7 @@ impl App {
         let len = self.dispatch_dests().len();
         let last = len.saturating_sub(1);
         match press.key {
-            Key::Esc => self.dispatch_open = false,
+            Key::Esc => self.modal = None,
             Key::Enter => self.dispatch_accept(),
             Key::Down => self.dispatch_sel = (self.dispatch_sel + 1).min(last),
             Key::Up => self.dispatch_sel = self.dispatch_sel.saturating_sub(1),
@@ -461,7 +461,7 @@ impl App {
             .iter()
             .position(|t| *t == current)
             .unwrap_or(0);
-        self.themes_open = true;
+        self.modal = Some(Modal::Themes);
     }
 
     /// Applies the highlighted theme straight away: the point of the picker is
@@ -705,7 +705,7 @@ impl App {
 
     /// `enter`: drills into the focused pane.
     pub(super) fn enter(&mut self) {
-        if self.accounts_open {
+        if self.modal == Some(Modal::Accounts) {
             return;
         }
         match self.pane {
@@ -762,21 +762,19 @@ impl App {
         }
         if let Some(modal) = self.active_modal() {
             match modal {
-                Modal::Accounts => self.accounts_open = false,
-                Modal::Help => self.help_open = false,
-                Modal::Finder => self.finder_open = false,
-                Modal::Dispatch => self.dispatch_open = false,
                 Modal::Note => {
-                    self.note_open = None;
+                    self.note_anchor = None;
                     self.note_text.clear();
                 }
-                Modal::Review => self.review_open = false,
-                Modal::Themes => {
-                    crate::tui::theme::set(self.theme_before);
-                    self.themes_open = false;
-                }
-                Modal::Commits => self.commits_open = false,
+                Modal::Themes => crate::tui::theme::set(self.theme_before),
+                Modal::Accounts
+                | Modal::Help
+                | Modal::Finder
+                | Modal::Dispatch
+                | Modal::Review
+                | Modal::Commits => {}
             }
+            self.modal = None;
             return;
         }
         match self.view {
@@ -813,7 +811,7 @@ impl App {
         let c = raw.trim().trim_start_matches(':').to_string();
         match c.as_str() {
             "account" | "accounts" => {
-                self.accounts_open = true;
+                self.modal = Some(Modal::Accounts);
                 self.acc_sel = self.acc;
             }
             // every tab by its id: `:files` was the diff, though the tab of
@@ -850,12 +848,13 @@ impl App {
             "theme" | "themes" => self.open_themes(),
             "sidebar" | "repos" => self.toggle_sidebar(),
             "find" | "search" => self.open_finder(),
-            "help" | "h" => self.help_open = true,
+            "help" | "h" => self.modal = Some(Modal::Help),
             "q" | "quit" => {
                 self.view = View::List;
-                self.accounts_open = false;
-                self.help_open = false;
-                self.themes_open = false;
+                if self.modal == Some(Modal::Themes) {
+                    crate::tui::theme::set(self.theme_before);
+                }
+                self.modal = None;
             }
             _ => {}
         }
@@ -872,7 +871,7 @@ impl App {
         self.item = 0;
         self.view = View::List;
         self.pane = Pane::Repos;
-        self.accounts_open = false;
+        self.modal = None;
         self.filter.clear();
         self.repo_scroll = 0;
         self.item_scroll = 0;
@@ -1039,7 +1038,7 @@ impl App {
                             self.commit_sel = self.commit_sel.saturating_sub(1);
                         }
                         Key::Enter => self.pick_commit(self.commit_sel),
-                        Key::Esc | Key::Char('q' | 'v') => self.commits_open = false,
+                        Key::Esc | Key::Char('q' | 'v') => self.modal = None,
                         _ => {}
                     }
                 }
@@ -1055,14 +1054,14 @@ impl App {
                             self.preview_theme();
                         }
                         Key::Enter => {
-                            self.themes_open = false;
+                            self.modal = None;
                             self.accept_theme();
                         }
                         Key::Esc | Key::Char('q' | 't') => {
                             // the picker previews as you move, so leaving it puts back
                             // whatever was on when it opened
                             crate::tui::theme::set(self.theme_before);
-                            self.themes_open = false;
+                            self.modal = None;
                         }
                         _ => {}
                     }
@@ -1075,15 +1074,14 @@ impl App {
                     Key::Char('k') | Key::Up => self.acc_sel = self.acc_sel.saturating_sub(1),
                     Key::Enter if !self.accounts.is_empty() => self.pick_account(self.acc_sel),
                     Key::Esc | Key::Char('q' | 'a') => {
-                        self.accounts_open = false;
+                        self.modal = None;
                     }
                     _ => {}
                 },
                 Modal::Help => {
                     // longer than a short terminal, so it scrolls
                     match press.key {
-                        Key::Esc | Key::Char('q') => self.help_open = false,
-                        Key::Char('?') => self.help_open = false,
+                        Key::Esc | Key::Char('q' | '?') => self.modal = None,
                         Key::Char('j') | Key::Down => self.help_scroll += 1,
                         Key::Char('k') | Key::Up => {
                             self.help_scroll = self.help_scroll.saturating_sub(1);
@@ -1111,7 +1109,7 @@ impl App {
             Key::Enter => self.enter(),
             Key::Esc | Key::Char('q') => self.back(),
             Key::Char('a') => {
-                self.accounts_open = true;
+                self.modal = Some(Modal::Accounts);
                 self.acc_sel = self.acc;
             }
             Key::Char('b') => self.toggle_sidebar(),
@@ -1126,7 +1124,7 @@ impl App {
             Key::Char(']') => self.step_repo(Dir::Next),
             Key::Char('t') => self.open_themes(),
             Key::Char('?') => {
-                self.help_open = true;
+                self.modal = Some(Modal::Help);
                 self.help_scroll = 0;
             }
             Key::Char(':') => {

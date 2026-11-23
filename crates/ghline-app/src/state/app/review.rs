@@ -112,14 +112,16 @@ impl App {
             .and_then(|i| self.drafts().get(i))
             .map(|d| d.body.clone())
             .unwrap_or_default();
-        self.note_open = Some(a);
+        self.note_anchor = Some(a);
+        self.modal = Some(super::Modal::Note);
     }
 
     /// The note editor owns every key while it is up: the letters are the note.
     pub(super) fn note_key(&mut self, press: Press) {
         match press.key {
             Key::Esc => {
-                self.note_open = None;
+                self.modal = None;
+                self.note_anchor = None;
                 self.note_text.clear();
             }
             // ^j is a newline: enter is taken by saving, and a terminal sends
@@ -136,7 +138,8 @@ impl App {
 
     /// Keeps the note, or — written down to nothing — lets it go.
     fn save_note(&mut self) {
-        let Some(a) = self.note_open.take() else {
+        self.modal = None;
+        let Some(a) = self.note_anchor.take() else {
             return;
         };
         let body = std::mem::take(&mut self.note_text).trim().to_string();
@@ -184,7 +187,7 @@ impl App {
         if self.current().map(crate::data::Item::kind) != Some(Kind::Pr) {
             return;
         }
-        self.review_open = true;
+        self.modal = Some(super::Modal::Review);
         self.review_verdict = Verdict::Comment;
         self.review_text.clear();
     }
@@ -198,7 +201,7 @@ impl App {
             .unwrap_or(0);
         let n = Verdict::ALL.len();
         match press.key {
-            Key::Esc => self.review_open = false,
+            Key::Esc => self.modal = None,
             Key::Tab | Key::Down => self.review_verdict = Verdict::ALL[(at + 1) % n],
             Key::BackTab | Key::Up => self.review_verdict = Verdict::ALL[(at + n - 1) % n],
             Key::Char('j') if press.ctrl => self.review_text.push('\n'),
@@ -241,7 +244,7 @@ impl App {
             body: self.review_text.trim().to_string(),
             drafts: self.drafts().to_vec(),
         };
-        self.review_open = false;
+        self.modal = None;
         // busy first: a worker that is gone clears it again on the way out
         self.busy = true;
         self.flash_ok("sending the review…");

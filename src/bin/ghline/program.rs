@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use tui_kit::run::{Handover, Program};
 
-use ghline_app::app::App;
+use ghline_app::app::{App, Modal};
 use ghline_app::service::{Request, Response, Service};
 use ghline_app::ui;
 use line_shared::worker::Worker;
@@ -52,10 +52,10 @@ impl Ghline {
 
     fn shows_caret(&self) -> bool {
         self.app.cmd.is_some()
-            || self.app.finder_open
-            || self.app.note_open.is_some()
-            || self.app.review_open
-            || self.app.dispatch_open
+            || matches!(
+                self.app.modal,
+                Some(Modal::Finder | Modal::Note | Modal::Review | Modal::Dispatch)
+            )
     }
 }
 
@@ -106,7 +106,7 @@ impl Program for Ghline {
             } else {
                 Duration::MAX
             })
-            .min(if self.app.finder_open {
+            .min(if self.app.modal == Some(Modal::Finder) {
                 FIND.saturating_sub(self.find.elapsed())
             } else {
                 Duration::MAX
@@ -122,7 +122,7 @@ impl Program for Ghline {
                 self.dirty = true;
             }
         }
-        if self.app.finder_open && self.find.elapsed() >= FIND {
+        if self.app.modal == Some(Modal::Finder) && self.find.elapsed() >= FIND {
             let before = self.app.finder_sent.clone();
             self.app.finder_tick();
             self.find = Instant::now();

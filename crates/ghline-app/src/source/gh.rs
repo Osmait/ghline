@@ -117,10 +117,10 @@ fn run_with_input(args: &[&str], input: &str) -> Res<String> {
         });
         child.wait_with_output()
     })
-    .map_err(|e| Error::Command {
-        args: label(args),
-        status: None,
-        stderr: e.to_string(),
+    .map_err(|source| Error::Spawn {
+        program: "gh",
+        install: None,
+        source,
     })?;
     if !out.status.success() {
         return Err(failure(args, &out));

@@ -21,7 +21,7 @@ pub(super) fn tree(buf: &mut Buffer, area: Rect, app: &mut App) {
 
     if app.files.is_empty() {
         let state = app.files_state.clone();
-        let failure = state.error();
+        let failure = state.brief();
         crate::tui::empty(
             buf,
             list,
