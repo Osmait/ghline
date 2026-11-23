@@ -64,10 +64,16 @@ pub struct Row {
 struct Node {
     dirs: BTreeMap<String, Self>,
     files: Vec<(String, usize)>,
+    add: u32,
+    del: u32,
+    total_files: usize,
 }
 
 impl Node {
-    fn totals(&self, all: &[Leaf]) -> (u32, u32, usize) {
+    /// Accumulates `(add, del, file_count)` bottom-up in a single `O(N)` pass
+    /// so `walk` reads each folder's totals in `O(1)` instead of re-traversing
+    /// the subtree at every depth.
+    fn finish_totals(&mut self, all: &[Leaf]) -> (u32, u32, usize) {
         let mut t = (0u32, 0u32, self.files.len());
         for (_, i) in &self.files {
             if let Some(f) = all.get(*i) {
@@ -75,14 +81,17 @@ impl Node {
                 t.1 = t.1.saturating_add(f.del);
             }
         }
-        for d in self.dirs.values() {
-            let (a, r, n) = d.totals(all);
+        for d in self.dirs.values_mut() {
+            let (a, r, n) = d.finish_totals(all);
             t = (
                 t.0.saturating_add(a),
                 t.1.saturating_add(r),
                 t.2.saturating_add(n),
             );
         }
+        self.add = t.0;
+        self.del = t.1;
+        self.total_files = t.2;
         t
     }
 }
@@ -95,14 +104,19 @@ pub fn rows(files: &[Leaf], folded: &HashSet<String>) -> Vec<Row> {
     let mut root = Node::default();
     for (i, f) in files.iter().enumerate() {
         let mut node = &mut root;
-        let mut parts: Vec<&str> = f.path.split('/').collect();
-        let name = parts.pop().unwrap_or_default();
-        for p in parts {
-            node = node.dirs.entry(p.to_string()).or_default();
+        let mut parts = f.path.split('/').peekable();
+        let mut name = "";
+        while let Some(p) = parts.next() {
+            if parts.peek().is_none() {
+                name = p;
+            } else {
+                node = node.dirs.entry(p.to_string()).or_default();
+            }
         }
         node.files.push((name.to_string(), i));
     }
-    let mut out = Vec::new();
+    root.finish_totals(files);
+    let mut out = Vec::with_capacity(files.len());
     walk(&root, "", 0, files, folded, &mut out);
     out
 }
@@ -123,11 +137,12 @@ fn walk(
             let Some((next, inner)) = dir.dirs.iter().next() else {
                 break;
             };
-            label = format!("{label}/{next}");
+            label.push('/');
+            label.push_str(next);
             dir = inner;
         }
         let path = format!("{prefix}{label}");
-        let (add, del, n) = dir.totals(all);
+        let (add, del, n) = (dir.add, dir.del, dir.total_files);
         let closed = folded.contains(&path);
         out.push(Row {
             entry: Entry::Dir(path.clone()),
@@ -139,7 +154,9 @@ fn walk(
             folded: closed,
         });
         if !closed {
-            walk(dir, &format!("{path}/"), depth + 1, all, folded, out);
+            let mut next_prefix = path;
+            next_prefix.push('/');
+            walk(dir, &next_prefix, depth + 1, all, folded, out);
         }
     }
     let mut files = node.files.clone();
@@ -183,7 +200,13 @@ pub fn ordinal(files: &[Leaf], file: usize) -> usize {
 /// The folders whose path `path` lies under, as rows of the tree.
 fn above<'r>(rows: &'r [Row], path: &str) -> impl Iterator<Item = &'r str> {
     rows.iter().filter_map(move |r| match &r.entry {
-        Entry::Dir(d) if path.starts_with(&format!("{d}/")) => Some(d.as_str()),
+        Entry::Dir(d)
+            if path
+                .strip_prefix(d.as_str())
+                .is_some_and(|s| s.starts_with('/')) =>
+        {
+            Some(d.as_str())
+        }
         _ => None,
     })
 }

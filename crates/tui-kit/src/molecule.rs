@@ -183,9 +183,20 @@ pub fn matched(
     }
     let hit = base.fg(accent).add_modifier(Modifier::BOLD);
     let mut cx = x;
+    let mut pi = 0usize;
+    let mut encoded = [0u8; 4];
     for (i, c) in text.chars().enumerate() {
-        let style = if positions.contains(&i) { hit } else { base };
-        cx = put(buf, cx, y, max, &c.to_string(), style);
+        while positions.get(pi).is_some_and(|&p| p < i) {
+            pi += 1;
+        }
+        let style = if positions.get(pi) == Some(&i) {
+            pi += 1;
+            hit
+        } else {
+            base
+        };
+        let s = c.encode_utf8(&mut encoded);
+        cx = put(buf, cx, y, max, s, style);
         if cx >= max {
             break;
         }
@@ -437,5 +448,27 @@ mod tests {
         let base = Style::default().bg(theme::bg()).fg(theme::fg());
         matched(&mut buf, (0, 0, 4), "sidebar", &[0, 6], base, theme::cyan());
         assert_eq!(row(&buf, 0), "side");
+    }
+
+    #[test]
+    fn matched_highlights_non_contiguous_positions_and_cjk() {
+        let mut buf = buffer(20, 1);
+        let base = Style::default().bg(theme::bg()).fg(theme::fg());
+        matched(
+            &mut buf,
+            (0, 0, 20),
+            "漢sidebar",
+            &[1, 3, 6],
+            base,
+            theme::cyan(),
+        );
+        assert_eq!(row(&buf, 0), "漢 sidebar");
+        // '漢' occupies x=0..2 (wide), so char index 1 ('s') is at x=2,
+        // index 3 ('d') at x=4, index 6 ('a') at x=7.
+        assert_eq!(buf[(0, 0)].style().fg, Some(theme::fg()));
+        assert_eq!(buf[(2, 0)].style().fg, Some(theme::cyan()));
+        assert_eq!(buf[(3, 0)].style().fg, Some(theme::fg()));
+        assert_eq!(buf[(4, 0)].style().fg, Some(theme::cyan()));
+        assert_eq!(buf[(7, 0)].style().fg, Some(theme::cyan()));
     }
 }

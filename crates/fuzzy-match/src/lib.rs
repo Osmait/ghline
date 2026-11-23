@@ -140,37 +140,46 @@ pub fn score(query: &str, haystack: &str) -> Option<(i32, Positions)> {
 /// starts at. Walks the haystack in place: the tests below hold `score` to
 /// the one allocation of its positions, and this is inside it.
 fn contiguous(query: &str, haystack: &str) -> Option<(i32, usize)> {
-    let n = query.chars().count();
+    let first_q = query.chars().next()?;
     let same = |a: char, b: char| a.eq_ignore_ascii_case(&b);
     let mut best: Option<(i32, usize)> = None;
     let mut before: Option<char> = None;
     for (start, (byte, first)) in haystack.char_indices().enumerate() {
-        let rest = &haystack[byte..];
-        let fits = rest.chars().take(n).count() == n
-            && rest.chars().zip(query.chars()).all(|(h, q)| same(h, q));
-        if fits {
-            let mut total = 0;
-            for (k, (h, q)) in rest.chars().zip(query.chars()).enumerate() {
-                let mut points = 1;
-                if k == 0 {
-                    points += if start == 0 {
-                        STRING_START
-                    } else if is_boundary(before, h) {
-                        WORD_START
-                    } else {
-                        0
-                    };
+        if !same(first, first_q) {
+            before = Some(first);
+            continue;
+        }
+        let mut h_chars = haystack[byte..].chars();
+        let mut total = 0;
+        let mut matched = true;
+        for (k, q) in query.chars().enumerate() {
+            let Some(h) = h_chars.next() else {
+                matched = false;
+                break;
+            };
+            if !same(h, q) {
+                matched = false;
+                break;
+            }
+            let mut points = 1;
+            if k == 0 {
+                points += if start == 0 {
+                    STRING_START
+                } else if is_boundary(before, h) {
+                    WORD_START
                 } else {
-                    points += CONSECUTIVE;
-                }
-                if h == q {
-                    points += EXACT_CASE;
-                }
-                total += points;
+                    0
+                };
+            } else {
+                points += CONSECUTIVE;
             }
-            if best.is_none_or(|(b, _)| total > b) {
-                best = Some((total, start));
+            if h == q {
+                points += EXACT_CASE;
             }
+            total += points;
+        }
+        if matched && best.is_none_or(|(b, _)| total > b) {
+            best = Some((total, start));
         }
         before = Some(first);
     }

@@ -336,6 +336,29 @@ impl App {
             .unwrap_or(0)
     }
 
+    /// Fast pre-check before building formatted `DiffRow`s for `idx`.
+    fn file_may_match(&self, idx: usize, query: &str) -> bool {
+        let Some(f) = self.diff_files().get(idx) else {
+            return false;
+        };
+        if f.hunks
+            .iter()
+            .flat_map(|h| h.lines.iter())
+            .any(|(_, line)| matches(line, query))
+        {
+            return true;
+        }
+        let notes = self.notes();
+        let in_thread = |t: &crate::data::Thread| {
+            (notes.shown || t.pending)
+                && t.comments.iter().any(|c| {
+                    matches(&c.author, query) || matches(&c.body, query) || matches(&c.when, query)
+                })
+        };
+        self.threads_on(&f.path).into_iter().any(in_thread)
+            || self.drafts_on(&f.path).iter().any(in_thread)
+    }
+
     /// A file's rows as the pane would number them: `w` applied and its
     /// review threads laid in, so a hit's row is the row the pane shows.
     fn unified(&self, idx: usize) -> Vec<crate::data::DiffRow> {
@@ -389,6 +412,11 @@ impl App {
                 (start + n - step % n) % n
             };
             let file = order[k];
+            // Quick scan before materializing `Hunk::rows` + `annotate`: most
+            // files in a PR do not contain the query at all.
+            if !self.file_may_match(file, &query) {
+                continue;
+            }
             let rows = self.unified(file);
             let mut hit_rows = rows
                 .iter()

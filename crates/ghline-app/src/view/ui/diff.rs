@@ -198,6 +198,7 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
     let focused = app.pane == Pane::Files;
     let icon_style = crate::shared::config::file_icons();
     let shown = app.file_idx();
+    let files = app.diff_files();
 
     for (row, r) in tree.iter().enumerate().skip(scroll) {
         if row - scroll >= list_h {
@@ -247,7 +248,7 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         }
         // open threads on a file: what is still being talked about in it
         if let Entry::File(i) = r.entry
-            && let Some(f) = app.diff_files().get(i)
+            && let Some(f) = files.get(i)
         {
             let open = app
                 .threads_on(&f.path)
@@ -303,15 +304,12 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
         // tree, so it lines up under its folder's name and not its arrow
         x = put(buf, x, y, area.right(), arrow, base.fg(theme::cyan_soft()));
         let icon = match &r.entry {
-            Entry::File(i) => app
-                .diff_files()
-                .get(*i)
-                .map_or("", |f| icon_file(icon_style, &f.path)),
+            Entry::File(i) => files.get(*i).map_or("", |f| icon_file(icon_style, &f.path)),
             Entry::Dir(_) => icon,
         };
         if !icon.is_empty() {
             let color = match &r.entry {
-                Entry::File(i) => app.diff_files().get(*i).map_or(theme::dimmer(), |f| {
+                Entry::File(i) => files.get(*i).map_or(theme::dimmer(), |f| {
                     theme::lang(crate::shared::icons::language(&f.path))
                 }),
                 Entry::Dir(_) => theme::cyan_soft(),
@@ -323,10 +321,7 @@ fn draw_files(buf: &mut Buffer, area: Rect, app: &mut App) {
             Entry::Dir(_) => (format!("{}/", r.label), base.fg(theme::cyan_soft())),
             Entry::File(i) => {
                 let lit = selected || i == shown;
-                let change = app
-                    .diff_files()
-                    .get(i)
-                    .map_or(Change::Modified, |f| f.change);
+                let change = files.get(i).map_or(Change::Modified, |f| f.change);
                 // what happened to it outranks being lit; being lit then shows
                 // as weight, so the file on show still stands out
                 let style = match change_style(change, base) {
@@ -761,38 +756,61 @@ fn draw_line_tinted(
     };
     let end = cut.unwrap_or(text.len());
 
+    // Every place the search matches, skipped completely when no search is
+    // active so idle renders never lowercase every visible line.
+    let mut hits = Vec::new();
+    if !query.is_empty() {
+        let mut from = 0;
+        while let Some(m) = text.get(from..).and_then(|t| find(t, query)) {
+            if m.is_empty() {
+                break;
+            }
+            let m = from + m.start..from + m.end;
+            from = m.end;
+            hits.push(m);
+        }
+    }
+
+    if spans.is_empty() && word.is_none() && hits.is_empty() {
+        let cx = put(buf, x, y, max, &text[start..end], ink);
+        if cut.is_some() {
+            put(buf, cx, y, max, "…", base.fg(theme::dimmer()));
+        }
+        return;
+    }
+
     // Every place the style can change, in order; between two of them it
     // cannot, so each stretch is one `put`.
-    let mut marks = vec![start, end];
+    let mut marks = Vec::with_capacity(2 + spans.len() * 2 + hits.len() * 2 + 2);
+    marks.push(start);
+    marks.push(end);
     for s in spans {
         marks.extend([s.from, s.to]);
     }
     if let Some(w) = &word {
         marks.extend([w.start, w.end]);
     }
-    // every place the search matches, so each one is lit and not just the
-    // first — the eye goes down a column of them
-    let mut hits = Vec::new();
-    let mut from = 0;
-    while let Some(m) = text.get(from..).and_then(|t| find(t, query)) {
-        if m.is_empty() {
-            break;
-        }
-        let m = from + m.start..from + m.end;
-        from = m.end;
-        marks.extend([m.start, m.end]);
-        hits.push(m);
+    for h in &hits {
+        marks.extend([h.start, h.end]);
     }
     marks.retain(|m| (start..=end).contains(m) && text.is_char_boundary(*m));
     marks.sort_unstable();
     marks.dedup();
 
     let mut cx = x;
+    let mut si = 0usize;
+    let mut hi = 0usize;
     for pair in marks.windows(2) {
         let (from, to) = (pair[0], pair[1]);
+        while si < spans.len() && spans[si].to <= from {
+            si += 1;
+        }
+        while hi < hits.len() && hits[hi].end <= from {
+            hi += 1;
+        }
         let mut style = spans
-            .iter()
-            .find(|s| s.from <= from && to <= s.to)
+            .get(si)
+            .filter(|s| s.from <= from && to <= s.to)
             .map_or(ink, |s| base.fg(syntax_color(s.kind)));
         if word
             .as_ref()
@@ -801,7 +819,7 @@ fn draw_line_tinted(
             style = style.add_modifier(Modifier::REVERSED);
         }
         // a search hit wins over both: it is what you are looking for now
-        if hits.iter().any(|h| h.start <= from && to <= h.end) {
+        if hits.get(hi).is_some_and(|h| h.start <= from && to <= h.end) {
             style = base.fg(theme::yellow()).add_modifier(Modifier::REVERSED);
         }
         cx = put(buf, cx, y, max, &text[from..to], style);

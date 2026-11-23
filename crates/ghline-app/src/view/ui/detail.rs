@@ -605,7 +605,7 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
     );
     y += 1;
 
-    let tally = crate::data::Tally::of(&jobs);
+    let tally = crate::data::Tally::of(jobs);
     put_trunc(
         buf,
         area.x + 2,

@@ -32,6 +32,7 @@ pub(super) struct Ghline {
     anim: Instant,
     find: Instant,
     handover_error: Arc<Mutex<Option<String>>>,
+    dirty: bool,
 }
 
 impl Ghline {
@@ -45,7 +46,16 @@ impl Ghline {
             anim: now,
             find: now,
             handover_error: Arc::new(Mutex::new(None)),
+            dirty: true,
         }
+    }
+
+    fn shows_caret(&self) -> bool {
+        self.app.cmd.is_some()
+            || self.app.finder_open
+            || self.app.note_open.is_some()
+            || self.app.review_open
+            || self.app.dispatch_open
     }
 }
 
@@ -73,18 +83,24 @@ impl Program for Ghline {
             && let Some(msg) = slot.take()
         {
             self.app.flash_warn(msg);
+            self.dirty = true;
         }
         while let Some(response) = self.app.poll_service() {
             self.app.apply(response);
+            self.dirty = true;
         }
     }
 
-    /// The soonest of four, two of them conditional: skeletons only travel
-    /// while something is on its way, and the finder's debounce only matters
-    /// while the finder is open.
+    /// The soonest of four, three of them conditional: skeletons only travel
+    /// while something is on its way, the caret only blinks when a text input
+    /// is visible, and the finder's debounce only matters while it is open.
     fn next_wake(&self) -> Duration {
         TICK.saturating_sub(self.tick.elapsed())
-            .min(BLINK.saturating_sub(self.blink.elapsed()))
+            .min(if self.shows_caret() {
+                BLINK.saturating_sub(self.blink.elapsed())
+            } else {
+                Duration::MAX
+            })
             .min(if self.app.waiting() {
                 ANIM.saturating_sub(self.anim.elapsed())
             } else {
@@ -99,21 +115,35 @@ impl Program for Ghline {
 
     fn on_wake(&mut self) {
         if self.tick.elapsed() >= TICK {
+            let had_flash = self.app.flash.is_some();
             self.app.tick();
             self.tick = Instant::now();
+            if had_flash || self.app.tab == ghline_app::data::AGENTS_TAB {
+                self.dirty = true;
+            }
         }
-        if self.find.elapsed() >= FIND {
+        if self.app.finder_open && self.find.elapsed() >= FIND {
+            let before = self.app.finder_sent.clone();
             self.app.finder_tick();
             self.find = Instant::now();
+            if self.app.finder_sent != before {
+                self.dirty = true;
+            }
         }
         if self.app.waiting() && self.anim.elapsed() >= ANIM {
             self.app.anim = self.app.anim.wrapping_add(1);
             self.anim = Instant::now();
+            self.dirty = true;
         }
-        if self.blink.elapsed() >= BLINK {
+        if self.shows_caret() && self.blink.elapsed() >= BLINK {
             self.app.blink = !self.app.blink;
             self.blink = Instant::now();
+            self.dirty = true;
         }
+    }
+
+    fn take_dirty(&mut self) -> bool {
+        std::mem::take(&mut self.dirty)
     }
 
     fn wants_redraw(&mut self) -> bool {

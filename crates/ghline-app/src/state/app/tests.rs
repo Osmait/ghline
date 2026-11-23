@@ -3774,3 +3774,125 @@ fn search_response_for_another_account_is_ignored() {
     });
     assert!(app.finder_hits.is_empty());
 }
+
+#[test]
+fn strip_ws_only_handles_large_deleted_blocks_and_whitespace_edits() {
+    let mut lines = Vec::new();
+    for i in 0..200 {
+        lines.push(('-', format!("deleted line {i}")));
+    }
+    lines.push((' ', "separator".to_string()));
+    lines.push(('-', "let  x = 1;".to_string()));
+    lines.push(('+', "let x = 1;".to_string()));
+    lines.push((' ', "unchanged".to_string()));
+
+    let hunk = crate::data::Hunk {
+        hdr: "@@ -1,203 +1,3 @@".into(),
+        lines,
+    };
+    let filtered = strip_ws_only(&hunk);
+    assert_eq!(filtered.lines.len(), 203);
+    assert!(
+        filtered.lines[..200].iter().all(|(s, _)| *s == '-'),
+        "long deleted-only run remains deleted"
+    );
+    assert_eq!(filtered.lines[200], (' ', "separator".to_string()));
+    assert_eq!(
+        filtered.lines[201],
+        (' ', "let  x = 1;".to_string()),
+        "whitespace-only paired change collapses to context"
+    );
+    assert_eq!(filtered.lines[202], (' ', "unchanged".to_string()));
+}
+
+#[test]
+fn diff_cache_keeps_multiple_files_and_caps_its_size() {
+    let mut app = seeded();
+    let repo = app.repo_key();
+    app.tab = 1;
+    let items = app.lists.get_mut(&(repo, 1)).unwrap();
+    let pr = items[0].as_pr_mut().unwrap();
+    pr.file_list = (0..12)
+        .map(|i| crate::data::FileChange {
+            path: format!("src/f{i}.rs"),
+            add: "+1".into(),
+            del: "-0".into(),
+            change: crate::data::Change::Modified,
+            from: None,
+            hunks: vec![crate::data::Hunk {
+                hdr: "@@ -1 +1 @@".into(),
+                lines: vec![('+', format!("let v = {i};"))],
+            }],
+        })
+        .collect();
+    app.item = 0;
+
+    for i in 0..4 {
+        app.file_idx = i;
+        let _ = app.prepared();
+    }
+    assert_eq!(app.diff_cache.len(), 4);
+
+    for i in 4..12 {
+        app.file_idx = i;
+        let _ = app.prepared();
+    }
+    assert_eq!(app.diff_cache.len(), 8, "MRU cache must stay capped at 8");
+}
+
+#[test]
+fn heavy_caches_evict_when_full_and_clear_on_account_switch() {
+    let mut app = seeded();
+    for i in 0..40 {
+        app.apply(Response::Tree {
+            repo: format!("owner/repo-{i}"),
+            result: Ok(vec![crate::data::TreeEntry {
+                path: "README.md".into(),
+                is_dir: false,
+                size: 10,
+            }]),
+        });
+    }
+    assert_eq!(app.trees.len(), 32);
+
+    for i in 0..70 {
+        app.apply(Response::FileText {
+            repo: "owner/repo".into(),
+            path: format!("f{i}.rs"),
+            result: Ok(("fn main() {}".into(), Vec::new())),
+        });
+    }
+    assert_eq!(app.file_text.len(), 64);
+
+    for i in 0..20 {
+        app.apply(Response::RunLog {
+            repo: "owner/repo".into(),
+            run_id: i,
+            result: Ok(Vec::new()),
+        });
+    }
+    assert_eq!(app.raw_logs.len(), 16);
+
+    app.pick_account(0);
+    assert!(app.trees.is_empty());
+    assert!(app.file_text.is_empty());
+    assert!(app.raw_logs.is_empty());
+    assert!(app.commit_files.is_empty());
+    assert!(app.diff_cache.is_empty());
+}
+
+#[test]
+fn ancestors_open_matches_ancestors_without_allocating() {
+    let entry = crate::data::TreeEntry {
+        path: "crates/ghline-app/src/data.rs".into(),
+        is_dir: false,
+        size: 100,
+    };
+    let mut open = std::collections::HashSet::new();
+    for a in entry.ancestors() {
+        open.insert(a.to_string());
+    }
+    assert!(entry.ancestors_open(&open));
+    open.remove("crates/ghline-app");
+    assert!(!entry.ancestors_open(&open));
+}

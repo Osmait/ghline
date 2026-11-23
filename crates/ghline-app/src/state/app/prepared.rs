@@ -84,14 +84,19 @@ impl App {
                 .collect(),
             notes,
         };
-        if let Some((k, p)) = &self.diff_cache
-            && *k == key
-        {
-            return Rc::clone(p);
+        if let Some(pos) = self.diff_cache.iter().position(|(k, _)| *k == key) {
+            let entry = self.diff_cache.remove(pos);
+            let p = Rc::clone(&entry.1);
+            self.diff_cache.push(entry);
+            return p;
         }
         let base = base_rows(f, self.ws);
         let p = Rc::new(prepare_with(&f.path, base, &threads, notes));
-        self.diff_cache = Some((key, Rc::clone(&p)));
+        const DIFF_CACHE_CAP: usize = 8;
+        if self.diff_cache.len() >= DIFF_CACHE_CAP {
+            self.diff_cache.remove(0);
+        }
+        self.diff_cache.push((key, Rc::clone(&p)));
         p
     }
 
@@ -134,18 +139,28 @@ pub fn file_rows(f: &FileChange, ws: bool, threads: &[&Thread], notes: Notes) ->
 
 /// Colours and pairs a file's own rows, then lays its threads in.
 pub fn prepare_with(path: &str, base: Vec<DiffRow>, threads: &[&Thread], notes: Notes) -> Prepared {
-    let plain = prepare(path, base.clone());
+    // Compute syntax spans and changed words directly against `&base` before
+    // moving `base` into `annotate`, avoiding a full `base.clone()`.
+    let mut base_spans = highlight_rows(path, &base);
+    let base_words = words(&base);
     let (rows, map) = annotate(base, threads, notes);
+    if rows.len() == base_spans.len() {
+        return Prepared {
+            rows,
+            spans: base_spans,
+            words: base_words,
+        };
+    }
     let spans = map
         .iter()
         .map(|m| {
-            m.and_then(|i| plain.spans.get(i).cloned())
+            m.and_then(|i| base_spans.get_mut(i).map(std::mem::take))
                 .unwrap_or_default()
         })
         .collect();
     let words = map
         .iter()
-        .map(|m| m.and_then(|i| plain.words.get(i).cloned().flatten()))
+        .map(|m| m.and_then(|i| base_words.get(i).cloned().flatten()))
         .collect();
     Prepared { rows, spans, words }
 }
@@ -162,11 +177,17 @@ pub fn code(r: &DiffRow) -> &str {
 
 /// Colours and pairs a file's rows.
 pub fn prepare(path: &str, rows: Vec<DiffRow>) -> Prepared {
+    let spans = highlight_rows(path, &rows);
+    let words = words(&rows);
+    Prepared { rows, spans, words }
+}
+
+fn highlight_rows(path: &str, rows: &[DiffRow]) -> Vec<Vec<Span>> {
     // The lexer reads whole files and a diff is not one: a hunk starts
     // mid-file, so a comment opened above it is invisible here. Feeding it the
     // rows in order is the closest thing available, and right for everything
     // a hunk contains rather than inherits — the same bargain diffline makes.
-    let spans = match syntax::of_path(path) {
+    match syntax::of_path(path) {
         Some(lang) => {
             let joined = rows.iter().map(code).collect::<Vec<_>>().join("\n");
             let mut s = syntax::highlight(lang, &joined);
@@ -175,9 +196,7 @@ pub fn prepare(path: &str, rows: Vec<DiffRow>) -> Prepared {
             s
         }
         None => vec![Vec::new(); rows.len()],
-    };
-    let words = words(&rows);
-    Prepared { rows, spans, words }
+    }
 }
 
 /// Which words changed on each edited line.

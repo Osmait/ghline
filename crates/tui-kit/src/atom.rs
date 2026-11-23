@@ -33,11 +33,12 @@ pub fn fill(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
 /// Like `fill`, but it also wipes the text: whatever is drawn on top hides
 /// what was underneath. This is what the modals need.
 pub fn clear(buf: &mut Buffer, area: Rect, bg: ratatui::style::Color) {
+    let style = Style::default().bg(bg).fg(theme::fg());
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_symbol(" ");
-                cell.set_style(Style::default().bg(bg).fg(theme::fg()));
+                cell.set_style(style);
             }
         }
     }
@@ -107,8 +108,20 @@ pub fn put_trunc(buf: &mut Buffer, x: u16, y: u16, max_x: u16, text: &str, style
     if text.width() <= usize::from(avail) {
         return put(buf, x, y, max_x, text, style);
     }
-    let cut = truncate_to(text, avail.saturating_sub(1) as usize);
-    let end = put(buf, x, y, max_x, &cut, style);
+    // Slice at the exact UTF-8 byte boundary that fits in `avail - 1` columns
+    // instead of allocating an intermediate `String` on every truncated label.
+    let limit = usize::from(avail.saturating_sub(1));
+    let mut used = 0usize;
+    let mut cut = 0usize;
+    for (i, c) in text.char_indices() {
+        let w = c.width().unwrap_or(0);
+        if used + w > limit {
+            break;
+        }
+        used += w;
+        cut = i + c.len_utf8();
+    }
+    let end = put(buf, x, y, max_x, &text[..cut], style);
     put(buf, end, y, max_x, "…", style)
 }
 
@@ -137,15 +150,17 @@ pub fn put_right(buf: &mut Buffer, right_x: u16, y: u16, text: &str, style: Styl
 /// `area.width` would otherwise all write `area.right()` and one of them would
 /// get it wrong.
 pub fn hline(buf: &mut Buffer, x: u16, y: u16, w: u16, color: ratatui::style::Color) {
-    let s = "─".repeat(w as usize);
-    put(
-        buf,
-        x,
-        y,
-        x + w,
-        &s,
-        Style::default().fg(color).bg(theme::bg()),
-    );
+    if y >= buf.area.bottom() {
+        return;
+    }
+    let style = Style::default().fg(color).bg(theme::bg());
+    let right = x.saturating_add(w).min(buf.area.right());
+    for xx in x..right {
+        if let Some(cell) = buf.cell_mut((xx, y)) {
+            cell.set_char('─');
+            cell.set_style(style);
+        }
+    }
 }
 
 /// Draws `h` rows of `│` down column `x` from `y`, on the theme's background.
@@ -154,15 +169,16 @@ pub fn hline(buf: &mut Buffer, x: u16, y: u16, w: u16, color: ratatui::style::Co
 /// row rather than one `put` of a repeated glyph, because a buffer is laid out
 /// by rows and there is no vertical run to write.
 pub fn vline(buf: &mut Buffer, x: u16, y: u16, h: u16, color: ratatui::style::Color) {
-    for yy in y..y + h {
-        put(
-            buf,
-            x,
-            yy,
-            x + 1,
-            "│",
-            Style::default().fg(color).bg(theme::bg()),
-        );
+    if x >= buf.area.right() {
+        return;
+    }
+    let style = Style::default().fg(color).bg(theme::bg());
+    let bottom = y.saturating_add(h).min(buf.area.bottom());
+    for yy in y..bottom {
+        if let Some(cell) = buf.cell_mut((x, yy)) {
+            cell.set_char('│');
+            cell.set_style(style);
+        }
     }
 }
 
@@ -709,5 +725,12 @@ mod tests {
         assert_eq!(truncate_to("áéíóú", 3), "áéí");
         // and a wide glyph takes two columns, so only one fits in three
         assert_eq!(truncate_to("→→", 3), "→→");
+    }
+
+    #[test]
+    fn put_trunc_cuts_wide_cjk_on_column_and_char_boundary() {
+        let mut buf = buffer(6, 1);
+        put_trunc(&mut buf, 0, 0, 6, "漢漢漢漢", Style::default());
+        assert_eq!(row(&buf, 0), "漢 漢 …");
     }
 }
