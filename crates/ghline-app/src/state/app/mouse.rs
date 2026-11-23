@@ -122,7 +122,7 @@ impl App {
                     self.theme_sel = i;
                     self.preview_theme();
                     if repeat {
-                        self.themes_open = false;
+                        self.modal = None;
                         self.accept_theme();
                     }
                 }

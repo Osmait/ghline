@@ -79,12 +79,15 @@ impl App {
         // Asked for by anything that needs to know where a repository is —
         // the picker, and `E`. Gating it on the picker alone was a deadlock:
         // `E` reported that it was looking while nothing had been asked.
-        if (self.dispatch_open || self.wants_edit) && self.clones_state == Load::Idle {
+        if (self.modal == Some(super::Modal::Dispatch) || self.wants_edit)
+            && self.clones_state == Load::Idle
+        {
             self.clones_state = Load::Loading;
             self.ask(Request::Scan);
         }
 
-        let wants_agents = self.tab == crate::data::AGENTS_TAB || self.dispatch_open;
+        let wants_agents =
+            self.tab == crate::data::AGENTS_TAB || self.modal == Some(super::Modal::Dispatch);
         if wants_agents && self.agents_state == Load::Idle {
             self.agents_state = Load::Loading;
             self.ask(Request::Agents);
@@ -254,7 +257,10 @@ impl App {
     /// changed since the last one. Called on a short beat from the main loop
     /// so that typing does not fire a request per keystroke.
     pub fn finder_tick(&mut self) {
-        if !self.finder_open || self.finder_source.is_local() || !self.has_worker() {
+        if self.modal != Some(super::Modal::Finder)
+            || self.finder_source.is_local()
+            || !self.has_worker()
+        {
             return;
         }
         if self.finder_query == self.finder_sent {
@@ -286,13 +292,13 @@ impl App {
         self.accounts_state = Load::Loading;
         self.repos_state
             .insert(self.login().to_string(), Load::Loading);
-        for t in 0..3 {
+        for t in crate::data::LIST_TABS {
             self.lists_state.insert((key.clone(), t), Load::Loading);
         }
         // only the list view wants its rows gone; the other views need the
         // selection to stay so their own panes have something to be about
         if self.view == View::List {
-            for t in 0..3 {
+            for t in crate::data::LIST_TABS {
                 self.lists.remove(&(key.clone(), t));
             }
         }
@@ -328,7 +334,7 @@ impl App {
             self.accounts_state = Load::Idle;
         }
         let repo_key = self.repo_key();
-        for t in 0..3 {
+        for t in crate::data::LIST_TABS {
             self.lists_state.insert((repo_key.clone(), t), Load::Idle);
         }
         if !self.is_all() {
@@ -359,14 +365,15 @@ impl App {
         self.flash_ok("refreshing…");
     }
 
-    /// A status-bar message, suggesting a retry when the failure looks
-    /// temporary.
-    fn advice(&self, e: &crate::shared::error::Error) -> String {
-        if e.is_transient() {
-            format!("{} · press r to retry", e.brief())
+    /// A status-bar message, naming what failed and suggesting a retry when
+    /// the failure looks temporary.
+    fn advice(&self, what: &str, e: &crate::shared::error::Error) -> String {
+        let retry = if e.is_transient() {
+            " · press r to retry"
         } else {
-            e.brief()
-        }
+            ""
+        };
+        format!("{what}: {}{retry}", e.brief())
     }
 
     /// Applies one response from the service thread.
@@ -377,7 +384,7 @@ impl App {
                 self.accounts_state = Load::Ready;
             }
             Response::Accounts(Err(e)) => {
-                self.flash_warn(self.advice(&e));
+                self.flash_warn(self.advice("accounts", &e));
                 self.accounts_state = Load::from(e);
             }
 
@@ -390,7 +397,7 @@ impl App {
                         self.flash_ok("sent");
                         self.agents_state = Load::Idle;
                     }
-                    Err(e) => self.flash_warn(self.advice(&e)),
+                    Err(e) => self.flash_warn(self.advice("dispatch", &e)),
                 }
             }
 
@@ -418,7 +425,7 @@ impl App {
                             self.open_in_editor();
                         }
                     }
-                    Err(e) => self.flash_warn(self.advice(&e)),
+                    Err(e) => self.flash_warn(self.advice("clone", &e)),
                 }
             }
 
@@ -512,7 +519,7 @@ impl App {
                     self.repos_state.insert(login, Load::Ready);
                 }
                 Err(e) => {
-                    self.flash_warn(self.advice(&e));
+                    self.flash_warn(self.advice("repos", &e));
                     self.repos_state.insert(login, Load::from(e));
                 }
             },
@@ -536,7 +543,7 @@ impl App {
                     self.diff_rev = self.diff_rev.wrapping_add(1);
                 }
                 Err(e) => {
-                    self.flash_warn(self.advice(&e));
+                    self.flash_warn(self.advice("list", &e));
                     self.lists_state.insert((repo, tab), Load::from(e));
                 }
             },
@@ -731,7 +738,7 @@ impl App {
                         self.threads_state.remove(&(repo.clone(), num));
                         self.detail_state.remove(&(repo, num));
                     }
-                    Err(e) => self.flash_warn(self.advice(&e)),
+                    Err(e) => self.flash_warn(format!("review not sent: {}", e.brief())),
                 }
             }
 
@@ -754,7 +761,8 @@ impl App {
                     self.land_on_first_file(was_empty);
                 }
                 Err(e) => {
-                    self.flash_warn(self.advice(&e));
+                    let short = sha.get(..7).unwrap_or(&sha);
+                    self.flash_warn(self.advice(&format!("commit {short}"), &e));
                     self.commit_state.insert((repo, sha), Load::from(e));
                 }
             },
@@ -772,7 +780,7 @@ impl App {
                 // Comments are an extra on the diff, not the diff: their
                 // failure says so once and leaves the diff to be read.
                 Err(e) => {
-                    self.flash_warn(self.advice(&e));
+                    self.flash_warn(self.advice("review comments", &e));
                     self.threads_state.insert((repo, num), Load::from(e));
                 }
             },
@@ -833,7 +841,7 @@ impl App {
                         if let Some(state) = now {
                             for ((list_repo, tab), items) in &mut self.lists {
                                 // Pull request actions only ever mutate PR lists
-                                // (`tab == 1`) for the same repository or its
+                                // (`PRS_TAB`) for the same repository or its
                                 // gathered `owner/*` list — never another repo
                                 // or an issue with the same number.
                                 if *tab == crate::data::PRS_TAB
@@ -850,7 +858,7 @@ impl App {
                         // re-request the repo's lists and counters, the list
                         // being read, and the item's own page
                         let shown = self.repo_key();
-                        for t in 0..3 {
+                        for t in crate::data::LIST_TABS {
                             self.lists_state.insert((repo.clone(), t), Load::Idle);
                             self.lists_state.insert((shown.clone(), t), Load::Idle);
                         }

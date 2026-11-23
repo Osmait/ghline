@@ -334,7 +334,7 @@ fn draw_pane(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = match st.error() {
+        let (msg, color) = match st.brief() {
             Some(e) => (e.to_string(), theme::red()),
             None => ("no output for this step".to_string(), theme::dimmer()),
         };

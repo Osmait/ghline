@@ -771,6 +771,9 @@ pub const PRS_TAB: usize = 1;
 /// Index of the Actions workflow runs tab in [`TABS`].
 pub const RUNS_TAB: usize = 2;
 
+/// The tabs whose content is a list of items.
+pub const LIST_TABS: [usize; 3] = [ISSUES_TAB, PRS_TAB, RUNS_TAB];
+
 /// The repository's file tree.
 /// Written by hand, and checked against the table by a test: a `const` that
 /// has to agree with a position in a slice is two sources of truth, and
@@ -1141,6 +1144,7 @@ mod tests {
         assert_eq!(TABS[ISSUES_TAB].id, "issues");
         assert_eq!(TABS[PRS_TAB].id, "prs");
         assert_eq!(TABS[RUNS_TAB].id, "actions");
+        assert_eq!(LIST_TABS, [ISSUES_TAB, PRS_TAB, RUNS_TAB]);
         assert_eq!(TABS[FILES_TAB].id, "files");
         assert_eq!(TABS[AGENTS_TAB].id, "agents");
     }

@@ -42,11 +42,12 @@ impl Load {
 
     /// One line for a status bar or an empty pane.
     #[must_use]
-    pub fn error(&self) -> Option<String> {
+    pub fn brief(&self) -> Option<String> {
         self.failure().map(Failure::brief)
     }
 
-    /// Whether trying again might work.
+    /// Whether trying again might work. A network blip is worth a retry; a
+    /// missing binary is not, and offering one would be a lie.
     #[must_use]
     pub fn is_transient(&self) -> bool {
         self.failure().is_some_and(Failure::is_transient)
@@ -94,7 +95,7 @@ mod tests {
         let a = Load::refused("first");
         let b = Load::refused("second");
         assert_eq!(a, b);
-        assert_eq!(a.error().as_deref(), Some("first"));
+        assert_eq!(a.brief().as_deref(), Some("first"));
         assert!(!a.is_transient());
         assert!(!a.is_loading());
     }

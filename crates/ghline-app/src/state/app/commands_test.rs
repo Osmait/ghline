@@ -366,10 +366,10 @@ fn ctrl_l_asks_for_the_screen_to_be_repainted() {
 fn a_switches_account() {
     let mut app = seeded();
     ch(&mut app, 'a');
-    assert!(app.accounts_open);
+    assert!(app.modal == Some(Modal::Accounts));
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
-    assert!(!app.accounts_open);
+    assert!(app.modal != Some(Modal::Accounts));
     assert_eq!(app.acc, 1);
     assert_eq!(app.login(), "acme-platform");
 }
@@ -380,7 +380,7 @@ fn esc_leaves_the_account_switcher_without_switching() {
     ch(&mut app, 'a');
     ch(&mut app, 'j');
     press(&mut app, Key::Esc);
-    assert!(!app.accounts_open);
+    assert!(app.modal != Some(Modal::Accounts));
     assert_eq!(app.acc, 0);
 }
 
@@ -389,11 +389,11 @@ fn t_opens_the_theme_picker_and_j_previews_the_next_theme() {
     let mut app = seeded();
     let before = crate::tui::theme::current();
     ch(&mut app, 't');
-    assert!(app.themes_open);
+    assert!(app.modal == Some(Modal::Themes));
     ch(&mut app, 'j');
     assert_ne!(crate::tui::theme::current(), before, "j previews");
     press(&mut app, Key::Esc);
-    assert!(!app.themes_open);
+    assert!(app.modal != Some(Modal::Themes));
     assert_eq!(crate::tui::theme::current(), before, "esc puts it back");
 }
 
@@ -405,7 +405,7 @@ fn enter_in_the_theme_picker_keeps_the_previewed_theme() {
     ch(&mut app, 'j');
     let chosen = crate::tui::theme::current();
     press(&mut app, Key::Enter);
-    assert!(!app.themes_open);
+    assert!(app.modal != Some(Modal::Themes));
     assert_eq!(crate::tui::theme::current(), chosen);
     crate::tui::theme::set(before);
 }
@@ -441,7 +441,7 @@ fn brackets_go_to_the_previous_and_next_repository() {
 fn p_finds_repos_issues_and_prs() {
     let mut app = seeded();
     ch(&mut app, 'p');
-    assert!(app.finder_open);
+    assert!(app.modal == Some(Modal::Finder));
     assert_eq!(app.finder_source, crate::data::Source::Repos);
 }
 
@@ -449,16 +449,16 @@ fn p_finds_repos_issues_and_prs() {
 fn ctrl_p_opens_the_finder_too() {
     let mut app = seeded();
     ctrl(&mut app, 'p');
-    assert!(app.finder_open);
+    assert!(app.modal == Some(Modal::Finder));
 }
 
 #[test]
 fn question_mark_shows_this_help_and_again_hides_it() {
     let mut app = seeded();
     ch(&mut app, '?');
-    assert!(app.help_open);
+    assert!(app.modal == Some(Modal::Help));
     ch(&mut app, '?');
-    assert!(!app.help_open);
+    assert!(app.modal != Some(Modal::Help));
 }
 
 #[test]
@@ -669,10 +669,10 @@ fn capital_c_shows_and_hides_comments() {
 fn v_picks_one_commit_of_the_pr() {
     let mut app = in_the_diff_body();
     ch(&mut app, 'v');
-    assert!(app.commits_open);
+    assert!(app.modal == Some(Modal::Commits));
     ch(&mut app, 'j');
     press(&mut app, Key::Enter);
-    assert!(!app.commits_open);
+    assert!(app.modal != Some(Modal::Commits));
     assert_eq!(app.diff_commit.as_deref(), Some("4f1c2a9e0b7d"));
 }
 
@@ -681,10 +681,10 @@ fn i_writes_a_note_on_this_line() {
     let mut app = in_the_diff_body();
     app.diff_cursor = an_added_line(&mut app);
     ch(&mut app, 'i');
-    assert!(app.note_open.is_some());
+    assert!(app.modal == Some(Modal::Note));
     typed(&mut app, "why");
     press(&mut app, Key::Enter);
-    assert!(app.note_open.is_none());
+    assert!(app.modal != Some(Modal::Note));
     assert_eq!(app.drafts().len(), 1);
     assert_eq!(app.drafts()[0].body, "why");
 }
@@ -708,7 +708,7 @@ fn esc_in_a_note_throws_it_away() {
     ch(&mut app, 'i');
     typed(&mut app, "nope");
     press(&mut app, Key::Esc);
-    assert!(app.note_open.is_none());
+    assert!(app.modal != Some(Modal::Note));
     assert!(app.drafts().is_empty());
 }
 
@@ -738,14 +738,14 @@ fn capital_r_sends_the_review() {
     tape.0.borrow_mut().clear();
 
     ch(&mut app, 'R');
-    assert!(app.review_open);
+    assert!(app.modal == Some(Modal::Review));
     press(&mut app, Key::Tab); // Comment -> Approve
     typed(&mut app, "lgtm");
     ctrl(&mut app, 'j');
     typed(&mut app, "thanks");
     press(&mut app, Key::Enter);
 
-    assert!(!app.review_open);
+    assert!(app.modal != Some(Modal::Review));
     let sent = tape.0.borrow();
     assert!(
         sent.iter().any(|r| matches!(
@@ -766,7 +766,7 @@ fn esc_in_the_review_dialog_sends_nothing() {
     ch(&mut app, 'R');
     typed(&mut app, "lgtm");
     press(&mut app, Key::Esc);
-    assert!(!app.review_open);
+    assert!(app.modal != Some(Modal::Review));
     assert!(
         !tape
             .0
@@ -784,7 +784,7 @@ fn a_review_that_cannot_be_sent_is_not_sent() {
     tape.0.borrow_mut().clear();
     ch(&mut app, 'R');
     press(&mut app, Key::Enter); // a comment with nothing in it
-    assert!(app.review_open, "it stays up, saying why");
+    assert!(app.modal == Some(Modal::Review), "it stays up, saying why");
     assert!(app.flash.is_some());
     assert!(tape.0.borrow().is_empty());
 }
@@ -1037,7 +1037,7 @@ fn x_sends_this_to_an_agent() {
     app.agents_state = Load::Ready;
     let num = app.current().unwrap().num;
     ch(&mut app, 'x');
-    assert!(app.dispatch_open);
+    assert!(app.modal == Some(Modal::Dispatch));
     // the picker asks afresh which agents are free; answer as the worker would
     app.agents = vec![agent("claude", "idle", "wA:p1")];
     app.agents_state = Load::Ready;
@@ -1090,7 +1090,7 @@ fn esc_closes_the_dispatch_picker() {
     let mut app = with_agents();
     ch(&mut app, 'x');
     press(&mut app, Key::Esc);
-    assert!(!app.dispatch_open);
+    assert!(app.modal != Some(Modal::Dispatch));
     assert!(app.prompt.is_none());
 }
 
@@ -1176,7 +1176,7 @@ fn colon_account_opens_the_account_picker() {
     for word in ["account", "accounts"] {
         let mut app = seeded();
         command(&mut app, word);
-        assert!(app.accounts_open, ":{word}");
+        assert!(app.modal == Some(Modal::Accounts), ":{word}");
     }
 }
 
@@ -1237,19 +1237,19 @@ fn colon_diff_opens_the_diff() {
 fn colon_review_opens_the_review_dialog() {
     let mut app = in_the_diff_body();
     command(&mut app, "review");
-    assert!(app.review_open);
+    assert!(app.modal == Some(Modal::Review));
 
     // and from the list, on a pull request
     let mut app = seeded();
     command(&mut app, "review");
-    assert!(app.review_open);
+    assert!(app.modal == Some(Modal::Review));
 }
 
 #[test]
 fn colon_commits_opens_the_commit_picker() {
     let mut app = in_the_diff_body();
     command(&mut app, "commits");
-    assert!(app.commits_open);
+    assert!(app.modal == Some(Modal::Commits));
 }
 
 #[test]
@@ -1267,7 +1267,7 @@ fn colon_split_ws_and_comments_do_what_their_keys_do() {
 fn colon_send_opens_the_dispatch_picker() {
     let mut app = with_agents();
     command(&mut app, "send");
-    assert!(app.dispatch_open);
+    assert!(app.modal == Some(Modal::Dispatch));
 }
 
 #[test]
@@ -1283,7 +1283,7 @@ fn colon_theme_opens_the_theme_picker() {
     for word in ["theme", "themes"] {
         let mut app = seeded();
         command(&mut app, word);
-        assert!(app.themes_open, ":{word}");
+        assert!(app.modal == Some(Modal::Themes), ":{word}");
         press(&mut app, Key::Esc);
     }
 }
@@ -1304,7 +1304,7 @@ fn colon_find_opens_the_finder() {
     for word in ["find", "search"] {
         let mut app = seeded();
         command(&mut app, word);
-        assert!(app.finder_open, ":{word}");
+        assert!(app.modal == Some(Modal::Finder), ":{word}");
     }
 }
 
@@ -1313,7 +1313,7 @@ fn colon_help_opens_the_help() {
     for word in ["help", "h"] {
         let mut app = seeded();
         command(&mut app, word);
-        assert!(app.help_open, ":{word}");
+        assert!(app.modal == Some(Modal::Help), ":{word}");
     }
 }
 
@@ -1383,7 +1383,7 @@ fn on_the_repositories_a_switches_account() {
     let mut app = with_sidebar();
     app.pane = Pane::Repos;
     ch(&mut app, 'a');
-    assert!(app.accounts_open);
+    assert!(app.modal == Some(Modal::Accounts));
 }
 
 #[test]
@@ -1610,7 +1610,7 @@ fn on_the_file_tree_slash_finds_a_file() {
 fn on_the_file_tree_x_sends_the_file() {
     let mut app = in_the_explorer();
     ch(&mut app, 'x');
-    assert!(app.dispatch_open);
+    assert!(app.modal == Some(Modal::Dispatch));
     assert_eq!(app.dispatch_subject(), Some(crate::subject::Subject::File));
 }
 
@@ -1661,7 +1661,7 @@ fn on_the_file_view_x_sends_the_file() {
     let mut app = in_the_explorer();
     ch(&mut app, 'l');
     ch(&mut app, 'x');
-    assert!(app.dispatch_open);
+    assert!(app.modal == Some(Modal::Dispatch));
     assert_eq!(app.dispatch_subject(), Some(crate::subject::Subject::File));
 }
 
@@ -1798,7 +1798,7 @@ fn on_the_changed_files_v_s_and_w_work_too() {
     ch(&mut app, 'w');
     assert!(app.ws);
     ch(&mut app, 'v');
-    assert!(app.commits_open);
+    assert!(app.modal == Some(Modal::Commits));
 }
 
 #[test]
@@ -1851,7 +1851,7 @@ fn in_the_finder_enter_opens_the_row() {
     ch(&mut app, 'p');
     typed(&mut app, "dotfiles");
     press(&mut app, Key::Enter);
-    assert!(!app.finder_open);
+    assert!(app.modal != Some(Modal::Finder));
     assert_eq!(app.repo_name(), "dotfiles");
 }
 
@@ -1862,7 +1862,7 @@ fn in_the_finder_esc_closes_it() {
     ch(&mut app, 'p');
     typed(&mut app, "dotfiles");
     press(&mut app, Key::Esc);
-    assert!(!app.finder_open);
+    assert!(app.modal != Some(Modal::Finder));
     assert_eq!(app.repo, repo);
 }
 
@@ -1875,7 +1875,7 @@ fn in_the_commit_picker_j_k_enter_and_esc() {
     ch(&mut app, 'k');
     assert_eq!(app.commit_sel, 1);
     press(&mut app, Key::Esc);
-    assert!(!app.commits_open);
+    assert!(app.modal != Some(Modal::Commits));
     assert!(app.diff_commit.is_none(), "esc chooses nothing");
     ch(&mut app, 'v');
     ch(&mut app, 'j');
@@ -1906,7 +1906,7 @@ fn in_the_help_j_and_k_scroll_and_esc_closes() {
     ch(&mut app, 'k');
     assert_eq!(app.help_scroll, 1);
     press(&mut app, Key::Esc);
-    assert!(!app.help_open);
+    assert!(app.modal != Some(Modal::Help));
 }
 
 #[test]

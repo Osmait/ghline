@@ -228,7 +228,7 @@ impl App {
             self.flash_ok("no commits to pick from yet");
             return;
         }
-        self.commits_open = true;
+        self.modal = Some(super::Modal::Commits);
         self.commit_sel = match &self.diff_commit {
             Some(sha) => self
                 .commits()
@@ -243,7 +243,7 @@ impl App {
     /// Everything about where you were in the old set of files goes: a
     /// commit is a different set of files, not a scroll position in this one.
     pub(super) fn pick_commit(&mut self, row: usize) {
-        self.commits_open = false;
+        self.modal = None;
         let sha = row
             .checked_sub(1)
             .and_then(|i| self.commits().get(i))

@@ -524,7 +524,7 @@ fn checks_pane(buf: &mut Buffer, area: Rect, app: &App) {
             }
             return;
         }
-        let (msg, color) = match st.error() {
+        let (msg, color) = match st.brief() {
             Some(e) => (e.to_string(), theme::red()),
             None => (
                 "no checks for this pull request".to_string(),

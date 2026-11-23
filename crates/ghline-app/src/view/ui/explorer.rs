@@ -121,7 +121,7 @@ fn draw_tree(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = match state.error() {
+        let (msg, color) = match state.brief() {
             Some(e) => (e.to_string(), theme::red()),
             None if !app.filter.is_empty() => ("no file matches".to_string(), theme::dimmer()),
             None => ("no files".to_string(), theme::dimmer()),
@@ -297,7 +297,7 @@ fn draw_file(buf: &mut Buffer, area: Rect, app: &mut App) {
             return;
         }
         Err(state) => {
-            let (msg, color) = match state.error() {
+            let (msg, color) = match state.brief() {
                 Some(e) => (e.to_string(), theme::red()),
                 None => ("select a file to read it".to_string(), theme::dimmer()),
             };

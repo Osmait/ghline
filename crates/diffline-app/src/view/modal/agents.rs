@@ -40,7 +40,7 @@ pub(crate) fn agents(buf: &mut Buffer, area: Rect, app: &mut App) {
     let mut y = m.y + 3;
 
     if app.agents.is_empty() {
-        let msg = match app.agents_state.error() {
+        let msg = match app.agents_state.brief() {
             Some(e) => e.to_string(),
             None if app.agents_state.is_loading() => "looking…".into(),
             None => "none running yet".into(),

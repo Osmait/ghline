@@ -213,7 +213,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = if let Some(e) = st.error() {
+        let (msg, color) = if let Some(e) = st.brief() {
             (e.to_string(), theme::red())
         } else if !app.filter.is_empty() {
             ("no matches".to_string(), theme::dimmer())

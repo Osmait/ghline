@@ -1318,7 +1318,7 @@ mod tests {
             "a missing git is not, and offering a retry would be a lie"
         );
         assert_eq!(
-            a.files_state.error().as_deref(),
+            a.files_state.brief().as_deref(),
             Some("git not found — is it installed?")
         );
     }
@@ -1503,8 +1503,8 @@ mod tests {
         assert!(a.waiting());
         a.poll();
         assert!(!a.waiting());
-        assert!(a.log_state.error().is_some());
-        assert!(a.corpus_state.error().is_some());
+        assert!(a.log_state.brief().is_some());
+        assert!(a.corpus_state.brief().is_some());
         assert_eq!(a.search_pending, None);
     }
 

@@ -284,7 +284,7 @@ pub fn commits(buf: &mut Buffer, area: Rect, app: &mut App) {
 /// The note editor: where the note goes, then what it says so far, folded to
 /// the box and ending in the cursor.
 pub fn note(buf: &mut Buffer, area: Rect, app: &mut App) {
-    let Some(at) = app.note_open.clone() else {
+    let Some(at) = app.note_anchor.clone() else {
         return;
     };
     let width: u16 = 76;

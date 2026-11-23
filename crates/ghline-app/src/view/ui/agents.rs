@@ -49,7 +49,7 @@ pub(crate) fn draw(buf: &mut Buffer, area: Rect, app: &mut App) {
             }
             return;
         }
-        let (msg, color) = match state.error() {
+        let (msg, color) = match state.brief() {
             Some(e) => (e.to_string(), theme::red()),
             None if !app.filter.is_empty() => ("no matches".to_string(), theme::dimmer()),
             None => (

@@ -535,7 +535,7 @@ fn empty(buf: &mut Buffer, area: Rect, app: &App) {
         }
         return;
     }
-    let (title, sub) = if let Some(e) = st.error() {
+    let (title, sub) = if let Some(e) = st.brief() {
         ("diff unavailable".to_string(), e.to_string())
     } else if binary {
         // The mode this used to print was made up: `gh` does not send it.

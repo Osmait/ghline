@@ -44,7 +44,7 @@ pub(crate) fn history(buf: &mut Buffer, area: Rect, app: &mut App) {
     if hits.is_empty() {
         let (said, color) = if app.log_state.is_loading() {
             ("reading history…".to_string(), theme::dimmer())
-        } else if let Some(e) = app.log_state.error() {
+        } else if let Some(e) = app.log_state.brief() {
             (e, theme::red())
         } else if app.log.is_empty() {
             ("no commits yet".into(), theme::dimmer())
